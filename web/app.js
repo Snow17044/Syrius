@@ -303,6 +303,7 @@ async function sendMessage(text) {
         if (ev.type === "text") { view.text += ev.text; repaint(); }
         else if (ev.type === "tool") { tools.push(ev.label); setTools(view, [...new Set(tools)]); scrollDown(); }
         else if (ev.type === "action") { view.bubble.appendChild(actionCard(ev)); scrollDown(); }
+        else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
         else if (ev.type === "error") { gotError = true; showError(view, ev.message); }
@@ -324,6 +325,60 @@ function showError(view, msg) {
   p.className = "msg-error";
   p.textContent = "⚠ " + msg;
   view.bubble.appendChild(p);
+}
+
+// ------------------------------------------------------------------ actions sur le téléphone
+const DEVICE_TEXT = {
+  phone_alarm: (p) => `⏰ Réveil à ${String(p.hour).padStart(2, "0")}h${String(p.minute).padStart(2, "0")}`,
+  phone_timer: (p) => `⏱ Minuteur de ${Math.round(p.seconds / 60) || 1} min`,
+  phone_call: (p) => `📞 Appeler ${p.contact}`,
+  phone_sms: (p) => `💬 SMS à ${p.contact} : « ${p.message} »`,
+  phone_open_app: (p) => `📱 Ouvrir ${p.app}`,
+  phone_map: (p) => `🗺 ${p.navigate ? "Itinéraire vers" : "Carte :"} ${p.query}`,
+  phone_open_url: (p) => `🔗 Ouvrir ${p.url}`,
+  phone_flashlight: (p) => `🔦 Lampe ${p.on ? "allumée" : "éteinte"}`,
+  phone_volume: (p) => `🔊 Volume à ${p.level} %`,
+  phone_settings: (p) => `⚙ Réglages : ${p.page.replace("_", " ")}`,
+};
+
+function runDevice(ev) {
+  if (!Native || typeof Native.device !== "function") return "Disponible uniquement dans l'application Android Syrius.";
+  try { return Native.device(JSON.stringify({ action: ev.action, params: ev.params })) || "ok"; }
+  catch (_) { return "Action impossible sur ce téléphone."; }
+}
+
+function handleDevice(view, ev) {
+  const card = document.createElement("div");
+  card.className = "action-card";
+  const title = document.createElement("div");
+  title.className = "action-title";
+  title.textContent = (DEVICE_TEXT[ev.action] || (() => ev.action))(ev.params || {});
+  const status = document.createElement("p");
+  status.className = "small";
+  card.append(title);
+  const finish = (res) => { status.textContent = res === "ok" ? "✅ Envoyé au téléphone." : "⚠ " + res; };
+  if (ev.confirm) {
+    if (ev.after_untrusted) {
+      const warn = document.createElement("p");
+      warn.className = "small msg-error";
+      warn.textContent = "Syrius vient de lire un email ou une page web : vérifie bien que c'est toi qui as demandé cette action.";
+      card.append(warn);
+    }
+    const row = document.createElement("div");
+    row.className = "action-buttons";
+    const ok = document.createElement("button");
+    ok.className = "primary"; ok.textContent = "Confirmer";
+    const no = document.createElement("button");
+    no.className = "ghost"; no.textContent = "Annuler";
+    ok.addEventListener("click", () => { row.remove(); finish(runDevice(ev)); });
+    no.addEventListener("click", () => { row.remove(); status.textContent = "Annulé."; });
+    row.append(ok, no);
+    card.append(row);
+  } else {
+    finish(runDevice(ev));
+  }
+  card.append(status);
+  view.bubble.appendChild(card);
 }
 
 function actionCard(ev) {

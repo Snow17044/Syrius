@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     private String allowedHost;
     private TextToSpeech tts;
     private SpeechRecognizer recognizer;
+    private DeviceActions device;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,6 +90,7 @@ public class MainActivity extends Activity {
                 }
             }
         });
+        device = new DeviceActions(this);
         web.addJavascriptInterface(new Bridge(), "SyriusAndroid");
 
         tts = new TextToSpeech(this, status -> {
@@ -214,6 +216,10 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
+        if (code == DeviceActions.REQ_CONTACTS) {
+            device.onContactsPermission(results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED);
+            return;
+        }
         if (code == REQ_MIC) {
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
                 startListening();
@@ -257,6 +263,20 @@ public class MainActivity extends Activity {
         public void startListening() {
             if (!trusted()) return;
             runOnUiThread(MainActivity.this::startListening);
+        }
+
+        /** Action sur le téléphone demandée par Syrius (liste fermée, revérifiée par DeviceActions). */
+        @JavascriptInterface
+        public String device(String json) {
+            if (json == null || json.length() > 4000 || !trusted()) return "Refusé";
+            final JSONObject req;
+            try {
+                req = new JSONObject(json);
+            } catch (Exception e) {
+                return "Demande illisible";
+            }
+            runOnUiThread(() -> device.run(req));
+            return "ok";
         }
 
         @JavascriptInterface
