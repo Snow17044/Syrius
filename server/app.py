@@ -2,6 +2,7 @@
 import asyncio
 import hmac
 import logging
+import re
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -12,7 +13,7 @@ from . import auth
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
-from .store_redis import RedisDatabase, UpstashREST
+from .store_redis import RedisDatabase, RedisError, UpstashREST
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -52,13 +53,44 @@ class PasswordChange(BaseModel):
     new: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
 
 
+_UPSTASH_URL = re.compile(r"https://[A-Za-z0-9.-]+\.upstash\.io")
+_UPSTASH_TOKEN = re.compile(r"UPSTASH_REDIS_REST_TOKEN\s*[=:]\s*[\"']?([A-Za-z0-9_=+/-]{20,})")
+_TOKEN_ONLY = re.compile(r"[A-Za-z0-9_=+/-]{20,}")
+
+
+def upstash_settings(url_value: str, token_value: str) -> tuple[str, str]:
+    """Retrouve l'adresse et le jeton Upstash même s'ils ont été collés en vrac
+    (valeurs inversées, sans https://, bloc .env entier, guillemets, retours à la ligne)."""
+    both = f"{url_value}\n{token_value}"
+    m = _UPSTASH_URL.search(both)
+    if m:
+        url = m.group(0)
+    else:
+        host = re.search(r"[A-Za-z0-9.-]+\.upstash\.io", both)
+        url = "https://" + host.group(0) if host else url_value.strip()
+    m = _UPSTASH_TOKEN.search(both)
+    if m:
+        token = m.group(1)
+    else:
+        # Le jeton est la valeur qui n'est pas l'adresse.
+        candidates = [v for v in (token_value, url_value) if v and "upstash.io" not in v]
+        found = _TOKEN_ONLY.search(candidates[0]) if candidates else None
+        token = found.group(0) if found else ""
+    return url, token
+
+
 def open_database(cfg: Config):
     """Upstash Redis si configuré (obligatoire sur Vercel), sinon SQLite local."""
-    if cfg.redis_url and cfg.redis_token:
-        return RedisDatabase(UpstashREST(cfg.redis_url, cfg.redis_token))
+    log = logging.getLogger("syrius")
+    if cfg.redis_url or cfg.redis_token:
+        url, token = upstash_settings(cfg.redis_url, cfg.redis_token)
+        if url.startswith("https://") and token:
+            return RedisDatabase(UpstashREST(url, token))
+        log.error("Base Upstash ignorée : adresse %s, jeton %s",
+                  "trouvée" if url.startswith("https://") else "introuvable",
+                  "trouvé" if token else "introuvable")
     if cfg.behind_vercel:
-        logging.getLogger("syrius").warning(
-            "Upstash non configuré : les données seront PERDUES à chaque redémarrage (voir README).")
+        log.warning("Upstash non configuré : les données seront PERDUES à chaque redémarrage (voir README).")
     return Database(cfg.db_path)
 
 
@@ -72,6 +104,12 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         agent.executor.email.db = db
 
     app = FastAPI(title="Syrius", docs_url=None, redoc_url=None, openapi_url=None)
+
+    @app.exception_handler(RedisError)
+    async def database_error(request: Request, exc: RedisError):
+        # Message clair pour l'utilisateur et le journal (jamais de secret dedans).
+        logging.getLogger("syrius").error("ERREUR BASE : %s (sur %s)", exc, request.url.path)
+        return JSONResponse({"detail": str(exc)}, status_code=503)
     app.state.db = db
     app.state.agent = agent
     app.state.cfg = cfg
@@ -134,7 +172,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
     @app.get("/health")
     async def health():
-        return {"ok": True}
+        return {"ok": True, "stockage": "upstash" if isinstance(db, RedisDatabase) else "temporaire",
+                "cerveaux": [b["name"] for b in agent.brains()]}
 
     # ------------------------------------------------------------------ connexion
     @app.get("/api/session")

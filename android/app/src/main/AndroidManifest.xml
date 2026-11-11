@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Micro : uniquement quand tu appuies sur le bouton 🎙 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Réveils et minuteurs -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- Retrouver le numéro d'un contact (demandé au premier appel/SMS par nom ; reste sur le téléphone) -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <queries>
         <intent>
@@ -11,6 +15,31 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER" />
         </intent>
     </queries>
 

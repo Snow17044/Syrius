@@ -1,0 +1,238 @@
+package fr.syrius.app;
+
+import android.Manifest;
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.database.Cursor;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.media.AudioManager;
+import android.net.Uri;
+import android.provider.AlarmClock;
+import android.provider.ContactsContract;
+import android.provider.MediaStore;
+import android.provider.Settings;
+import android.widget.Toast;
+
+import org.json.JSONObject;
+
+import java.text.Normalizer;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Exécute les actions demandées par Syrius. Liste fermée d'actions (aucune commande libre),
+ * chaque paramètre est revérifié ici. Appels et SMS s'ouvrent dans l'app Téléphone/Messages :
+ * c'est toujours l'utilisateur qui appuie sur « Appeler » / « Envoyer ».
+ */
+final class DeviceActions {
+    static final int REQ_CONTACTS = 43;
+
+    private final Activity activity;
+    private JSONObject pending; // action en attente de la permission « contacts »
+
+    DeviceActions(Activity activity) {
+        this.activity = activity;
+    }
+
+    void run(JSONObject req) {
+        try {
+            String action = req.getString("action");
+            JSONObject p = req.optJSONObject("params");
+            if (p == null) p = new JSONObject();
+            switch (action) {
+                case "phone_alarm": alarm(p); break;
+                case "phone_timer": timer(p); break;
+                case "phone_call": callOrSms(req, p, false); break;
+                case "phone_sms": callOrSms(req, p, true); break;
+                case "phone_open_app": openApp(p.getString("app")); break;
+                case "phone_map": map(p.getString("query"), p.optBoolean("navigate")); break;
+                case "phone_open_url": url(p.getString("url")); break;
+                case "phone_flashlight": flashlight(p.getBoolean("on")); break;
+                case "phone_volume": volume(p.getInt("level")); break;
+                case "phone_settings": settings(p.getString("page")); break;
+                default: toast("Action inconnue");
+            }
+        } catch (Exception e) {
+            toast("Action impossible : " + e.getClass().getSimpleName());
+        }
+    }
+
+    /** Appelé quand l'utilisateur a répondu à la demande d'accès aux contacts. */
+    void onContactsPermission(boolean granted) {
+        JSONObject req = pending;
+        pending = null;
+        if (req == null) return;
+        if (granted) {
+            run(req);
+        } else {
+            toast("Sans accès aux contacts, donne-moi plutôt le numéro.");
+        }
+    }
+
+    // ------------------------------------------------------------------ actions
+    private void alarm(JSONObject p) throws Exception {
+        int h = p.getInt("hour"), m = p.getInt("minute");
+        if (h < 0 || h > 23 || m < 0 || m > 59) throw new IllegalArgumentException();
+        Intent i = new Intent(AlarmClock.ACTION_SET_ALARM)
+                .putExtra(AlarmClock.EXTRA_HOUR, h)
+                .putExtra(AlarmClock.EXTRA_MINUTES, m)
+                .putExtra(AlarmClock.EXTRA_MESSAGE, clip(p.optString("label", "Syrius"), 60))
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, true);
+        start(i, String.format(Locale.FRANCE, "Réveil réglé à %02dh%02d", h, m));
+    }
+
+    private void timer(JSONObject p) throws Exception {
+        int s = p.getInt("seconds");
+        if (s < 1 || s > 86400) throw new IllegalArgumentException();
+        Intent i = new Intent(AlarmClock.ACTION_SET_TIMER)
+                .putExtra(AlarmClock.EXTRA_LENGTH, s)
+                .putExtra(AlarmClock.EXTRA_MESSAGE, clip(p.optString("label", "Syrius"), 60))
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, true);
+        start(i, "Minuteur lancé");
+    }
+
+    private void callOrSms(JSONObject req, JSONObject p, boolean sms) throws Exception {
+        String contact = p.getString("contact").trim();
+        String number = p.optBoolean("is_number") ? contact.replaceAll("[^0-9+]", "") : null;
+        if (number == null) {
+            if (activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                pending = req;
+                activity.requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
+                return;
+            }
+            number = lookup(contact);
+            if (number == null) {
+                toast("Contact « " + clip(contact, 40) + " » introuvable");
+                return;
+            }
+        }
+        if (number.isEmpty() || number.length() > 20) throw new IllegalArgumentException();
+        if (sms) {
+            Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", number, null))
+                    .putExtra("sms_body", clip(p.optString("message", ""), 1000));
+            start(i, "SMS prêt : appuie sur Envoyer");
+        } else {
+            start(new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)), "Appuie sur Appeler");
+        }
+    }
+
+    private String lookup(String name) {
+        Uri uri = Uri.withAppendedPath(ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI, Uri.encode(name));
+        try (Cursor c = activity.getContentResolver().query(uri,
+                new String[]{ContactsContract.CommonDataKinds.Phone.NUMBER}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private void openApp(String name) {
+        String wanted = norm(name);
+        if (wanted.isEmpty()) {
+            toast("Nom d'application vide");
+            return;
+        }
+        if (wanted.contains("photo") || wanted.contains("camera")) {
+            start(new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA), "Appareil photo");
+            return;
+        }
+        PackageManager pm = activity.getPackageManager();
+        Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> apps = pm.queryIntentActivities(launcher, 0);
+        ResolveInfo best = null;
+        for (ResolveInfo r : apps) {
+            String label = norm(String.valueOf(r.loadLabel(pm)));
+            if (label.equals(wanted)) { best = r; break; }
+            if (best == null && label.length() >= 3 && (label.contains(wanted) || wanted.contains(label))) best = r;
+        }
+        if (best == null) {
+            toast("Application « " + clip(name, 40) + " » introuvable");
+            return;
+        }
+        Intent i = pm.getLaunchIntentForPackage(best.activityInfo.packageName);
+        if (i != null) start(i, "Ouverture de " + best.loadLabel(pm));
+    }
+
+    private void map(String query, boolean navigate) {
+        String q = Uri.encode(clip(query, 200));
+        Intent nav = new Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=" + q));
+        if (navigate && nav.resolveActivity(activity.getPackageManager()) != null) {
+            start(nav, "Itinéraire");
+        } else {
+            start(new Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + q)), "Carte");
+        }
+    }
+
+    private void url(String raw) {
+        Uri u = Uri.parse(raw);
+        if (!"https".equals(u.getScheme()) || u.getHost() == null) {
+            toast("Lien refusé (https uniquement)");
+            return;
+        }
+        start(new Intent(Intent.ACTION_VIEW, u), null);
+    }
+
+    private void flashlight(boolean on) throws Exception {
+        CameraManager cm = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+        for (String id : cm.getCameraIdList()) {
+            Boolean flash = cm.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+            if (Boolean.TRUE.equals(flash)) {
+                cm.setTorchMode(id, on);
+                toast(on ? "Lampe allumée" : "Lampe éteinte");
+                return;
+            }
+        }
+        toast("Pas de lampe sur ce téléphone");
+    }
+
+    private void volume(int level) {
+        if (level < 0 || level > 100) throw new IllegalArgumentException();
+        AudioManager am = (AudioManager) activity.getSystemService(Context.AUDIO_SERVICE);
+        int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        am.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(max * level / 100f), AudioManager.FLAG_SHOW_UI);
+    }
+
+    private void settings(String page) {
+        String action;
+        switch (page) {
+            case "wifi": action = Settings.ACTION_WIFI_SETTINGS; break;
+            case "bluetooth": action = Settings.ACTION_BLUETOOTH_SETTINGS; break;
+            case "donnees_mobiles": action = Settings.ACTION_NETWORK_OPERATOR_SETTINGS; break;
+            case "affichage": action = Settings.ACTION_DISPLAY_SETTINGS; break;
+            case "son": action = Settings.ACTION_SOUND_SETTINGS; break;
+            case "batterie": action = Intent.ACTION_POWER_USAGE_SUMMARY; break;
+            case "localisation": action = Settings.ACTION_LOCATION_SOURCE_SETTINGS; break;
+            default: action = Settings.ACTION_SETTINGS;
+        }
+        start(new Intent(action), null);
+    }
+
+    // ------------------------------------------------------------------ outils
+    private void start(Intent i, String message) {
+        try {
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(i);
+            if (message != null) toast(message);
+        } catch (ActivityNotFoundException | SecurityException e) {
+            toast("Aucune application ne peut faire ça sur ce téléphone");
+        }
+    }
+
+    private void toast(String text) {
+        Toast.makeText(activity, text, Toast.LENGTH_SHORT).show();
+    }
+
+    private static String clip(String s, int max) {
+        return s == null ? "" : (s.length() > max ? s.substring(0, max) : s);
+    }
+
+    private static String norm(String s) {
+        String n = Normalizer.normalize(s == null ? "" : s, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return n.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+}

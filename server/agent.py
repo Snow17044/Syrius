@@ -14,6 +14,7 @@ from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
 
+UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search"}
 MAX_STEPS = 8          # allers-retours max avec les outils pour une seule question
 MAX_HISTORY = 40       # messages gardés en contexte (au-delà, les plus anciens sont oubliés)
 PERSONA_FILE = Path(__file__).with_name("persona.md")
@@ -162,6 +163,7 @@ class Agent:
         to_save = [history[-1]]
         providers = self.llm.ordered(settings.get("brain", ""))
         effort = "high" if settings.get("effort") == "high" else "low"
+        untrusted_seen = False
 
         for _step in range(MAX_STEPS):
             system = build_system(settings, self.db.list_memories())  # les souvenirs peuvent changer
@@ -207,8 +209,16 @@ class Agent:
                 break
 
             results = []
+            if any(c["name"] in UNTRUSTED_TOOLS for c in state["calls"]):
+                untrusted_seen = True  # même si l'action téléphone est demandée dans le même lot
             for call in state["calls"]:
                 result, is_error, ui_event = await self.executor.run(call["name"], call["input"])
+                if call["name"] in UNTRUSTED_TOOLS and not is_error:
+                    untrusted_seen = True
+                if ui_event and ui_event.get("type") == "device" and untrusted_seen:
+                    # Un contenu extérieur (email, web) a été lu dans cette réponse :
+                    # toute action sur le téléphone doit être confirmée par l'utilisateur.
+                    ui_event = {**ui_event, "confirm": True, "after_untrusted": True}
                 results.append({"type": "tool_result", "tool_use_id": call["id"], "tool_name": call["name"],
                                 "content": result, "is_error": is_error})
                 if ui_event:

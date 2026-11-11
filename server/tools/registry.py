@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from ..config import Config
 from ..db import Database
+from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -62,12 +63,13 @@ TOOL_LABELS = {
     "read_email": "Je lis l'email",
     "draft_email": "Je prépare un brouillon",
     "web_search": "Je cherche sur le web",
+    **DEVICE_LABELS,
 }
 
 
 def build_tools(cfg: Config, settings: dict) -> list[dict]:
     """Liste triée et stable (important pour le cache)."""
-    tools = list(BASE_TOOLS)
+    tools = list(BASE_TOOLS) + DEVICE_TOOLS
     if cfg.email_enabled:
         tools += EMAIL_TOOLS
     if settings.get("web_search") and cfg.web_search_key:
@@ -166,6 +168,13 @@ class ToolExecutor:
                      "subject": a["subject"], "body": a["body"]}
             return ("Brouillon prêt. Il sera envoyé seulement si l'utilisateur appuie sur 'Envoyer' "
                     "dans l'application. Ne prétends pas qu'il est déjà envoyé."), False, event
+
+        if name in DEVICE_LABELS:
+            try:
+                event, done = build_action(name, args)
+            except DeviceInputError as e:
+                raise InvalidInput(str(e)) from None
+            return done, False, event
 
         if name == "web_search":
             a = _check(args, {"query": str}, ["query"])

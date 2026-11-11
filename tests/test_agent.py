@@ -269,3 +269,52 @@ def test_cle_groq_nom_court(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.setenv("groq", "gsk_test")
     assert Config().groq_api_key == "gsk_test"
+
+
+def test_valeurs_collees_nettoyees(monkeypatch):
+    from server.config import Config
+    monkeypatch.setenv("UPSTASH_REDIS_REST_URL", 'UPSTASH_REDIS_REST_URL="https://abc.upstash.io"')
+    monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "  'jeton'  ")
+    c = Config()
+    assert c.redis_url == "https://abc.upstash.io" and c.redis_token == "jeton"
+
+
+@pytest.mark.parametrize("url,token", [
+    ('UPSTASH_REDIS_REST_URL="https://abc.upstash.io"\nUPSTASH_REDIS_REST_TOKEN="AbCdEfGhIjKlMnOpQrStUvWx123="', ""),
+    ("https://abc.upstash.io\n", "\n  AbCdEfGhIjKlMnOpQrStUvWx123=\n"),
+    ("", 'export UPSTASH_REDIS_REST_URL="https://abc.upstash.io"\nexport UPSTASH_REDIS_REST_TOKEN="AbCdEfGhIjKlMnOpQrStUvWx123="'),
+])
+def test_upstash_bloc_colle_en_vrac(url, token):
+    from server.app import upstash_settings
+    assert upstash_settings(url, token) == ("https://abc.upstash.io", "AbCdEfGhIjKlMnOpQrStUvWx123=")
+
+
+def test_adresse_upstash_invalide_ne_fait_pas_planter(cfg):
+    from fastapi.testclient import TestClient
+    from server.app import create_app
+    cfg.redis_url, cfg.redis_token = "pas-une-adresse", "x"
+    r = TestClient(create_app(cfg), base_url="https://testserver").get("/health")
+    assert r.status_code == 200 and r.json()["stockage"] == "temporaire"
+
+
+@pytest.mark.parametrize("url,token", [("jeton-secret-tres-long-1234567", "https://abc.upstash.io"),
+                                       ("abc.upstash.io", "jeton-secret-tres-long-1234567")])
+def test_upstash_valeurs_inversees_ou_sans_https(cfg, url, token):
+    from server.app import open_database
+    from server.store_redis import RedisDatabase
+    cfg.redis_url, cfg.redis_token = url, token
+    db = open_database(cfg)
+    assert isinstance(db, RedisDatabase)
+    assert db.r.url == "https://abc.upstash.io" and db.r.token == "jeton-secret-tres-long-1234567"
+
+
+def test_erreur_base_message_clair(make_client, monkeypatch):
+    from server.store_redis import RedisError
+    c = make_client(password=False)
+    c.app.state.cfg.setup_code = "code-secret-vercel"
+
+    def boom(*a, **k):
+        raise RedisError("Base de données : erreur 403 – jeton Upstash en lecture seule")
+    monkeypatch.setattr(c.db, "set_secret", boom)
+    r = c.post("/api/setup", json={"code": "code-secret-vercel", "password": "nouveau-mdp-123"}, headers=H)
+    assert r.status_code == 503 and "lecture seule" in r.json()["detail"]

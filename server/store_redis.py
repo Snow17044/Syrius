@@ -36,11 +36,16 @@ class UpstashREST:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # nosec B310
                 out = json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
-            raise RedisError(f"Base de données : erreur {e.code}") from None
+            hint = {401: "jeton Upstash refusé (vérifie UPSTASH_REDIS_REST_TOKEN)",
+                    403: "jeton Upstash en lecture seule : utilise le jeton principal, pas « read-only »"}
+            raise RedisError(f"Base de données : erreur {e.code} – {hint.get(e.code, 'réessaie plus tard')}") from None
         except (urllib.error.URLError, TimeoutError, ValueError):
             raise RedisError("Base de données injoignable") from None
         if "error" in out:
-            raise RedisError("Base de données : " + str(out["error"])[:120])
+            err = str(out["error"])[:120]
+            if "NOPERM" in err or "readonly" in err.lower() or "read only" in err.lower():
+                err += " – jeton en lecture seule : utilise le jeton principal d'Upstash"
+            raise RedisError("Base de données : " + err)
         return out.get("result")
 
 
