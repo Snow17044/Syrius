@@ -279,6 +279,16 @@ def test_valeurs_collees_nettoyees(monkeypatch):
     assert c.redis_url == "https://abc.upstash.io" and c.redis_token == "jeton"
 
 
+@pytest.mark.parametrize("url,token", [
+    ('UPSTASH_REDIS_REST_URL="https://abc.upstash.io"\nUPSTASH_REDIS_REST_TOKEN="AbCdEfGhIjKlMnOpQrStUvWx123="', ""),
+    ("https://abc.upstash.io\n", "\n  AbCdEfGhIjKlMnOpQrStUvWx123=\n"),
+    ("", 'export UPSTASH_REDIS_REST_URL="https://abc.upstash.io"\nexport UPSTASH_REDIS_REST_TOKEN="AbCdEfGhIjKlMnOpQrStUvWx123="'),
+])
+def test_upstash_bloc_colle_en_vrac(url, token):
+    from server.app import upstash_settings
+    assert upstash_settings(url, token) == ("https://abc.upstash.io", "AbCdEfGhIjKlMnOpQrStUvWx123=")
+
+
 def test_adresse_upstash_invalide_ne_fait_pas_planter(cfg):
     from fastapi.testclient import TestClient
     from server.app import create_app
@@ -287,12 +297,12 @@ def test_adresse_upstash_invalide_ne_fait_pas_planter(cfg):
     assert r.status_code == 200 and r.json()["stockage"] == "temporaire"
 
 
-@pytest.mark.parametrize("url,token", [("jeton-secret", "https://abc.upstash.io"),
-                                       ("abc.upstash.io", "jeton-secret")])
+@pytest.mark.parametrize("url,token", [("jeton-secret-tres-long-1234567", "https://abc.upstash.io"),
+                                       ("abc.upstash.io", "jeton-secret-tres-long-1234567")])
 def test_upstash_valeurs_inversees_ou_sans_https(cfg, url, token):
     from server.app import open_database
     from server.store_redis import RedisDatabase
     cfg.redis_url, cfg.redis_token = url, token
     db = open_database(cfg)
     assert isinstance(db, RedisDatabase)
-    assert db.r.url == "https://abc.upstash.io" and db.r.token == "jeton-secret"
+    assert db.r.url == "https://abc.upstash.io" and db.r.token == "jeton-secret-tres-long-1234567"

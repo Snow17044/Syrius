@@ -2,6 +2,7 @@
 import asyncio
 import hmac
 import logging
+import re
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -52,26 +53,44 @@ class PasswordChange(BaseModel):
     new: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
 
 
+_UPSTASH_URL = re.compile(r"https://[A-Za-z0-9.-]+\.upstash\.io")
+_UPSTASH_TOKEN = re.compile(r"UPSTASH_REDIS_REST_TOKEN\s*[=:]\s*[\"']?([A-Za-z0-9_=+/-]{20,})")
+_TOKEN_ONLY = re.compile(r"[A-Za-z0-9_=+/-]{20,}")
+
+
+def upstash_settings(url_value: str, token_value: str) -> tuple[str, str]:
+    """Retrouve l'adresse et le jeton Upstash même s'ils ont été collés en vrac
+    (valeurs inversées, sans https://, bloc .env entier, guillemets, retours à la ligne)."""
+    both = f"{url_value}\n{token_value}"
+    m = _UPSTASH_URL.search(both)
+    if m:
+        url = m.group(0)
+    else:
+        host = re.search(r"[A-Za-z0-9.-]+\.upstash\.io", both)
+        url = "https://" + host.group(0) if host else url_value.strip()
+    m = _UPSTASH_TOKEN.search(both)
+    if m:
+        token = m.group(1)
+    else:
+        # Le jeton est la valeur qui n'est pas l'adresse.
+        candidates = [v for v in (token_value, url_value) if v and "upstash.io" not in v]
+        found = _TOKEN_ONLY.search(candidates[0]) if candidates else None
+        token = found.group(0) if found else ""
+    return url, token
+
+
 def open_database(cfg: Config):
     """Upstash Redis si configuré (obligatoire sur Vercel), sinon SQLite local."""
-    url, token = cfg.redis_url, cfg.redis_token
-    if token.startswith("https://") and not url.startswith("https://"):
-        url, token = token, url  # les deux valeurs ont été inversées
-    if url and "://" not in url and url.rstrip("/").endswith(".upstash.io"):
-        url = "https://" + url  # adresse copiée sans « https:// »
-    if url and token:
-        if not url.startswith("https://"):
-            # Diagnostic sans révéler de secret : seulement la forme de la valeur.
-            shape = ("vide" if not url else f"{len(url)} caractères, commence par « {url[:6]}… »"
-                     if url.startswith(("redis", "rediss", "http:")) else f"{len(url)} caractères")
-            logging.getLogger("syrius").error("UPSTASH_REDIS_REST_URL ne ressemble pas à une adresse : %s", shape)
-        try:
+    log = logging.getLogger("syrius")
+    if cfg.redis_url or cfg.redis_token:
+        url, token = upstash_settings(cfg.redis_url, cfg.redis_token)
+        if url.startswith("https://") and token:
             return RedisDatabase(UpstashREST(url, token))
-        except ValueError as e:  # adresse mal copiée : on démarre quand même et on le signale
-            logging.getLogger("syrius").error("Base Upstash ignorée : %s", e)
+        log.error("Base Upstash ignorée : adresse %s, jeton %s",
+                  "trouvée" if url.startswith("https://") else "introuvable",
+                  "trouvé" if token else "introuvable")
     if cfg.behind_vercel:
-        logging.getLogger("syrius").warning(
-            "Upstash non configuré : les données seront PERDUES à chaque redémarrage (voir README).")
+        log.warning("Upstash non configuré : les données seront PERDUES à chaque redémarrage (voir README).")
     return Database(cfg.db_path)
 
 
