@@ -1,0 +1,5 @@
+# Outils de test et d'audit de sécurité (pas nécessaires pour faire tourner Syrius)
+pytest==9.1.1
+httpx2==2.16.0
+pip-audit==2.10.1
+bandit==1.9.4

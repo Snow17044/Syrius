@@ -1,0 +1,7 @@
+# HTTPS automatique (certificat Let's Encrypt gratuit, renouvelé tout seul)
+{$SYRIUS_DOMAIN} {
+	encode gzip
+	reverse_proxy syrius:8000 {
+		flush_interval -1
+	}
+}
