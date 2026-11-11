@@ -1,7 +1,12 @@
-"""Configuration lue depuis les variables d'environnement (fichier .env)."""
+"""Configuration lue depuis les variables d'environnement (Vercel ou fichier .env)."""
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default).strip()
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -11,29 +16,46 @@ def _bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "oui", "on"}
 
 
+def _default_data_dir() -> str:
+    # Sur Vercel, seul /tmp est inscriptible (et il est effacé) : il faut Upstash.
+    return os.path.join(tempfile.gettempdir(), "syrius") if os.environ.get("VERCEL") else "data"
+
+
 @dataclass
 class Config:
-    data_dir: Path = field(default_factory=lambda: Path(os.environ.get("SYRIUS_DATA_DIR", "data")))
-    # Cerveau local (Ollama). Modèle par défaut : bon équilibre vitesse / intelligence sans carte graphique.
-    ollama_url: str = field(default_factory=lambda: os.environ.get("SYRIUS_OLLAMA_URL", "http://ollama:11434"))
-    model: str = field(default_factory=lambda: os.environ.get("SYRIUS_MODEL", "qwen3:30b"))
-    context_tokens: int = field(default_factory=lambda: int(os.environ.get("SYRIUS_CONTEXT", "16384")))
+    data_dir: Path = field(default_factory=lambda: Path(_env("SYRIUS_DATA_DIR", _default_data_dir())))
+    # Base de données Upstash Redis (gratuite). Vercel crée ces variables automatiquement.
+    redis_url: str = field(default_factory=lambda: _env("UPSTASH_REDIS_REST_URL") or _env("KV_REST_API_URL"))
+    redis_token: str = field(default_factory=lambda: _env("UPSTASH_REDIS_REST_TOKEN") or _env("KV_REST_API_TOKEN"))
+
+    # Cerveaux IA gratuits (au moins un des trois)
+    groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
+    groq_model: str = field(default_factory=lambda: _env("SYRIUS_GROQ_MODEL", "openai/gpt-oss-120b"))
+    gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY"))
+    gemini_model: str = field(default_factory=lambda: _env("SYRIUS_GEMINI_MODEL", "gemini-flash-latest"))
+    ollama_url: str = field(default_factory=lambda: _env("SYRIUS_OLLAMA_URL"))
+    ollama_model: str = field(default_factory=lambda: _env("SYRIUS_OLLAMA_MODEL", "qwen3:8b"))
+
     # Recherche web gratuite (compte Ollama gratuit). Vide = recherche web désactivée.
-    web_search_key: str = field(default_factory=lambda: os.environ.get("OLLAMA_API_KEY", ""))
+    web_search_key: str = field(default_factory=lambda: _env("OLLAMA_API_KEY"))
+
+    # Premier mot de passe : code choisi dans Vercel, demandé une seule fois au premier lancement.
+    setup_code: str = field(default_factory=lambda: _env("SYRIUS_SETUP_CODE"))
     # Cookies "Secure" : obligatoire en production (HTTPS). Désactivable seulement en local.
     cookie_secure: bool = field(default_factory=lambda: _bool("SYRIUS_COOKIE_SECURE", True))
-    session_days: int = field(default_factory=lambda: int(os.environ.get("SYRIUS_SESSION_DAYS", "30")))
+    session_days: int = field(default_factory=lambda: int(_env("SYRIUS_SESSION_DAYS", "30")))
+    behind_vercel: bool = field(default_factory=lambda: bool(os.environ.get("VERCEL")))
 
     # Emails (IMAP lecture / SMTP envoi)
-    imap_host: str = field(default_factory=lambda: os.environ.get("SYRIUS_IMAP_HOST", ""))
-    imap_port: int = field(default_factory=lambda: int(os.environ.get("SYRIUS_IMAP_PORT", "993")))
-    smtp_host: str = field(default_factory=lambda: os.environ.get("SYRIUS_SMTP_HOST", ""))
-    smtp_port: int = field(default_factory=lambda: int(os.environ.get("SYRIUS_SMTP_PORT", "587")))
-    email_user: str = field(default_factory=lambda: os.environ.get("SYRIUS_EMAIL_USER", ""))
-    email_password: str = field(default_factory=lambda: os.environ.get("SYRIUS_EMAIL_PASSWORD", ""))
+    imap_host: str = field(default_factory=lambda: _env("SYRIUS_IMAP_HOST"))
+    imap_port: int = field(default_factory=lambda: int(_env("SYRIUS_IMAP_PORT", "993")))
+    smtp_host: str = field(default_factory=lambda: _env("SYRIUS_SMTP_HOST"))
+    smtp_port: int = field(default_factory=lambda: int(_env("SYRIUS_SMTP_PORT", "587")))
+    email_user: str = field(default_factory=lambda: _env("SYRIUS_EMAIL_USER"))
+    email_password: str = field(default_factory=lambda: _env("SYRIUS_EMAIL_PASSWORD"))
     # "password" (mot de passe d'application, ex. Gmail) ou "outlook" (OAuth2 Microsoft)
-    email_auth: str = field(default_factory=lambda: os.environ.get("SYRIUS_EMAIL_AUTH", "password"))
-    ms_client_id: str = field(default_factory=lambda: os.environ.get("SYRIUS_MS_CLIENT_ID", ""))
+    email_auth: str = field(default_factory=lambda: _env("SYRIUS_EMAIL_AUTH", "password"))
+    ms_client_id: str = field(default_factory=lambda: _env("SYRIUS_MS_CLIENT_ID"))
 
     @property
     def db_path(self) -> Path:

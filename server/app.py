@@ -1,5 +1,6 @@
 """Serveur web de Syrius (API + application téléphone)."""
 import asyncio
+import hmac
 import logging
 from pathlib import Path
 
@@ -11,7 +12,8 @@ from . import auth
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
-from .tools.email_tool import EmailError
+from .store_redis import RedisDatabase, UpstashREST
+from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 STATIC_FILES = {
@@ -40,14 +42,29 @@ class ConversationPatch(BaseModel):
     pinned: bool | None = None
 
 
+class SetupBody(BaseModel):
+    code: str = Field(max_length=256)
+    password: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
+
+
 class PasswordChange(BaseModel):
     current: str = Field(max_length=256)
     new: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
 
 
-def create_app(cfg: Config | None = None, agent: Agent | None = None) -> FastAPI:
+def open_database(cfg: Config):
+    """Upstash Redis si configuré (obligatoire sur Vercel), sinon SQLite local."""
+    if cfg.redis_url and cfg.redis_token:
+        return RedisDatabase(UpstashREST(cfg.redis_url, cfg.redis_token))
+    if cfg.behind_vercel:
+        logging.getLogger("syrius").warning(
+            "Upstash non configuré : les données seront PERDUES à chaque redémarrage (voir README).")
+    return Database(cfg.db_path)
+
+
+def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -> FastAPI:
     cfg = cfg or default_config
-    db = Database(cfg.db_path)
+    db = db or open_database(cfg)
     agent = agent or Agent(cfg, db)
     if agent.db is not db:
         agent.db = db
@@ -83,6 +100,10 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None) -> FastAPI
         return response
 
     def client_ip(request: Request) -> str:
+        if cfg.behind_vercel:  # Vercel indique la vraie adresse du visiteur dans cet en-tête
+            real = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "")
+            if real:
+                return real.split(",")[0].strip()[:64]
         return request.client.host if request.client else "unknown"
 
     def require_auth(request: Request) -> None:
@@ -118,8 +139,24 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None) -> FastAPI
     # ------------------------------------------------------------------ connexion
     @app.get("/api/session")
     async def session(request: Request):
+        password_set = auth.password_is_set(db)
         return {"authenticated": auth.check_session(db, request.cookies.get(auth.COOKIE_NAME)),
-                "password_set": auth.password_is_set(db)}
+                "password_set": password_set, "setup_available": not password_set and bool(cfg.setup_code)}
+
+    @app.post("/api/setup")
+    async def setup(body: SetupBody, request: Request):
+        """Premier lancement : choisir son mot de passe avec le code défini dans Vercel."""
+        ip = client_ip(request)
+        if auth.password_is_set(db) or not cfg.setup_code:
+            raise HTTPException(403, "Configuration déjà faite.")
+        if auth.is_locked_out(db, ip):
+            raise HTTPException(429, "Trop d'essais. Réessaie dans 15 minutes.")
+        if not hmac.compare_digest(body.code.encode(), cfg.setup_code.encode()):
+            db.record_failed_login(ip)
+            await asyncio.sleep(1)
+            raise HTTPException(401, "Code de configuration incorrect.")
+        await asyncio.to_thread(auth.set_password, db, body.password)
+        return {"ok": True}
 
     @app.post("/api/login")
     async def login(body: LoginBody, request: Request):
@@ -193,8 +230,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None) -> FastAPI
             try:
                 async for event in agent.chat(cid, body.text):
                     yield sse(event)
-                if first and conv["title"] == "Nouvelle discussion":
-                    title = await agent.make_title(body.text)
+                if first and conv["title"] == "Nouvelle discussion" and db.get_messages(cid):
+                    title = agent.make_title(body.text)
                     db.update_conversation(cid, title=title)
                     yield sse({"type": "title", "title": title})
             except Exception:
@@ -239,18 +276,33 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None) -> FastAPI
     @app.get("/api/settings", dependencies=[Depends(require_auth)])
     async def get_settings():
         return {**db.get_settings(), "email_enabled": cfg.email_enabled,
-                "web_search_available": bool(cfg.web_search_key), "default_model": cfg.model}
+                "outlook": cfg.email_auth == "outlook" and bool(cfg.ms_client_id),
+                "web_search_available": bool(cfg.web_search_key)}
 
-    @app.get("/api/models", dependencies=[Depends(require_auth)])
-    async def list_models():
-        return {"installed": await agent.list_models(), "default": cfg.model}
+    # Connexion Outlook / Hotmail depuis l'app (code à entrer sur le site de Microsoft)
+    @app.post("/api/email/outlook/start", dependencies=[Depends(require_auth)])
+    async def outlook_login_start():
+        try:
+            return await asyncio.to_thread(outlook_start, cfg, db)
+        except EmailError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.post("/api/email/outlook/poll", dependencies=[Depends(require_auth)])
+    async def outlook_login_poll():
+        try:
+            return {"status": await asyncio.to_thread(outlook_poll, cfg, db)}
+        except EmailError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.get("/api/brains", dependencies=[Depends(require_auth)])
+    async def list_brains():
+        return agent.brains()
 
     @app.put("/api/settings", dependencies=[Depends(require_auth)])
     async def put_settings(body: dict):
-        model = body.get("model")
-        if model:  # seul un modèle réellement installé peut être choisi
-            if not isinstance(model, str) or model not in await agent.list_models():
-                raise HTTPException(400, "Modèle non installé sur le serveur.")
+        brain = body.get("brain")
+        if brain and brain not in {b["name"] for b in agent.brains()}:
+            raise HTTPException(400, "Cerveau inconnu.")
         try:
             return db.update_settings(body)
         except ValueError as e:

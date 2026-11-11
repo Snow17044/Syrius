@@ -1,10 +1,15 @@
-"""Connexion au cerveau local (Ollama). Aucune dépendance externe : bibliothèque standard uniquement."""
+"""Connexion aux cerveaux IA (format compatible OpenAI) : Groq, Gemini, ou Ollama en local.
+
+Bibliothèque standard uniquement. Si un cerveau est saturé (limite gratuite atteinte)
+ou en panne, Syrius passe automatiquement au suivant.
+"""
 import asyncio
 import json
 import threading
 import urllib.error
 import urllib.request
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 
@@ -12,59 +17,99 @@ class LLMError(Exception):
     """Erreur affichable telle quelle à l'utilisateur."""
 
 
-class OllamaClient:
-    def __init__(self, base_url: str, timeout: float = 600):
-        parsed = urlparse(base_url)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
-            raise ValueError("SYRIUS_OLLAMA_URL invalide")
-        self.base_url = base_url.rstrip("/")
+class RetryableError(LLMError):
+    """Limite atteinte ou panne passagère : on peut essayer un autre cerveau."""
+
+
+@dataclass
+class Provider:
+    name: str        # identifiant court : groq, gemini, local
+    label: str       # nom affiché
+    base_url: str
+    model: str
+    api_key: str = ""
+    reasoning: bool = True  # accepte le paramètre reasoning_effort
+
+    def __post_init__(self):
+        p = urlparse(self.base_url)
+        if p.scheme not in ("http", "https") or not p.netloc:
+            raise ValueError(f"URL invalide pour {self.name}")
+        self.base_url = self.base_url.rstrip("/")
+
+
+def _http_error_message(provider: Provider, code: int, detail: str) -> LLMError:
+    if code == 429:
+        return RetryableError(f"{provider.label} : limite gratuite atteinte pour le moment.")
+    if code in (401, 403):
+        return LLMError(f"{provider.label} : clé API invalide ou refusée (voir README).")
+    if code == 404:
+        return LLMError(f"{provider.label} : modèle « {provider.model} » introuvable.")
+    if code >= 500:
+        return RetryableError(f"{provider.label} est momentanément indisponible.")
+    return LLMError(f"{provider.label} a refusé la demande ({code}) : {detail[:150]}")
+
+
+class ChatClient:
+    def __init__(self, providers: list[Provider], timeout: float = 120):
+        self.providers = providers
         self.timeout = timeout
 
-    def _open(self, path: str, payload: dict | None):
-        data = json.dumps(payload).encode() if payload is not None else None
-        req = urllib.request.Request(self.base_url + path, data=data, method="POST" if data else "GET",
-                                     headers={"Content-Type": "application/json"})
+    def _open(self, provider: Provider, path: str, body: dict | None):
+        headers = {"Content-Type": "application/json", "User-Agent": "Syrius/1.0"}
+        if provider.api_key:
+            headers["Authorization"] = f"Bearer {provider.api_key}"
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(provider.base_url + path, data=data, headers=headers,
+                                     method="POST" if data else "GET")
         try:
             return urllib.request.urlopen(req, timeout=self.timeout)  # nosec B310
         except urllib.error.HTTPError as e:
             try:
-                detail = json.loads(e.read().decode()).get("error", "")
-            except ValueError:
+                raw = json.loads(e.read().decode() or "{}")
+                err = raw[0] if isinstance(raw, list) and raw else raw
+                detail = str((err.get("error") or {}).get("message", "")) if isinstance(err, dict) else ""
+            except (ValueError, AttributeError):
                 detail = ""
-            if e.code == 404 and "not found" in detail:
-                model = (payload or {}).get("model", "?")
-                raise LLMError(f"Le modèle « {model} » n'est pas installé. Sur le serveur : "
-                               f"docker compose exec ollama ollama pull {model}") from None
-            raise LLMError(f"Le cerveau local a renvoyé une erreur ({e.code}) : {detail[:150]}") from None
+            raise _http_error_message(provider, e.code, detail) from None
         except (urllib.error.URLError, TimeoutError, ConnectionError):
-            raise LLMError("Le cerveau local (Ollama) ne répond pas. Est-il démarré ?") from None
+            raise RetryableError(f"{provider.label} ne répond pas.") from None
 
-    async def stream_chat(self, payload: dict) -> AsyncIterator[dict]:
-        """Envoie une requête /api/chat et renvoie les morceaux au fil de l'eau."""
+    def ordered(self, preferred: str = "") -> list[Provider]:
+        if not preferred:
+            return list(self.providers)
+        return sorted(self.providers, key=lambda p: p.name != preferred)
+
+    async def stream_chat(self, provider: Provider, body: dict) -> AsyncIterator[dict]:
+        """Requête /chat/completions en streaming ; renvoie chaque morceau JSON."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         stop = threading.Event()
         done = object()
+        payload = {**body, "model": provider.model, "stream": True}
 
         def put(item):
             try:
                 loop.call_soon_threadsafe(queue.put_nowait, item)
-            except RuntimeError:  # la boucle est déjà fermée (requête abandonnée)
+            except RuntimeError:  # requête abandonnée
                 stop.set()
 
         def worker():
             try:
-                with self._open("/api/chat", {**payload, "stream": True}) as resp:
-                    for line in resp:
+                with self._open(provider, "/chat/completions", payload) as resp:
+                    for raw in resp:
                         if stop.is_set():
                             return
-                        line = line.strip()
-                        if line:
-                            put(json.loads(line))
+                        line = raw.decode("utf-8", errors="replace").strip()
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        put(json.loads(data))
             except LLMError as e:
                 put(e)
             except (ValueError, OSError):
-                put(LLMError("Réponse illisible du cerveau local."))
+                put(RetryableError(f"Réponse illisible de {provider.label}."))
             finally:
                 put(done)
 
@@ -76,20 +121,22 @@ class OllamaClient:
                     return
                 if isinstance(item, Exception):
                     raise item
-                if item.get("error"):
-                    raise LLMError(f"Erreur du cerveau local : {str(item['error'])[:200]}")
+                if isinstance(item, dict) and item.get("error"):
+                    msg = item["error"].get("message", "") if isinstance(item["error"], dict) else item["error"]
+                    raise RetryableError(f"{provider.label} : {str(msg)[:150]}")
                 yield item
         finally:
-            stop.set()  # l'utilisateur a arrêté : on coupe la génération
+            stop.set()
 
-    async def chat(self, payload: dict) -> dict:
-        def run():
-            with self._open("/api/chat", {**payload, "stream": False}) as resp:
-                return json.loads(resp.read().decode())
-        return await asyncio.to_thread(run)
 
-    async def list_models(self) -> list[str]:
-        def run():
-            with self._open("/api/tags", None) as resp:
-                return [m["name"] for m in json.loads(resp.read().decode()).get("models", [])]
-        return await asyncio.to_thread(run)
+def providers_from_config(cfg) -> list[Provider]:
+    out = []
+    if cfg.groq_api_key:
+        out.append(Provider("groq", "Groq", "https://api.groq.com/openai/v1", cfg.groq_model, cfg.groq_api_key))
+    if cfg.gemini_api_key:
+        out.append(Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
+                            cfg.gemini_model, cfg.gemini_api_key))
+    if cfg.ollama_url:
+        out.append(Provider("local", "IA locale", cfg.ollama_url.rstrip("/") + "/v1", cfg.ollama_model,
+                            reasoning=False))
+    return out

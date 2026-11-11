@@ -4,6 +4,8 @@ services:
     build: .
     restart: unless-stopped        # redémarre tout seul (panne, reboot du serveur…)
     env_file: .env
+    environment:
+      SYRIUS_OLLAMA_URL: http://ollama:11434   # IA locale (en plus de Groq/Gemini si configurés)
     volumes:
       - syrius-data:/data          # discussions, mémoire, réglages
     read_only: true
@@ -35,8 +37,8 @@ services:
     restart: "no"
     environment:
       OLLAMA_HOST: ollama:11434
-      SYRIUS_MODEL: ${SYRIUS_MODEL:-qwen3:30b}
-    entrypoint: ["/bin/sh", "-c", "sleep 5 && ollama pull \"$$SYRIUS_MODEL\""]
+      SYRIUS_OLLAMA_MODEL: ${SYRIUS_OLLAMA_MODEL:-qwen3:8b}
+    entrypoint: ["/bin/sh", "-c", "sleep 5 && ollama pull \"$$SYRIUS_OLLAMA_MODEL\""]
     depends_on: [ollama]
 
   caddy:

@@ -58,12 +58,32 @@ CREATE TABLE IF NOT EXISTS secrets (
 DEFAULT_SETTINGS: dict[str, Any] = {
     "user_name": "",
     "effort": "low",          # low = réponse directe (rapide) ; high = réfléchit avant de répondre
-    "model": "",              # vide = modèle par défaut du serveur
+    "brain": "",              # cerveau préféré (groq, gemini, local) ; vide = automatique
     "web_search": True,
     "voice_reply": False,     # lecture vocale des réponses (dans le téléphone)
     "custom_instructions": "",
 }
 ALLOWED_EFFORTS = {"low", "high"}
+
+
+def validate_settings(values: dict) -> dict:
+    """Ne garde que les réglages connus, avec le bon type. Lève ValueError sinon."""
+    clean: dict[str, Any] = {}
+    for key, val in values.items():
+        if key not in DEFAULT_SETTINGS:
+            continue
+        default = DEFAULT_SETTINGS[key]
+        if isinstance(default, bool):
+            if not isinstance(val, bool):
+                raise ValueError(f"{key} doit être vrai/faux")
+        elif isinstance(default, str):
+            if not isinstance(val, str):
+                raise ValueError(f"{key} doit être un texte")
+            val = val[:2000]
+        if key == "effort" and val not in ALLOWED_EFFORTS:
+            raise ValueError("effort invalide")
+        clean[key] = val
+    return clean
 
 
 class Database:
@@ -167,22 +187,7 @@ class Database:
         return out
 
     def update_settings(self, values: dict) -> dict:
-        clean: dict[str, Any] = {}
-        for key, val in values.items():
-            if key not in DEFAULT_SETTINGS:
-                continue
-            default = DEFAULT_SETTINGS[key]
-            if isinstance(default, bool):
-                if not isinstance(val, bool):
-                    raise ValueError(f"{key} doit être vrai/faux")
-            elif isinstance(default, str):
-                if not isinstance(val, str):
-                    raise ValueError(f"{key} doit être un texte")
-                val = val[:2000]
-            if key == "effort" and val not in ALLOWED_EFFORTS:
-                raise ValueError("effort invalide")
-            clean[key] = val
-        for key, val in clean.items():
+        for key, val in validate_settings(values).items():
             self._x("INSERT INTO settings (key, value) VALUES (?, ?) "
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, json.dumps(val)))
         return self.get_settings()

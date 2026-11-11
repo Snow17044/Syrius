@@ -1,4 +1,4 @@
-"""Le cerveau de Syrius : dialogue avec l'IA locale, outils, mémoire, réponses en direct."""
+"""Le cerveau de Syrius : dialogue avec l'IA, outils, mémoire, réponses en direct."""
 import json
 import logging
 import re
@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import Config
 from .db import Database
-from .llm import LLMError, OllamaClient
+from .llm import ChatClient, LLMError, RetryableError, providers_from_config
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
@@ -60,20 +60,21 @@ def unanswered_tool_uses(stored: list[dict]) -> list[tuple[str, str]]:
     return [(b["id"], b["name"]) for b in stored[-1]["content"] if b.get("type") == "tool_use"]
 
 
-def to_ollama(stored: list[dict], system: str) -> list[dict]:
-    """Convertit l'historique enregistré au format attendu par Ollama."""
+def to_openai(stored: list[dict], system: str) -> list[dict]:
+    """Convertit l'historique enregistré au format « chat completions » (Groq, Gemini, Ollama)."""
     out = [{"role": "system", "content": system}]
     for m in stored:
         if m["role"] == "user":
             for b in m["content"]:
                 if b.get("type") == "tool_result":
-                    out.append({"role": "tool", "tool_name": b.get("tool_name", ""), "content": b["content"]})
+                    out.append({"role": "tool", "tool_call_id": b["tool_use_id"], "content": b["content"]})
                 elif b.get("type") == "text":
                     out.append({"role": "user", "content": b["text"]})
         else:
             text = "\n\n".join(b["text"] for b in m["content"] if b.get("type") == "text")
-            msg = {"role": "assistant", "content": text}
-            calls = [{"function": {"name": b["name"], "arguments": b["input"]}}
+            msg: dict = {"role": "assistant", "content": text}
+            calls = [{"id": b["id"], "type": "function",
+                      "function": {"name": b["name"], "arguments": json.dumps(b["input"], ensure_ascii=False)}}
                      for b in m["content"] if b.get("type") == "tool_use"]
             if calls:
                 msg["tool_calls"] = calls
@@ -106,28 +107,49 @@ _THINK_TAGS = re.compile(r"<think>.*?</think>\s*", re.S)
 
 
 class Agent:
-    def __init__(self, cfg: Config, db: Database, llm=None):
+    def __init__(self, cfg: Config, db: Database, llm: ChatClient | None = None):
         self.cfg = cfg
         self.db = db
-        self.llm = llm or OllamaClient(cfg.ollama_url)
+        self.llm = llm or ChatClient(providers_from_config(cfg))
         self.executor = ToolExecutor(cfg, db)
 
-    def model(self, settings: dict) -> str:
-        return settings.get("model") or self.cfg.model
+    def brains(self) -> list[dict]:
+        return [{"name": p.name, "label": p.label, "model": p.model} for p in self.llm.providers]
 
-    def _payload(self, settings: dict, messages: list[dict], tools: list[dict], think: bool | None) -> dict:
-        payload = {
-            "model": self.model(settings),
-            "messages": messages,
-            "tools": tools,
-            "keep_alive": -1,  # le modèle reste chargé en mémoire : pas d'attente au réveil
-            "options": {"num_ctx": self.cfg.context_tokens},
-        }
-        if think is not None:
-            payload["think"] = think
-        return payload
+    async def _one_step(self, provider, body: dict, state: dict) -> AsyncIterator[dict]:
+        """Une réponse du modèle. Remplit state["text"] et state["calls"]."""
+        partial: dict[int, dict] = {}
+        async for chunk in self.llm.stream_chat(provider, body):
+            for choice in chunk.get("choices") or []:
+                delta = choice.get("delta") or {}
+                text = delta.get("content") or ""
+                if text:
+                    state["streamed"] = True
+                    state["text"] += text
+                    yield {"type": "text", "text": text}
+                for tc in delta.get("tool_calls") or []:
+                    idx = tc.get("index", len(partial))
+                    cur = partial.setdefault(idx, {"id": "", "name": "", "args": ""})
+                    cur["id"] = tc.get("id") or cur["id"]
+                    fn = tc.get("function") or {}
+                    cur["name"] += fn.get("name") or ""
+                    cur["args"] += fn.get("arguments") or ""
+        for idx in sorted(partial):
+            cur = partial[idx]
+            try:
+                args = json.loads(cur["args"]) if cur["args"].strip() else {}
+            except ValueError:
+                args = {"__invalid_json__": cur["args"][:200]}
+            name = cur["name"][:64]
+            state["calls"].append({"type": "tool_use", "id": (cur["id"] or "call_" + uuid.uuid4().hex[:12])[:64],
+                                   "name": name, "input": args})
+            yield {"type": "tool", "name": name, "label": TOOL_LABELS.get(name, name)}
 
     async def chat(self, conversation_id: str, user_text: str) -> AsyncIterator[dict]:
+        if not self.llm.providers:
+            yield {"type": "error", "message": "Aucun cerveau configuré : ajoute une clé GROQ_API_KEY "
+                                               "ou GEMINI_API_KEY (voir README)."}
+            return
         settings = self.db.get_settings()
         stored = self.db.get_messages(conversation_id)
 
@@ -138,44 +160,54 @@ class Agent:
         user_content.append({"type": "text", "text": user_text})
         history = trim_history(stored) + [{"role": "user", "content": user_content}]
         to_save = [history[-1]]
-        think: bool | None = settings.get("effort", "low") != "low"
+        providers = self.llm.ordered(settings.get("brain", ""))
+        effort = "high" if settings.get("effort") == "high" else "low"
 
         for _step in range(MAX_STEPS):
             system = build_system(settings, self.db.list_memories())  # les souvenirs peuvent changer
-            payload = self._payload(settings, to_ollama(history, system), build_tools(self.cfg, settings), think)
-            text, calls, streamed_any = "", [], False
-            try:
-                async for chunk in self.llm.stream_chat(payload):
-                    msg = chunk.get("message") or {}
-                    delta = msg.get("content") or ""
-                    if delta:
-                        streamed_any = True
-                        text += delta
-                        yield {"type": "text", "text": delta}
-                    for call in msg.get("tool_calls") or []:
-                        fn = call.get("function") or {}
-                        name = str(fn.get("name", ""))[:64]
-                        calls.append({"type": "tool_use", "id": "call_" + uuid.uuid4().hex[:12],
-                                      "name": name, "input": fn.get("arguments")})
-                        yield {"type": "tool", "name": name, "label": TOOL_LABELS.get(name, name)}
-            except LLMError as e:
-                if think is not None and "think" in str(e).lower() and not streamed_any:
-                    think = None  # ce modèle ne gère pas le réglage « réflexion » : on réessaie sans
-                    continue
-                yield {"type": "error", "message": str(e)}
+            body = {"messages": to_openai(history, system), "tools": build_tools(self.cfg, settings),
+                    "max_tokens": 8000}
+            state = {"text": "", "calls": [], "streamed": False}
+            last_error: LLMError | None = None
+            while providers:
+                provider = providers[0]
+                req = dict(body)
+                if provider.reasoning:
+                    req["reasoning_effort"] = effort
+                try:
+                    async for event in self._one_step(provider, req, state):
+                        yield event
+                    last_error = None
+                    break
+                except RetryableError as e:
+                    last_error = e
+                    if state["streamed"] or state["calls"]:
+                        break  # coupure en plein milieu : on ne mélange pas deux cerveaux
+                    providers = providers[1:]  # limite atteinte : on passe au cerveau suivant
+                    if providers:
+                        yield {"type": "tool", "name": "switch",
+                               "label": f"{e} Je passe sur {providers[0].label}."}
+                except LLMError as e:
+                    last_error = e
+                    break
+            if last_error is not None:
+                yield {"type": "error", "message": str(last_error)}
+                if state["text"]:  # garde ce qui a déjà été écrit
+                    self.db.add_messages(conversation_id, to_save + [
+                        {"role": "assistant", "content": [{"type": "text", "text": state["text"]}]}])
                 return
 
-            text = _THINK_TAGS.sub("", text)
-            content = ([{"type": "text", "text": text}] if text else []) + calls
+            text = _THINK_TAGS.sub("", state["text"])
+            content = ([{"type": "text", "text": text}] if text else []) + state["calls"]
             assistant_msg = {"role": "assistant", "content": content or [{"type": "text", "text": ""}]}
             self.db.add_messages(conversation_id, to_save + [assistant_msg])
             history.append(assistant_msg)
             to_save = []
-            if not calls:
+            if not state["calls"]:
                 break
 
             results = []
-            for call in calls:
+            for call in state["calls"]:
                 result, is_error, ui_event = await self.executor.run(call["name"], call["input"])
                 results.append({"type": "tool_result", "tool_use_id": call["id"], "tool_name": call["name"],
                                 "content": result, "is_error": is_error})
@@ -191,29 +223,11 @@ class Agent:
             self.db.add_messages(conversation_id, to_save)
         yield {"type": "done"}
 
-    async def make_title(self, first_message: str) -> str:
-        fallback = first_message.strip().split("\n")[0][:50] or "Nouvelle discussion"
-        settings = self.db.get_settings()
-        try:
-            resp = await self.llm.chat({
-                "model": self.model(settings), "think": False, "keep_alive": -1,
-                "options": {"num_predict": 24, "num_ctx": 2048},
-                "messages": [
-                    {"role": "system", "content": "Donne un titre très court (2 à 6 mots, sans guillemets) à une "
-                                                  "discussion qui commence par le message fourni. Réponds uniquement le titre."},
-                    {"role": "user", "content": first_message[:1500]}],
-            })
-            title = _THINK_TAGS.sub("", (resp.get("message") or {}).get("content", "")).strip()
-            title = title.strip('"«»*# ').split("\n")[0]
-            return title[:60] or fallback
-        except (LLMError, OSError, ValueError):
-            return fallback
-
-    async def list_models(self) -> list[str]:
-        try:
-            return await self.llm.list_models()
-        except (LLMError, OSError, ValueError):
-            return []
+    @staticmethod
+    def make_title(first_message: str) -> str:
+        # Titre tiré du premier message : n'utilise pas le quota gratuit de l'IA.
+        line = " ".join(first_message.split())
+        return (line[:48] + "…") if len(line) > 50 else (line or "Nouvelle discussion")
 
 
 def sse(event: dict) -> bytes:

@@ -13,17 +13,33 @@ Avant d'ajouter un paquet, on vérifie :
 | Failles connues | `pip-audit` compare chaque version à la base publique de vulnérabilités (OSV / PyPA). |
 | Peu de dépendances | L'app téléphone n'utilise **aucune** bibliothèque externe ni CDN. La connexion à l'IA, les emails, le chiffrement du mot de passe et la base de données utilisent la bibliothèque standard de Python. |
 
-Images Docker officielles : `python:3.13-slim`, `caddy:2.10`, `ollama/ollama:0.40.12` (version fixée, publiée depuis plus de 2 semaines).
+Option auto-hébergée : images Docker officielles `python:3.13-slim`, `caddy:2.10`, `ollama/ollama:0.40.12`
+(version fixée, publiée depuis plus de 2 semaines).
 
-**Modèles d'IA** : téléchargés depuis la bibliothèque officielle d'Ollama. Ce sont des fichiers de données (poids du modèle), pas des programmes.
+## 1 bis. Les cerveaux IA et l'hébergement
 
-## 1 bis. L'IA locale
+- **Groq** (principal) et **Google Gemini** (secours) traitent tes messages. Avec l'offre gratuite de Gemini,
+  Google peut utiliser les échanges pour améliorer ses produits : n'y mets pas de secrets.
+  Pour que rien ne sorte de chez toi, utilise l'option « IA locale » (Ollama, `docker-compose.yml`).
+- Les clés API sont des **variables d'environnement Vercel** : jamais dans le code, jamais envoyées au téléphone.
+- **Upstash** stocke discussions, mémoire, réglages (accès par jeton secret, HTTPS). Le mot de passe y est haché,
+  les jetons de session aussi.
+- Premier mot de passe : créé dans l'app avec le code `SYRIUS_SETUP_CODE`, **une seule fois** (ensuite la page est fermée),
+  avec le même blocage anti-force brute que la connexion.
+- Derrière Vercel, l'adresse IP du visiteur vient de l'en-tête posé par Vercel ; ailleurs, les en-têtes d'IP envoyés
+  par le visiteur sont ignorés (impossible de contourner le blocage en les falsifiant — testé).
+- Si un cerveau est saturé, Syrius bascule sur l'autre ; les erreurs de clé ne basculent pas (pour te prévenir).
 
-- L'IA tourne sur ton serveur : **aucune discussion ni aucun email n'est envoyé à une entreprise d'IA**.
-- L'API d'Ollama n'a pas de mot de passe : elle n'est **jamais publiée sur Internet** (réseau Docker interne uniquement ; un test le vérifie).
-- Seul un modèle réellement installé peut être choisi dans les réglages.
-- Les petits modèles locaux résistent moins bien que les grandes IA aux emails piégés : c'est pour ça que les protections importantes ne dépendent **pas** de l'IA (lecture seule, envoi uniquement sur ton clic).
-- Recherche web (optionnelle) : seuls les mots recherchés partent vers ollama.com ; les résultats sont traités comme non fiables.
+## 1 ter. L'application Android
+
+- Construite par GitHub Actions à partir du code du dépôt : actions **officielles épinglées par empreinte**
+  (commit), droits minimaux (`contents: read`, écriture seulement pour publier la Release depuis `main`).
+- Aucune bibliothèque tierce dans l'app (uniquement Android). Empreinte SHA-256 de l'APK publiée à côté.
+- HTTPS obligatoire, sauvegarde Android désactivée, aucun accès aux fichiers, navigation limitée à ton Syrius
+  (les autres liens s'ouvrent dans le navigateur).
+- Le pont « voix » (micro, lecture) vérifie que la page affichée est bien ton Syrius ; le texte dicté est échappé
+  avant d'être transmis à la page. Le micro n'est demandé qu'au premier appui sur 🎙.
+- Signature : clé de test par défaut ; clé personnelle possible via les secrets GitHub (voir README).
 
 ## 2. Accès à Syrius
 

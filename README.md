@@ -1,188 +1,142 @@
 # SYRIUS — ton assistant IA personnel, 100 % gratuit
 
 Syrius est un assistant IA dans l'esprit de J.A.R.V.I.S. : professionnel, drôle quand il faut, et toujours là.
-Son cerveau est une **IA locale qui tourne sur ton propre serveur** : aucun abonnement, aucune facture,
-aucune limite de messages, et tes discussions ne partent chez personne.
+C'est une **vraie application Android**, et il est disponible 24h/24 sans rien à redémarrer.
 
 ## Ce qu'il sait faire
 
 | | |
 |---|---|
-| 💬 **Discuter** | Réponses affichées en direct, mot par mot, au format téléphone |
+| 💬 **Discuter** | Réponses affichées en direct, mot par mot |
 | 🗂 **Menu des discussions** | Historique complet, recherche, renommer, épingler, supprimer |
 | 🧠 **Mémoire** | Retient ton prénom, tes goûts et tes projets, d'une discussion à l'autre (modifiable dans les réglages) |
 | 📬 **Emails** | Lister, chercher, lire et résumer tes emails (Gmail, Outlook/Hotmail…) |
 | ✉ **Envoi d'emails** | Il prépare le brouillon ; **rien ne part sans que tu appuies sur « Envoyer »** |
-| 🌐 **Web** | Recherche l'actu (optionnel, clé gratuite) |
+| 🌐 **Web** | Recherche l'actu (optionnel) |
 | 🎙 **Voix** | Dictée au micro et lecture des réponses à voix haute |
-| ⚙ **Réglages** | Prénom, mode Rapide / Réfléchi, choix du modèle d'IA, web, voix, mot de passe |
+| ⚙ **Réglages** | Prénom, mode Rapide / Réfléchi, cerveau préféré, web, voix, mot de passe |
 
-## Ce que ça coûte : 0 €
+## Comment ça marche (et pourquoi c'est gratuit)
 
-| Élément | Solution gratuite |
-|---|---|
-| Cerveau | **Ollama** + un modèle libre (par défaut **Qwen3 30B**), qui tourne sur ton serveur |
-| Serveur 24h/24 | **Oracle Cloud « Always Free »** (gratuit à vie) ou un vieux PC chez toi |
-| Adresse web + HTTPS | **DuckDNS** + Caddy (certificat Let's Encrypt gratuit) |
-| Recherche web | Clé gratuite Ollama (optionnelle) |
-
-### Soyons honnêtes sur la vitesse et l'intelligence
-
-- **Intelligence** : Qwen3 30B est un très bon modèle libre (conversation, résumés, emails, outils),
-  mais il reste un cran en dessous des meilleures IA payantes (Claude, ChatGPT) sur les questions très pointues.
-- **Vitesse** : sur le serveur Oracle gratuit (sans carte graphique), il écrit à peu près à la vitesse
-  de lecture. C'est un modèle « MoE » : il n'active qu'une petite partie de lui-même à chaque mot,
-  c'est pour ça qu'il est rapide sans carte graphique.
-  Le mode **Rapide** (par défaut) répond directement ; le mode **Réfléchi** réfléchit d'abord (plus lent, plus juste).
-  - Le tout premier message après le démarrage du serveur prend plus de temps (chargement du modèle).
-    Ensuite le modèle reste en mémoire en permanence.
-  - Avec un PC équipé d'une carte graphique NVIDIA (12 Go ou plus), c'est quasi instantané.
-
-## Pourquoi « toujours là » sans le redémarrer
-
-- Syrius vit sur un **serveur allumé en permanence**, pas dans ton téléphone. Si le serveur redémarre, tout repart tout seul.
-- Sur ton téléphone, c'est une **app installée sur l'écran d'accueil** (PWA). Tu restes connecté·e 30 jours, et l'app rouvre ta dernière discussion.
-
----
-
-## Installation (environ 45 minutes, une seule fois)
-
-### 1. Créer le serveur gratuit (Oracle Cloud)
-
-1. Crée un compte sur <https://www.oracle.com/cloud/free/>. Une carte bancaire est demandée
-   **pour vérifier ton identité** ; l'offre « Always Free » ne prélève rien.
-2. *Compute → Instances → Create instance* :
-   - Image : **Ubuntu**
-   - Shape : **Ampere (VM.Standard.A1.Flex)**, mets **4 OCPU et 24 Go de mémoire** (le maximum gratuit)
-   - Ajoute ta clé SSH (ou laisse Oracle en générer une et télécharge-la)
-3. Dans le *réseau* de l'instance (Security List), autorise les ports **80** et **443** en entrée.
-   Sur le serveur, ouvre-les aussi : `sudo iptables -I INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT && sudo netfilter-persistent save`
-
-> Si Oracle affiche « Out of capacity », réessaie un peu plus tard ou choisis une autre zone.
-> Alternative : un vieux PC à la maison sous Linux (16 Go de RAM ou plus), avec les ports 80/443 redirigés par ta box.
-
-### 2. Créer ton adresse gratuite
-
-Sur <https://www.duckdns.org>, connecte-toi, crée un nom (ex. `monsyrius`) et mets l'IP publique de ton serveur.
-Ton adresse sera `monsyrius.duckdns.org`.
-
-### 3. Installer Syrius
-
-Sur le serveur (connecté en SSH) :
-
-```bash
-# Installer Docker (méthode officielle)
-curl -fsSL https://get.docker.com -o get-docker.sh
-less get-docker.sh          # (facultatif) relire le script avant de l'exécuter
-sudo sh get-docker.sh
-
-# Récupérer Syrius
-git clone https://github.com/snow17044/syrius.git
-cd syrius
-
-# Configurer
-cp .env.example .env
-nano .env                   # mets ton SYRIUS_DOMAIN (et choisis le modèle selon ta RAM)
-chmod 600 .env
-
-# Lancer (24h/24, redémarrage automatique)
-sudo docker compose up -d --build
-
-# Suivre le téléchargement du modèle (~18 Go, une seule fois, 5 à 20 minutes)
-sudo docker compose logs -f ollama-pull
-
-# Choisir ton mot de passe Syrius (10 caractères minimum)
-sudo docker compose exec syrius python -m server.manage set-password
-```
-
-### 4. Sur ton téléphone
-
-1. Ouvre `https://monsyrius.duckdns.org` et connecte-toi.
-2. **Android (Chrome)** : menu ⋮ → *Ajouter à l'écran d'accueil* / *Installer l'application*.
-   **iPhone (Safari)** : bouton Partager → *Sur l'écran d'accueil*.
-
----
-
-## Choisir / changer de modèle d'IA
-
-Le modèle se choisit selon la mémoire (RAM) du serveur :
-
-| RAM du serveur | Modèle conseillé | |
+| Élément | Service gratuit | Carte bancaire ? |
 |---|---|---|
-| 24 Go et plus (Oracle gratuit) | `qwen3:30b` | rapide et intelligent (par défaut) |
-| 16 Go | `qwen3:14b` | bon, un peu plus lent |
-| 8 Go | `qwen3:8b` | correct, pour les petites machines |
+| Cerveau principal | **Groq** (modèle GPT-OSS 120B, très rapide) | Non |
+| Cerveau de secours | **Google Gemini** (Flash) | Non |
+| Serveur 24h/24 | **Vercel** | Non |
+| Base de données (discussions, mémoire) | **Upstash Redis** | Non |
+| Application Android | Construite automatiquement par **GitHub** | Non |
 
-Pour en essayer un autre (par exemple `gemma4`, catalogue sur <https://ollama.com/library>) :
+Si la limite gratuite du jour de Groq est atteinte, Syrius passe tout seul sur Gemini.
 
-```bash
-sudo docker compose exec ollama ollama pull gemma4
-```
-
-Il apparaît ensuite dans **Réglages → Modèle d'IA** sur ton téléphone. Choisis un modèle qui gère les
-« tools » (outils), sinon la mémoire et les emails ne marcheront pas.
-
-**Avec une carte graphique NVIDIA** : installe le *NVIDIA Container Toolkit*, puis décommente le bloc `deploy:` du service `ollama` dans `docker-compose.yml`.
-
-## Modifier Syrius
-
-Tout le code est à toi et modifiable.
-
-- **Sa personnalité** : le fichier [`server/persona.md`](server/persona.md), en français, sans programmation.
-  Change son ton, ajoute des règles… puis `sudo docker compose up -d --build`.
-- **Tes préférences** sans toucher au code : *Réglages → Ce que Syrius doit savoir*.
-- **Ses outils** (ce qu'il sait faire) : `server/tools/registry.py`.
-- **L'apparence** de l'app : `web/style.css`.
-
-Après une modification, relance les tests : `./scripts/security_check.sh` (voir plus bas).
+**À savoir :**
+- Avec les offres gratuites, tes messages passent par Groq ou Google pour être traités.
+  Google peut utiliser les échanges de l'offre gratuite pour améliorer ses produits. Évite d'y mettre des secrets.
+- Limites gratuites (indicatives, elles changent) : environ 1 000 messages par jour chez Groq, moins chez Gemini.
+  Une question qui utilise un outil (emails, mémoire…) compte pour plusieurs messages.
+- Vercel gratuit est réservé à un usage personnel, non commercial.
 
 ---
 
-## Recherche web (optionnelle, gratuite)
+## Installation (environ 30 minutes, une seule fois, tout depuis le téléphone)
 
-1. Crée un compte gratuit sur <https://ollama.com>, puis une clé sur <https://ollama.com/settings/keys>.
-2. Mets-la dans `.env` : `OLLAMA_API_KEY=...`, puis `sudo docker compose up -d`.
+### Étape 1 — Clé Groq (le cerveau)
+1. Va sur <https://console.groq.com> et crée un compte (avec Google ou ton email).
+2. Menu **API Keys** → **Create API Key** → nom `Syrius` → copie la clé (`gsk_…`) dans une note.
 
-Seule la recherche (quelques mots) est envoyée à ollama.com ; tes discussions restent sur ton serveur.
+### Étape 2 — Clé Gemini (le cerveau de secours, conseillé)
+1. Va sur <https://aistudio.google.com/apikey> et connecte-toi avec ton compte Google.
+2. **Create API key** → copie la clé (`AIza…`) dans ta note.
 
-## Emails
+### Étape 3 — Mettre Syrius sur Vercel
+1. Va sur <https://vercel.com/signup> → **Continue with GitHub** (ton compte GitHub).
+2. **Add New… → Project** → choisis le dépôt **Syrius** → **Import**.
+3. Ouvre **Environment Variables** et ajoute :
+
+   | Nom | Valeur |
+   |---|---|
+   | `GROQ_API_KEY` | ta clé Groq |
+   | `GEMINI_API_KEY` | ta clé Gemini |
+   | `SYRIUS_SETUP_CODE` | un code secret inventé par toi (ex. 4 mots au hasard). Il sert **une seule fois** pour créer ton mot de passe. |
+
+4. Appuie sur **Deploy**. Attends le message de réussite, puis note ton adresse : `https://syrius-xxxx.vercel.app`.
+
+### Étape 4 — La base de données (pour ne rien perdre)
+1. Dans ton projet Vercel : onglet **Storage** → **Create Database** → **Upstash** (Redis) → offre **Free**.
+2. Relie-la au projet Syrius : Vercel ajoute tout seul les variables nécessaires.
+3. Onglet **Deployments** → sur le dernier, **⋯ → Redeploy**.
+
+> Sans cette étape, Syrius oublie tout à chaque redémarrage de Vercel.
+
+### Étape 5 — Installer l'application Android
+1. Sur GitHub, dans ton dépôt Syrius : **Settings → Secrets and variables → Actions → Variables** →
+   **New repository variable** : nom `SYRIUS_URL`, valeur ton adresse Vercel (facultatif : elle sera pré-remplie dans l'app).
+2. Onglet **Actions** → **Application Android** → **Run workflow** (sur `main`). Attends ~5 minutes.
+3. Sur ton téléphone, ouvre la page **Releases** du dépôt (`github.com/<toi>/Syrius/releases`),
+   télécharge **Syrius.apk** et ouvre-le.
+4. Android te demande d'autoriser l'installation depuis ton navigateur : accepte (c'est ton application).
+   Play Protect peut afficher un avertissement car l'app ne vient pas du Play Store : choisis **Installer quand même**.
+5. Ouvre **Syrius**, entre ton adresse Vercel si elle n'est pas pré-remplie, puis le **code secret** de l'étape 3
+   et ton **mot de passe** (10 caractères minimum). C'est fini : tu restes connecté·e 30 jours.
+
+> Pas envie d'installer l'APK ? Ouvre simplement ton adresse Vercel dans Chrome → ⋮ → *Installer l'application*.
+
+---
+
+## Emails (optionnel)
 
 Syrius ouvre ta boîte **en lecture seule** : il ne peut ni supprimer, ni déplacer, ni marquer comme lu.
+Les variables s'ajoutent dans Vercel (**Settings → Environment Variables**), puis **Redeploy**.
 
 ### Gmail
 1. Active la **validation en 2 étapes** sur ton compte Google.
 2. Crée un **mot de passe d'application** : <https://myaccount.google.com/apppasswords>.
-3. Dans `.env`, décommente le bloc *Gmail* et remplis ton adresse + ce mot de passe d'application.
-4. `sudo docker compose up -d` pour appliquer.
+3. Variables : `SYRIUS_IMAP_HOST=imap.gmail.com`, `SYRIUS_SMTP_HOST=smtp.gmail.com`,
+   `SYRIUS_EMAIL_USER=ton.adresse@gmail.com`, `SYRIUS_EMAIL_PASSWORD=le mot de passe d'application`.
 
 ### Outlook / Hotmail / Live
-Microsoft n'accepte plus les mots de passe simples : il faut une connexion sécurisée (OAuth2), gratuite.
 1. Va sur <https://entra.microsoft.com> → *Inscriptions d'applications* → *Nouvelle inscription*.
    Nom : `Syrius` ; type de compte : *Comptes Microsoft personnels uniquement*.
 2. Dans l'application créée : *Authentification* → active **« Autoriser les flux de clients publics »**.
-3. *Autorisations d'API* → *Ajouter* → *API utilisées par mon organisation* → cherche **Office 365 Exchange Online** →
+3. *Autorisations d'API* → *Ajouter* → *API utilisées par mon organisation* → **Office 365 Exchange Online** →
    *Autorisations déléguées* → coche `IMAP.AccessAsUser.All` et `SMTP.Send`.
-4. Copie l'**ID d'application (client)** dans `SYRIUS_MS_CLIENT_ID` (bloc *Outlook* du `.env`), puis :
-   ```bash
-   sudo docker compose up -d
-   sudo docker compose exec syrius python -m server.manage outlook-login
-   ```
-   Suis le lien affiché et entre le code : c'est fait, une fois pour toutes.
+4. Variables : `SYRIUS_EMAIL_AUTH=outlook`, `SYRIUS_IMAP_HOST=outlook.office365.com`,
+   `SYRIUS_SMTP_HOST=smtp-mail.outlook.com`, `SYRIUS_EMAIL_USER=ton.adresse@hotmail.fr`,
+   `SYRIUS_MS_CLIENT_ID=l'ID d'application (client)`.
+5. Dans l'app Syrius : **Réglages → Emails → Connecter Outlook / Hotmail**, puis suis les instructions.
+
+## Recherche web (optionnelle)
+Crée un compte gratuit sur <https://ollama.com>, une clé sur <https://ollama.com/settings/keys>,
+et ajoute la variable `OLLAMA_API_KEY` dans Vercel.
+
+---
+
+## Modifier Syrius
+
+Tout le code est à toi.
+- **Sa personnalité** : [`server/persona.md`](server/persona.md), en français, sans programmation.
+  Modifie-le directement sur GitHub (icône ✏) : Vercel met Syrius à jour tout seul en 1 minute.
+- **Tes préférences** sans toucher au code : *Réglages → Ce que Syrius doit savoir*.
+- **Les cerveaux** : variables `SYRIUS_GROQ_MODEL` et `SYRIUS_GEMINI_MODEL` dans Vercel.
+- **Ses outils** : `server/tools/registry.py`. **L'apparence** : `web/style.css`. **L'app Android** : `android/`.
+
+### Mises à jour de l'application Android
+Par défaut, chaque construction est signée avec une clé de test différente : pour installer une nouvelle version,
+désinstalle d'abord l'ancienne (tes discussions restent sur le serveur). Pour des mises à jour directes,
+crée une clé de signature et ajoute les secrets GitHub `SYRIUS_KEYSTORE_BASE64`, `SYRIUS_KEYSTORE_PASSWORD`
+et `SYRIUS_KEY_ALIAS` (demande-moi, je t'explique).
 
 ---
 
 ## Sécurité
 
 Voir [SECURITY.md](SECURITY.md). En résumé :
-
-- Mot de passe obligatoire, stocké haché (scrypt) ; blocage après 5 essais ratés ; HTTPS uniquement.
-- L'IA tourne chez toi : aucune discussion n'est envoyée à une entreprise d'IA.
+- Mot de passe obligatoire (haché avec scrypt), blocage après 5 essais, HTTPS uniquement.
 - Les emails et pages web sont traités comme des **données non fiables** : un email piégé ne peut pas donner d'ordres à Syrius.
 - **Aucun email n'est envoyé sans ton clic de confirmation.**
-- Dépendances vérifiées : éditeurs officiels, versions de plus de 2 semaines, empreintes SHA-256, scan des failles connues.
+- Application Android : HTTPS obligatoire, aucun accès aux fichiers du téléphone, micro uniquement sur ton appui.
+- Dépendances vérifiées : éditeurs officiels, versions de plus de 2 semaines, empreintes vérifiées, scan des failles connues.
 
 Lancer tous les contrôles :
-
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install --require-hashes --only-binary :all: -r requirements.txt
@@ -190,32 +144,21 @@ pip install --only-binary :all: -r requirements-dev.txt
 ./scripts/security_check.sh
 ```
 
-## Mettre à jour Syrius
-
-```bash
-cd syrius && git pull && sudo docker compose up -d --build
-```
-
-## Sauvegarder
-
-```bash
-sudo docker compose exec syrius python -c "import sqlite3; s=sqlite3.connect('/data/syrius.db'); s.backup(sqlite3.connect('/tmp/backup.db'))"
-sudo docker compose cp syrius:/tmp/backup.db ./syrius-backup.db
-```
+## Autre option : tout héberger chez toi
+Le dossier contient aussi `docker-compose.yml` pour faire tourner Syrius et une IA locale (Ollama)
+sur ton propre serveur, sans aucun service extérieur. Voir les commentaires de `.env.example`.
 
 ## Pour les développeurs
-
 ```
+app.py             point d'entrée Vercel
 server/            API (FastAPI) + cerveau
   persona.md       personnalité de Syrius (modifiable)
-  agent.py         dialogue avec l'IA, outils, réponses en direct
-  llm.py           connexion à Ollama (bibliothèque standard uniquement)
-  app.py           routes, connexion, en-têtes de sécurité
-  db.py            stockage SQLite
+  agent.py         dialogue avec l'IA, outils, bascule entre cerveaux
+  llm.py           Groq / Gemini / Ollama (format compatible OpenAI, bibliothèque standard)
+  store_redis.py   base Upstash ; db.py : SQLite (local)
   tools/           mémoire, emails, web, heure
-web/               app téléphone (PWA, sans dépendance externe)
-tests/             tests fonctionnels et de sécurité
+web/               interface (sans dépendance externe)
+android/           application Android (WebView native + voix)
+tests/             152 tests fonctionnels et de sécurité
 ```
-
-Lancer en local (avec Ollama installé sur ta machine) :
-`SYRIUS_OLLAMA_URL=http://localhost:11434 SYRIUS_COOKIE_SECURE=false SYRIUS_DATA_DIR=./data uvicorn server.app:main --factory --reload`
+Lancer en local : `GROQ_API_KEY=... SYRIUS_COOKIE_SECURE=false SYRIUS_DATA_DIR=./data uvicorn server.app:main --factory --reload`

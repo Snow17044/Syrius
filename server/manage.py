@@ -8,7 +8,7 @@ import sys
 
 from . import auth
 from .config import config
-from .db import Database
+from .app import open_database
 from .tools.email_tool import EmailError, outlook_device_login
 
 
@@ -16,7 +16,7 @@ def main(argv: list[str]) -> int:
     if len(argv) != 1 or argv[0] not in {"set-password", "outlook-login"}:
         print(__doc__)
         return 1
-    db = Database(config.db_path)
+    db = open_database(config)
     if argv[0] == "set-password":
         pw = getpass.getpass("Nouveau mot de passe Syrius (10 caractères min.) : ")
         if pw != getpass.getpass("Confirme : "):
