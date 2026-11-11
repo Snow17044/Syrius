@@ -21,18 +21,18 @@ aucune limite de messages, et tes discussions ne partent chez personne.
 
 | Élément | Solution gratuite |
 |---|---|
-| Cerveau | **Ollama** + un modèle libre (par défaut **Qwen3 30B**), qui tourne sur ton serveur |
+| Cerveau | **Ollama** + un modèle libre (par défaut **Qwen3 8B**), qui tourne sur ton serveur |
 | Serveur 24h/24 | **Oracle Cloud « Always Free »** (gratuit à vie) ou un vieux PC chez toi |
 | Adresse web + HTTPS | **DuckDNS** + Caddy (certificat Let's Encrypt gratuit) |
 | Recherche web | Clé gratuite Ollama (optionnelle) |
 
 ### Soyons honnêtes sur la vitesse et l'intelligence
 
-- **Intelligence** : Qwen3 30B est un très bon modèle libre (conversation, résumés, emails, outils),
-  mais il reste un cran en dessous des meilleures IA payantes (Claude, ChatGPT) sur les questions très pointues.
-- **Vitesse** : sur le serveur Oracle gratuit (sans carte graphique), il écrit à peu près à la vitesse
-  de lecture. C'est un modèle « MoE » : il n'active qu'une petite partie de lui-même à chaque mot,
-  c'est pour ça qu'il est rapide sans carte graphique.
+- **Intelligence** : Qwen3 8B est un bon modèle libre pour la conversation, les résumés et les emails,
+  mais il est nettement en dessous des meilleures IA payantes (Claude, ChatGPT) sur les questions pointues.
+  Avec plus de mémoire (un PC à 24 Go ou plus), `qwen3:30b` est bien plus intelligent **et** plus rapide.
+- **Vitesse** : sur le serveur Oracle gratuit (2 cœurs, sans carte graphique), il écrit **plus lentement
+  que la vitesse de lecture** : compte quelques secondes à une minute selon la longueur de la réponse.
   Le mode **Rapide** (par défaut) répond directement ; le mode **Réfléchi** réfléchit d'abord (plus lent, plus juste).
   - Le tout premier message après le démarrage du serveur prend plus de temps (chargement du modèle).
     Ensuite le modèle reste en mémoire en permanence.
@@ -53,7 +53,7 @@ aucune limite de messages, et tes discussions ne partent chez personne.
    **pour vérifier ton identité** ; l'offre « Always Free » ne prélève rien.
 2. *Compute → Instances → Create instance* :
    - Image : **Ubuntu**
-   - Shape : **Ampere (VM.Standard.A1.Flex)**, mets **4 OCPU et 24 Go de mémoire** (le maximum gratuit)
+   - Shape : **Ampere (VM.Standard.A1.Flex)**, mets **2 OCPU et 12 Go de mémoire** (le maximum gratuit depuis juin 2026)
    - Ajoute ta clé SSH (ou laisse Oracle en générer une et télécharge-la)
 3. Dans le *réseau* de l'instance (Security List), autorise les ports **80** et **443** en entrée.
    Sur le serveur, ouvre-les aussi : `sudo iptables -I INPUT -p tcp -m multiport --dports 80,443 -j ACCEPT && sudo netfilter-persistent save`
@@ -88,7 +88,7 @@ chmod 600 .env
 # Lancer (24h/24, redémarrage automatique)
 sudo docker compose up -d --build
 
-# Suivre le téléchargement du modèle (~18 Go, une seule fois, 5 à 20 minutes)
+# Suivre le téléchargement du modèle (~5 Go, une seule fois, quelques minutes)
 sudo docker compose logs -f ollama-pull
 
 # Choisir ton mot de passe Syrius (10 caractères minimum)
@@ -109,9 +109,10 @@ Le modèle se choisit selon la mémoire (RAM) du serveur :
 
 | RAM du serveur | Modèle conseillé | |
 |---|---|---|
-| 24 Go et plus (Oracle gratuit) | `qwen3:30b` | rapide et intelligent (par défaut) |
+| 24 Go et plus (PC perso) | `qwen3:30b` | le meilleur : intelligent et rapide |
 | 16 Go | `qwen3:14b` | bon, un peu plus lent |
-| 8 Go | `qwen3:8b` | correct, pour les petites machines |
+| 12 Go (Oracle gratuit) | `qwen3:8b` | correct (par défaut) |
+| 8 Go | `qwen3:4b` | basique, pour les petites machines |
 
 Pour en essayer un autre (par exemple `gemma4`, catalogue sur <https://ollama.com/library>) :
 

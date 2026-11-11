@@ -16,8 +16,8 @@ class Config:
     data_dir: Path = field(default_factory=lambda: Path(os.environ.get("SYRIUS_DATA_DIR", "data")))
     # Cerveau local (Ollama). Modèle par défaut : bon équilibre vitesse / intelligence sans carte graphique.
     ollama_url: str = field(default_factory=lambda: os.environ.get("SYRIUS_OLLAMA_URL", "http://ollama:11434"))
-    model: str = field(default_factory=lambda: os.environ.get("SYRIUS_MODEL", "qwen3:30b"))
-    context_tokens: int = field(default_factory=lambda: int(os.environ.get("SYRIUS_CONTEXT", "16384")))
+    model: str = field(default_factory=lambda: os.environ.get("SYRIUS_MODEL", "qwen3:8b"))
+    context_tokens: int = field(default_factory=lambda: int(os.environ.get("SYRIUS_CONTEXT", "8192")))
     # Recherche web gratuite (compte Ollama gratuit). Vide = recherche web désactivée.
     web_search_key: str = field(default_factory=lambda: os.environ.get("OLLAMA_API_KEY", ""))
     # Cookies "Secure" : obligatoire en production (HTTPS). Désactivable seulement en local.

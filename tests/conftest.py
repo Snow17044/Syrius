@@ -29,7 +29,7 @@ def reply(text: str = "", tool_calls: list | None = None) -> list[dict]:
 
 
 class FakeLLM:
-    def __init__(self, responses: list[list[dict]] | None = None, models=("qwen3:30b",)):
+    def __init__(self, responses: list[list[dict]] | None = None, models=("qwen3:8b",)):
         self.responses = list(responses or [])
         self.requests: list[dict] = []
         self.models = list(models)

@@ -32,7 +32,7 @@ def test_discussion_complete(make_client):
     assert [m["role"] for m in conv["messages"]] == ["user", "assistant"]
 
     req = c.fake.requests[0]
-    assert req["model"] == "qwen3:30b"
+    assert req["model"] == "qwen3:8b"
     assert req["keep_alive"] == -1          # reste chargé : pas d'attente
     assert req["think"] is False            # mode rapide par défaut
     assert req["messages"][0]["role"] == "system" and "Syrius" in req["messages"][0]["content"]
@@ -91,14 +91,14 @@ def test_menu_des_discussions(make_client):
 
 def test_reglages_appliques(make_client):
     c = make_client([reply("ok")])
-    c.fake.models = ["qwen3:30b", "qwen3:8b"]
+    c.fake.models = ["qwen3:8b", "qwen3:4b"]
     login(c)
-    r = c.put("/api/settings", json={"effort": "high", "model": "qwen3:8b", "web_search": False}, headers=H)
+    r = c.put("/api/settings", json={"effort": "high", "model": "qwen3:4b", "web_search": False}, headers=H)
     assert r.status_code == 200
     cid = new_conv(c)
     c.post(f"/api/conversations/{cid}/messages", json={"text": "test"}, headers=H)
     req = c.fake.requests[0]
-    assert req["think"] is True and req["model"] == "qwen3:8b"
+    assert req["think"] is True and req["model"] == "qwen3:4b"
     assert not any(t["function"]["name"] == "web_search" for t in req["tools"])
 
 
@@ -170,7 +170,7 @@ class _FakeOllama(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        body = json.dumps({"models": [{"name": "qwen3:30b"}]}).encode()
+        body = json.dumps({"models": [{"name": "qwen3:8b"}]}).encode()
         self.send_response(200)
         self.end_headers()
         self.wfile.write(body)
@@ -201,11 +201,11 @@ def ollama_url():
 @pytest.mark.anyio
 async def test_client_ollama_reel(ollama_url):
     client = OllamaClient(ollama_url)
-    chunks = [c async for c in client.stream_chat({"model": "qwen3:30b", "messages": []})]
+    chunks = [c async for c in client.stream_chat({"model": "qwen3:8b", "messages": []})]
     text = "".join((c.get("message") or {}).get("content", "") for c in chunks)
     calls = [tc for c in chunks for tc in (c.get("message") or {}).get("tool_calls", [])]
     assert text == "Bonjour Alex" and calls[0]["function"]["name"] == "get_current_time"
-    assert await client.list_models() == ["qwen3:30b"]
+    assert await client.list_models() == ["qwen3:8b"]
     with pytest.raises(LLMError, match="pas installé"):
         _ = [c async for c in client.stream_chat({"model": "absent", "messages": []})]
 
