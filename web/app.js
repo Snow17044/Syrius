@@ -56,6 +56,20 @@ $("#login-form").addEventListener("submit", async (e) => {
   } catch (err) { $("#login-error").textContent = err.message; }
 });
 
+$("#setup-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#login-error").textContent = "";
+  try {
+    const password = $("#setup-password").value;
+    await api("/api/setup", { method: "POST", body: JSON.stringify({ code: $("#setup-code").value, password }) });
+    await api("/api/login", { method: "POST", body: JSON.stringify({ password }) });
+    $("#setup-code").value = ""; $("#setup-password").value = "";
+    $("#setup-form").classList.add("hidden");
+    $("#login-form").classList.remove("hidden");
+    await showApp();
+  } catch (err) { $("#login-error").textContent = err.message; }
+});
+
 $("#logout").addEventListener("click", async () => {
   try { await api("/api/logout", { method: "POST" }); } catch (_) { /* ignore */ }
   store.set("syrius:lastConv", null);
@@ -333,9 +347,13 @@ function actionCard(ev) {
 }
 
 // ------------------------------------------------------------------ voix
+// Dans l'application Android, la voix passe par le téléphone (pont "SyriusAndroid").
+const Native = window.SyriusAndroid || null;
+
 function speak(text) {
-  if (!("speechSynthesis" in window)) return;
   const clean = text.replace(/[`*#>_\[\]()]/g, "").replace(/https?:\/\/\S+/g, "lien").slice(0, 1500);
+  if (Native) { Native.speak(clean); return; }
+  if (!("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(clean);
   u.lang = "fr-FR";
   const voice = speechSynthesis.getVoices().find((v) => v.lang && v.lang.startsWith("fr"));
@@ -345,7 +363,24 @@ function speak(text) {
 }
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (Recognition) {
+if (Native) {
+  const mic = $("#mic");
+  mic.classList.remove("hidden");
+  let base = "";
+  // Appelé par l'application Android avec le texte reconnu.
+  window.syriusOnSpeech = (text, isFinal) => {
+    $("#input").value = (base ? base + " " : "") + String(text || "");
+    autoGrow();
+    if (isFinal) { mic.classList.remove("listening"); if (text) sendMessage($("#input").value); }
+  };
+  window.syriusOnSpeechEnd = () => mic.classList.remove("listening");
+  mic.addEventListener("click", () => {
+    if (mic.classList.contains("listening")) { Native.stopListening(); return; }
+    base = $("#input").value;
+    mic.classList.add("listening");
+    Native.startListening();
+  });
+} else if (Recognition) {
   const mic = $("#mic");
   mic.classList.remove("hidden");
   let rec = null;
@@ -384,7 +419,9 @@ $("#open-settings").addEventListener("click", async () => {
   $("#s-web-note").textContent = s.web_search_available ? ""
     : "Pour l'activer : clé gratuite Ollama dans le fichier .env (voir README).";
   $("#s-voice").checked = !!s.voice_reply;
-  await renderModels(s);
+  await renderBrains(s);
+  $("#outlook-box").classList.toggle("hidden", !s.outlook);
+  $("#outlook-msg").textContent = "";
   $("#s-email").textContent = s.email_enabled
     ? "✅ Boîte mail connectée (lecture seule ; chaque envoi demande ta confirmation)."
     : "Non configurés. Voir le guide d'installation (README, section Emails).";
@@ -394,22 +431,22 @@ $("#open-settings").addEventListener("click", async () => {
   $("#settings").showModal();
 });
 
-async function renderModels(s) {
-  const sel = $("#s-model-choice");
+async function renderBrains(s) {
+  const sel = $("#s-brain");
   sel.replaceChildren();
-  let installed = [];
-  try { installed = (await api("/api/models")).installed; } catch (_) { /* ignore */ }
-  const def = document.createElement("option");
-  def.value = "";
-  def.textContent = `Par défaut (${s.default_model})`;
-  sel.appendChild(def);
-  for (const name of installed) {
+  let brains = [];
+  try { brains = await api("/api/brains"); } catch (_) { /* ignore */ }
+  const auto = document.createElement("option");
+  auto.value = "";
+  auto.textContent = "Automatique" + (brains[0] ? ` (${brains[0].label} d'abord)` : "");
+  sel.appendChild(auto);
+  for (const b of brains) {
     const o = document.createElement("option");
-    o.value = name;
-    o.textContent = name;
+    o.value = b.name;
+    o.textContent = `${b.label} — ${b.model}`;
     sel.appendChild(o);
   }
-  sel.value = installed.includes(s.model) ? s.model : "";
+  sel.value = brains.some((b) => b.name === s.brain) ? s.brain : "";
 }
 
 async function renderMemories() {
@@ -436,6 +473,27 @@ async function renderMemories() {
   }
 }
 
+$("#outlook-connect").addEventListener("click", async () => {
+  const msg = $("#outlook-msg");
+  try {
+    const info = await api("/api/email/outlook/start", { method: "POST" });
+    msg.replaceChildren();
+    msg.append("Ouvre ");
+    const a = document.createElement("a");
+    a.href = info.verification_uri; a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.textContent = info.verification_uri;
+    const b = document.createElement("b");
+    b.textContent = info.user_code;
+    msg.append(a, " et entre le code ", b, ". J'attends ta validation…");
+    const timer = setInterval(async () => {
+      try {
+        const r = await api("/api/email/outlook/poll", { method: "POST" });
+        if (r.status === "ok") { clearInterval(timer); msg.textContent = "✅ Outlook connecté."; }
+      } catch (err) { clearInterval(timer); msg.textContent = "⚠ " + err.message; }
+    }, Math.max(5, info.interval || 5) * 1000);
+  } catch (err) { msg.textContent = "⚠ " + err.message; }
+});
+
 $("#settings-save").addEventListener("click", async () => {
   try {
     state.settings = {
@@ -446,7 +504,7 @@ $("#settings-save").addEventListener("click", async () => {
           user_name: $("#s-name").value.trim(),
           custom_instructions: $("#s-custom").value,
           effort: $("#s-effort").value,
-          model: $("#s-model-choice").value,
+          brain: $("#s-brain").value,
           web_search: $("#s-web").checked,
           voice_reply: $("#s-voice").checked,
         }),
@@ -477,8 +535,13 @@ if ("serviceWorker" in navigator) {
     if (s.authenticated) await showApp();
     else {
       showLogin();
-      if (!s.password_set) $("#login-error").textContent =
-        "Aucun mot de passe défini. Sur le serveur, lance : python -m server.manage set-password";
+      if (s.setup_available) {
+        $("#login-form").classList.add("hidden");
+        $("#setup-form").classList.remove("hidden");
+      } else if (!s.password_set) {
+        $("#login-error").textContent =
+          "Aucun mot de passe défini : ajoute SYRIUS_SETUP_CODE dans Vercel (voir README).";
+      }
     }
   } catch (_) {
     showLogin();

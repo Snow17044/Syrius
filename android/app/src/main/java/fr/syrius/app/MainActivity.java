@@ -1,0 +1,294 @@
+package fr.syrius.app;
+
+import android.Manifest;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Bundle;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.text.InputType;
+import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.Locale;
+
+/**
+ * Application Syrius : affiche ton Syrius en plein écran et ajoute la voix du téléphone.
+ * Sécurité : HTTPS obligatoire, navigation limitée à l'adresse de ton Syrius,
+ * aucun accès aux fichiers du téléphone, micro seulement sur ton appui.
+ */
+public class MainActivity extends Activity {
+    private static final String PREFS = "syrius";
+    private static final String KEY_URL = "url";
+    private static final int REQ_MIC = 42;
+
+    private WebView web;
+    private String baseUrl;
+    private String allowedHost;
+    private TextToSpeech tts;
+    private SpeechRecognizer recognizer;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        web = new WebView(this);
+        web.setBackgroundColor(Color.parseColor("#05080f"));
+        setContentView(web);
+
+        WebSettings s = web.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(false);
+        s.setAllowContentAccess(false);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        s.setMediaPlaybackRequiresUserGesture(true);
+        s.setSupportMultipleWindows(false);
+        s.setJavaScriptCanOpenWindowsAutomatically(false);
+        s.setUserAgentString(s.getUserAgentString() + " SyriusAndroid/1.0");
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+
+        web.setWebChromeClient(new WebChromeClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if ("https".equals(uri.getScheme()) && allowedHost != null && allowedHost.equals(uri.getHost())) {
+                    return false; // page de ton Syrius : on reste dans l'app
+                }
+                // Tout autre lien (sites, emails…) s'ouvre dans le navigateur, hors de l'app.
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (Exception ignored) {
+                }
+                return true;
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) {
+                    showOfflineDialog();
+                }
+            }
+        });
+        web.addJavascriptInterface(new Bridge(), "SyriusAndroid");
+
+        tts = new TextToSpeech(this, status -> {
+            if (status == TextToSpeech.SUCCESS) {
+                tts.setLanguage(Locale.FRANCE);
+            }
+        });
+
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String saved = prefs.getString(KEY_URL, "");
+        if (saved.isEmpty()) {
+            askForUrl(BuildConfig.DEFAULT_URL);
+        } else {
+            open(saved);
+        }
+    }
+
+    private static String normalize(String raw) {
+        String url = raw == null ? "" : raw.trim();
+        if (url.isEmpty()) return null;
+        if (!url.startsWith("https://")) {
+            if (url.startsWith("http://")) return null; // HTTPS obligatoire
+            url = "https://" + url;
+        }
+        Uri uri = Uri.parse(url);
+        if (uri.getHost() == null || uri.getHost().isEmpty()) return null;
+        return "https://" + uri.getHost() + "/";
+    }
+
+    private void open(String url) {
+        baseUrl = url;
+        allowedHost = Uri.parse(url).getHost();
+        web.loadUrl(url);
+    }
+
+    private void askForUrl(String prefill) {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
+        input.setHint("monsyrius.vercel.app");
+        input.setText(prefill == null ? "" : prefill);
+        new AlertDialog.Builder(this)
+                .setTitle("Adresse de ton Syrius")
+                .setMessage("L'adresse donnée par Vercel (voir le guide).")
+                .setView(input)
+                .setCancelable(false)
+                .setPositiveButton("Valider", (d, w) -> {
+                    String url = normalize(input.getText().toString());
+                    if (url == null) {
+                        Toast.makeText(this, "Adresse invalide (https obligatoire)", Toast.LENGTH_LONG).show();
+                        askForUrl(input.getText().toString());
+                        return;
+                    }
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_URL, url).apply();
+                    open(url);
+                })
+                .show();
+    }
+
+    private void showOfflineDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Syrius injoignable")
+                .setMessage("Vérifie ta connexion Internet.")
+                .setPositiveButton("Réessayer", (d, w) -> web.reload())
+                .setNegativeButton("Changer l'adresse", (d, w) -> askForUrl(baseUrl))
+                .show();
+    }
+
+    // ------------------------------------------------------------------ voix
+    private void startListening() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+            return;
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(this, "Reconnaissance vocale indisponible sur ce téléphone", Toast.LENGTH_LONG).show();
+            sendJs("window.syriusOnSpeechEnd && window.syriusOnSpeechEnd()");
+            return;
+        }
+        if (recognizer == null) {
+            recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+            recognizer.setRecognitionListener(new RecognitionListener() {
+                @Override public void onReadyForSpeech(Bundle params) { }
+                @Override public void onBeginningOfSpeech() { }
+                @Override public void onRmsChanged(float rmsdB) { }
+                @Override public void onBufferReceived(byte[] buffer) { }
+                @Override public void onEndOfSpeech() { }
+                @Override public void onEvent(int eventType, Bundle params) { }
+
+                @Override
+                public void onError(int error) {
+                    sendJs("window.syriusOnSpeechEnd && window.syriusOnSpeechEnd()");
+                }
+
+                @Override
+                public void onPartialResults(Bundle partial) {
+                    deliver(partial, false);
+                }
+
+                @Override
+                public void onResults(Bundle results) {
+                    deliver(results, true);
+                }
+            });
+        }
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR");
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        recognizer.startListening(intent);
+    }
+
+    private void deliver(Bundle bundle, boolean isFinal) {
+        ArrayList<String> list = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        String text = (list == null || list.isEmpty()) ? "" : list.get(0);
+        // JSONObject.quote échappe le texte : il ne peut pas être interprété comme du code.
+        sendJs("window.syriusOnSpeech && window.syriusOnSpeech(" + JSONObject.quote(text) + ", " + isFinal + ")");
+    }
+
+    private void sendJs(String js) {
+        runOnUiThread(() -> web.evaluateJavascript(js, null));
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(code, perms, results);
+        if (code == REQ_MIC) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+                startListening();
+            } else {
+                sendJs("window.syriusOnSpeechEnd && window.syriusOnSpeechEnd()");
+            }
+        }
+    }
+
+    /** Fonctions appelables depuis la page de ton Syrius (et uniquement elle). */
+    private class Bridge {
+        private boolean trusted() {
+            // Vérifie que la page affichée est bien celle de ton Syrius.
+            final String[] url = {null};
+            final Object lock = new Object();
+            runOnUiThread(() -> {
+                synchronized (lock) {
+                    url[0] = web.getUrl();
+                    lock.notify();
+                }
+            });
+            synchronized (lock) {
+                try {
+                    if (url[0] == null) lock.wait(1000);
+                } catch (InterruptedException ignored) {
+                }
+            }
+            if (url[0] == null) return false;
+            Uri uri = Uri.parse(url[0]);
+            return "https".equals(uri.getScheme()) && allowedHost != null && allowedHost.equals(uri.getHost());
+        }
+
+        @JavascriptInterface
+        public void speak(String text) {
+            if (text == null || !trusted() || tts == null) return;
+            String t = text.length() > 3000 ? text.substring(0, 3000) : text;
+            tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, "syrius");
+        }
+
+        @JavascriptInterface
+        public void startListening() {
+            if (!trusted()) return;
+            runOnUiThread(MainActivity.this::startListening);
+        }
+
+        @JavascriptInterface
+        public void stopListening() {
+            runOnUiThread(() -> {
+                if (recognizer != null) recognizer.stopListening();
+            });
+        }
+    }
+
+    // ------------------------------------------------------------------ cycle de vie
+    @Override
+    public void onBackPressed() {
+        if (web.canGoBack()) {
+            web.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        CookieManager.getInstance().flush(); // reste connecté
+        if (tts != null) tts.stop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (recognizer != null) recognizer.destroy();
+        if (tts != null) tts.shutdown();
+        web.destroy();
+        super.onDestroy();
+    }
+}

@@ -1,0 +1,11 @@
+# Fichiers inutiles sur Vercel (non envoyés)
+.venv
+android
+tests
+scripts
+deploy
+data
+Dockerfile
+docker-compose.yml
+README.md
+SECURITY.md

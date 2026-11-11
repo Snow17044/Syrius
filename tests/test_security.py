@@ -65,9 +65,12 @@ def test_mot_de_passe_et_jetons_jamais_stockes_en_clair(make_client, cfg):
     c = make_client()
     login(c)
     token = c.cookies.get(auth.COOKIE_NAME)
-    raw = cfg.db_path.read_bytes()
-    con = sqlite3.connect(cfg.db_path)
-    dump = "\n".join(con.iterdump())
+    if hasattr(c.db, "r"):  # base Upstash : on inspecte tout son contenu
+        dump = raw = repr(c.db.r.data)
+        raw = raw.encode()
+    else:
+        raw = cfg.db_path.read_bytes()
+        dump = "\n".join(sqlite3.connect(cfg.db_path).iterdump())
     for secret in (PASSWORD, token):
         assert secret not in dump and secret.encode() not in raw
     assert c.db.get_secret(auth.PASSWORD_KEY).startswith("scrypt$")
@@ -298,3 +301,57 @@ def test_ollama_jamais_expose_sur_internet():
     assert not re.search(r"^\s+ports:", ollama_block, re.M)
     syrius_block = compose.split("  syrius:")[1].split("\n  ollama:")[0]
     assert not re.search(r"^\s+ports:", syrius_block, re.M)
+
+
+# --------------------------------------------------------------- Vercel / Android / GitHub
+def test_blocage_non_contournable_par_faux_entete_ip(make_client):
+    """Hors Vercel, un faux en-tête X-Forwarded-For ne permet pas d'échapper au blocage."""
+    c = make_client()
+    for i in range(auth.MAX_FAILED_LOGINS):
+        c.post("/api/login", json={"password": "nope-nope-nope"},
+               headers={**H, "X-Forwarded-For": f"10.0.0.{i}", "X-Real-IP": f"10.0.1.{i}"})
+    r = c.post("/api/login", json={"password": PASSWORD}, headers={**H, "X-Forwarded-For": "1.2.3.4"})
+    assert r.status_code == 429
+
+
+def test_vercel_utilise_la_vraie_ip(make_client, cfg):
+    cfg.behind_vercel = True
+    c = make_client()
+    for _ in range(auth.MAX_FAILED_LOGINS):
+        c.post("/api/login", json={"password": "nope-nope-nope"}, headers={**H, "X-Real-IP": "5.5.5.5"})
+    assert c.post("/api/login", json={"password": PASSWORD},
+                  headers={**H, "X-Real-IP": "5.5.5.5"}).status_code == 429
+    # Une autre personne (autre IP) n'est pas bloquée
+    assert c.post("/api/login", json={"password": PASSWORD},
+                  headers={**H, "X-Real-IP": "6.6.6.6"}).status_code == 200
+
+
+def test_identifiants_invalides_refuses_par_la_base(make_client):
+    c = make_client()
+    login(c)
+    for bad in ("..", "a b", "x" * 100, "conv:1", "*"):
+        assert c.get(f"/api/conversations/{bad}").status_code in (404, 405)
+
+
+def test_application_android_securisee():
+    manifest = open("android/app/src/main/AndroidManifest.xml", encoding="utf-8").read()
+    assert 'android:usesCleartextTraffic="false"' in manifest
+    assert 'android:allowBackup="false"' in manifest
+    nsc = open("android/app/src/main/res/xml/network_security_config.xml", encoding="utf-8").read()
+    assert 'cleartextTrafficPermitted="false"' in nsc
+    java = open("android/app/src/main/java/fr/syrius/app/MainActivity.java", encoding="utf-8").read()
+    assert "setAllowFileAccess(false)" in java and "setAllowContentAccess(false)" in java
+    assert "MIXED_CONTENT_NEVER_ALLOW" in java
+    assert "setWebContentsDebuggingEnabled(true)" not in java
+    assert "JSONObject.quote(text)" in java  # texte dicté échappé avant d'être envoyé à la page
+    assert "trusted()" in java  # le pont voix vérifie l'adresse de la page
+
+
+def test_actions_github_epinglees_par_empreinte():
+    import re
+    wf = open(".github/workflows/android.yml", encoding="utf-8").read()
+    uses = re.findall(r"uses:\s*([^\s#]+)", wf)
+    assert uses
+    for u in uses:
+        assert re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", u), u
+    assert "permissions:\n  contents: read" in wf

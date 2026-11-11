@@ -26,6 +26,12 @@
         <input id="login-password" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
         <button type="submit" class="primary">Se connecter</button>
       </form>
+      <form id="setup-form" class="hidden" autocomplete="off">
+        <p class="small">Premier lancement : entre le <b>code de configuration</b> choisi dans Vercel, puis ton futur mot de passe.</p>
+        <input id="setup-code" type="password" placeholder="Code de configuration" required>
+        <input id="setup-password" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe (10 caractères min.)" minlength="10" required>
+        <button type="submit" class="primary">Créer mon mot de passe</button>
+      </form>
       <p id="login-error" class="error" role="alert"></p>
     </div>
   </section>
@@ -92,14 +98,19 @@
           <option value="low">⚡ Rapide (répond directement)</option>
           <option value="high">🧠 Réfléchi (réfléchit avant, plus lent)</option>
         </select></label>
-      <label>Modèle d'IA (installé sur ton serveur)
-        <select id="s-model-choice"></select></label>
+      <label>Cerveau préféré
+        <select id="s-brain"></select></label>
+      <p class="muted small">Si sa limite gratuite du jour est atteinte, Syrius passe tout seul sur un autre.</p>
       <label class="switch"><input id="s-web" type="checkbox"><span>Recherche sur le web</span></label>
       <p class="muted small" id="s-web-note"></p>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
 
       <h4>Emails</h4>
       <p id="s-email" class="muted small"></p>
+      <div id="outlook-box" class="hidden">
+        <button type="button" id="outlook-connect" class="ghost wide">Connecter Outlook / Hotmail</button>
+        <p id="outlook-msg" class="small"></p>
+      </div>
 
       <h4>Mémoire</h4>
       <p class="muted small">Ce que Syrius a retenu sur toi. Supprime ce que tu veux.</p>

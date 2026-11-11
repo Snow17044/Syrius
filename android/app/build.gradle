@@ -1,0 +1,49 @@
+plugins {
+    id "com.android.application"
+}
+
+// Signature : si les secrets GitHub SYRIUS_KEYSTORE_* existent, l'APK est signé avec ta clé
+// (les mises à jour s'installent par-dessus). Sinon, clé de test (désinstaller avant mise à jour).
+def ks = System.getenv("SYRIUS_KEYSTORE_FILE")
+
+android {
+    namespace "fr.syrius.app"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "fr.syrius.app"
+        minSdk 26
+        targetSdk 34
+        versionCode Integer.parseInt(System.getenv("SYRIUS_VERSION_CODE") ?: "1")
+        versionName "1.0." + (System.getenv("SYRIUS_VERSION_CODE") ?: "1")
+        // Adresse de ton Syrius, pré-remplie au premier lancement (variable GitHub SYRIUS_URL).
+        buildConfigField "String", "DEFAULT_URL", "\"" + (System.getenv("SYRIUS_URL") ?: "") + "\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        if (ks) {
+            release {
+                storeFile file(ks)
+                storePassword System.getenv("SYRIUS_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("SYRIUS_KEY_ALIAS")
+                keyPassword System.getenv("SYRIUS_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig ks ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

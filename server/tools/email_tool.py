@@ -146,30 +146,51 @@ def _post_form(url: str, data: dict) -> dict:
             raise EmailError(f"Erreur Microsoft ({e.code})") from None
 
 
-def outlook_device_login(cfg: Config, db: Database, show=print) -> None:
-    """Connexion Outlook une seule fois (depuis le serveur). Stocke un jeton de renouvellement."""
+MS_DEVICE_KEY = "ms_device_code"
+
+
+def outlook_start(cfg: Config, db: Database) -> dict:
+    """Étape 1 : Microsoft donne un code à entrer sur microsoft.com/link (ou similaire)."""
     if not cfg.ms_client_id:
         raise EmailError("SYRIUS_MS_CLIENT_ID manquant (voir README).")
     flow = _post_form(MS_DEVICE_URL, {"client_id": cfg.ms_client_id, "scope": MS_SCOPES})
     if "device_code" not in flow:
-        raise EmailError(flow.get("error_description", "Échec de la connexion Microsoft"))
-    show(flow.get("message", f"Va sur {flow.get('verification_uri')} et entre le code {flow.get('user_code')}"))
-    deadline = time.time() + int(flow.get("expires_in", 900))
-    interval = int(flow.get("interval", 5))
-    while time.time() < deadline:
-        time.sleep(interval)
-        tok = _post_form(MS_TOKEN_URL, {
-            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            "client_id": cfg.ms_client_id, "device_code": flow["device_code"]})
-        if "refresh_token" in tok:
-            db.set_secret(MS_REFRESH_KEY, tok["refresh_token"])
+        raise EmailError(str(flow.get("error_description", "Échec de la connexion Microsoft"))[:200])
+    db.set_secret(MS_DEVICE_KEY, json.dumps({"code": flow["device_code"],
+                                             "expires": time.time() + int(flow.get("expires_in", 900))}))
+    return {"user_code": str(flow.get("user_code", ""))[:32],
+            "verification_uri": str(flow.get("verification_uri", "https://microsoft.com/devicelogin"))[:200],
+            "interval": int(flow.get("interval", 5))}
+
+
+def outlook_poll(cfg: Config, db: Database) -> str:
+    """Étape 2 : vérifie si l'utilisateur a validé. Renvoie pending, ok."""
+    raw = db.get_secret(MS_DEVICE_KEY)
+    if not raw:
+        raise EmailError("Aucune connexion en cours.")
+    flow = json.loads(raw)
+    if time.time() > flow["expires"]:
+        raise EmailError("Délai dépassé, recommence.")
+    tok = _post_form(MS_TOKEN_URL, {"grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                                    "client_id": cfg.ms_client_id, "device_code": flow["code"]})
+    if "refresh_token" in tok:
+        db.set_secret(MS_REFRESH_KEY, tok["refresh_token"])
+        db.set_secret(MS_DEVICE_KEY, "")
+        return "ok"
+    if tok.get("error") in ("authorization_pending", "slow_down"):
+        return "pending"
+    raise EmailError(str(tok.get("error_description", "Connexion refusée"))[:200])
+
+
+def outlook_device_login(cfg: Config, db: Database, show=print) -> None:
+    """Version ligne de commande (installation sur ton propre serveur)."""
+    info = outlook_start(cfg, db)
+    show(f"Va sur {info['verification_uri']} et entre le code {info['user_code']}")
+    while True:
+        time.sleep(info["interval"])
+        if outlook_poll(cfg, db) == "ok":
             show("Connexion Outlook réussie ✅")
             return
-        if tok.get("error") not in ("authorization_pending", "slow_down"):
-            raise EmailError(tok.get("error_description", "Connexion refusée"))
-        if tok.get("error") == "slow_down":
-            interval += 5
-    raise EmailError("Délai dépassé, recommence.")
 
 
 def _outlook_access_token(cfg: Config, db: Database) -> str:
