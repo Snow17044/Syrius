@@ -199,6 +199,9 @@ class Agent:
                         {"role": "assistant", "content": [{"type": "text", "text": state["text"]}]}])
                 return
 
+            # Journal de diagnostic : seulement le nom des outils, jamais le contenu.
+            log.info("Réponse %s : %d caractères, outils=%s", provider.name, len(state["text"]),
+                     [c["name"] for c in state["calls"]] or "aucun")
             text = _THINK_TAGS.sub("", state["text"])
             content = ([{"type": "text", "text": text}] if text else []) + state["calls"]
             assistant_msg = {"role": "assistant", "content": content or [{"type": "text", "text": ""}]}
