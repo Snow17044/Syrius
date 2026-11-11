@@ -1,8 +1,7 @@
-"""Outils de test : un faux Claude qui rejoue des réponses prévues à l'avance."""
-from types import SimpleNamespace
+"""Outils de test : un faux cerveau local qui rejoue des réponses prévues à l'avance."""
+import copy
 
 import pytest
-from anthropic.types.beta import BetaMessage
 from fastapi.testclient import TestClient
 
 from server import auth
@@ -14,56 +13,37 @@ from server.db import Database
 PASSWORD = "motdepasse-tres-solide"
 
 
-def make_message(content: list[dict], stop_reason: str = "end_turn") -> BetaMessage:
-    return BetaMessage.model_validate({
-        "id": "msg_test", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
-        "content": content, "stop_reason": stop_reason, "stop_sequence": None,
-        "usage": {"input_tokens": 10, "output_tokens": 10},
-    })
+def reply(text: str = "", tool_calls: list | None = None) -> list[dict]:
+    """Une réponse du modèle, découpée en morceaux comme le fait Ollama."""
+    chunks = []
+    words = text.split(" ") if text else []
+    for i, w in enumerate(words):
+        chunks.append({"message": {"role": "assistant", "content": w + (" " if i < len(words) - 1 else "")},
+                       "done": False})
+    if tool_calls:
+        chunks.append({"message": {"role": "assistant", "content": "",
+                                   "tool_calls": [{"function": {"name": n, "arguments": a}} for n, a in tool_calls]},
+                       "done": False})
+    chunks.append({"message": {"role": "assistant", "content": ""}, "done": True, "done_reason": "stop"})
+    return chunks
 
 
-class FakeStream:
-    def __init__(self, message: BetaMessage):
-        self.message = message
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    def __aiter__(self):
-        async def gen():
-            for block in self.message.content:
-                if block.type == "text":
-                    yield SimpleNamespace(type="text", text=block.text)
-                elif block.type in ("tool_use", "server_tool_use"):
-                    yield SimpleNamespace(type="content_block_start", content_block=block)
-        return gen()
-
-    async def get_final_message(self):
-        return self.message
-
-
-class FakeClient:
-    """Imite `client.beta.messages.stream(...)` et `client.messages.create(...)`."""
-
-    def __init__(self, responses: list[BetaMessage]):
-        self.responses = list(responses)
+class FakeLLM:
+    def __init__(self, responses: list[list[dict]] | None = None, models=("qwen3:30b",)):
+        self.responses = list(responses or [])
         self.requests: list[dict] = []
-        outer = self
+        self.models = list(models)
 
-        class _Messages:
-            def stream(self, **kwargs):
-                import copy
-                outer.requests.append(copy.deepcopy(kwargs))
-                return FakeStream(outer.responses.pop(0))
+    async def stream_chat(self, payload):
+        self.requests.append(copy.deepcopy(payload))
+        for chunk in self.responses.pop(0):
+            yield chunk
 
-            async def create(self, **kwargs):
-                return make_message([{"type": "text", "text": "Titre de test"}])
+    async def chat(self, payload):
+        return {"message": {"role": "assistant", "content": "Titre de test"}, "done": True}
 
-        self.beta = SimpleNamespace(messages=_Messages())
-        self.messages = _Messages()
+    async def list_models(self):
+        return self.models
 
 
 @pytest.fixture
@@ -92,8 +72,8 @@ def make_client(cfg):
             cfg.email_password = "x"
         db = Database(cfg.db_path)
         auth.set_password(db, PASSWORD)
-        fake = FakeClient(responses or [])
-        agent = Agent(cfg, db, client=fake)
+        fake = FakeLLM(responses or [])
+        agent = Agent(cfg, db, llm=fake)
         app = create_app(cfg, agent)
         client = TestClient(app, base_url="https://testserver")
         client.fake = fake

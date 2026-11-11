@@ -1,4 +1,4 @@
-# Lance Syrius 24h/24 :  docker compose up -d
+# Lance Syrius 24h/24 :  docker compose up -d --build
 services:
   syrius:
     build: .
@@ -10,7 +10,34 @@ services:
     tmpfs: [/tmp]
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    # Pas de "ports:" ici : Syrius n'est joignable que via Caddy.
+    depends_on: [ollama]
+    # Pas de "ports:" : Syrius n'est joignable que via Caddy (HTTPS).
+
+  ollama:                          # le cerveau : IA locale, gratuite, privée
+    image: ollama/ollama:0.40.12   # version fixée, publiée depuis plus de 2 semaines
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: "-1"      # le modèle reste chargé en mémoire
+      OLLAMA_NUM_PARALLEL: "1"
+    volumes:
+      - ollama-models:/root/.ollama
+    # Pas de "ports:" : l'API Ollama n'a pas de mot de passe, elle reste interne.
+    # Carte graphique NVIDIA ? Décommente les 6 lignes ci-dessous (voir README).
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           capabilities: [gpu]
+
+  ollama-pull:                     # télécharge le modèle au premier démarrage, puis s'arrête
+    image: ollama/ollama:0.40.12
+    restart: "no"
+    environment:
+      OLLAMA_HOST: ollama:11434
+      SYRIUS_MODEL: ${SYRIUS_MODEL:-qwen3:30b}
+    entrypoint: ["/bin/sh", "-c", "sleep 5 && ollama pull \"$$SYRIUS_MODEL\""]
+    depends_on: [ollama]
 
   caddy:
     image: caddy:2.10
@@ -26,5 +53,6 @@ services:
 
 volumes:
   syrius-data:
+  ollama-models:
   caddy-data:
   caddy-config:

@@ -57,13 +57,13 @@ CREATE TABLE IF NOT EXISTS secrets (
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "user_name": "",
-    "effort": "low",          # low = réponses rapides ; medium/high = plus réfléchi
-    "fast_mode": False,       # mode rapide (plus cher)
+    "effort": "low",          # low = réponse directe (rapide) ; high = réfléchit avant de répondre
+    "model": "",              # vide = modèle par défaut du serveur
     "web_search": True,
     "voice_reply": False,     # lecture vocale des réponses (dans le téléphone)
     "custom_instructions": "",
 }
-ALLOWED_EFFORTS = {"low", "medium", "high"}
+ALLOWED_EFFORTS = {"low", "high"}
 
 
 class Database:

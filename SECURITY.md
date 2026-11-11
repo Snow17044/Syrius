@@ -6,14 +6,24 @@ Avant d'ajouter un paquet, on vérifie :
 
 | Contrôle | Comment |
 |---|---|
-| Éditeur officiel | Uniquement des projets reconnus : `anthropic` (Anthropic), `fastapi`, `uvicorn` et leurs dépendances directes. |
+| Éditeur officiel | Uniquement des projets reconnus : `fastapi`, `uvicorn` et leurs dépendances directes (14 paquets au total). |
 | Ancienneté | Uniquement des versions publiées **depuis au moins 2 semaines**. Les piratages de paquets sont en général repérés et retirés pendant ce délai. |
 | Intégrité | `requirements.txt` contient l'**empreinte SHA-256** de chaque fichier. `pip --require-hashes` refuse tout fichier modifié. |
 | Pas de code à l'installation | `--only-binary :all:` : uniquement des paquets précompilés, aucun script `setup.py` n'est exécuté. |
 | Failles connues | `pip-audit` compare chaque version à la base publique de vulnérabilités (OSV / PyPA). |
-| Peu de dépendances | L'app téléphone n'utilise **aucune** bibliothèque externe ni CDN. Les emails, le chiffrement du mot de passe et la base de données utilisent la bibliothèque standard de Python. |
+| Peu de dépendances | L'app téléphone n'utilise **aucune** bibliothèque externe ni CDN. La connexion à l'IA, les emails, le chiffrement du mot de passe et la base de données utilisent la bibliothèque standard de Python. |
 
-Images Docker : `python:3.13-slim` et `caddy:2.10` (images officielles Docker Hub).
+Images Docker officielles : `python:3.13-slim`, `caddy:2.10`, `ollama/ollama:0.40.12` (version fixée, publiée depuis plus de 2 semaines).
+
+**Modèles d'IA** : téléchargés depuis la bibliothèque officielle d'Ollama. Ce sont des fichiers de données (poids du modèle), pas des programmes.
+
+## 1 bis. L'IA locale
+
+- L'IA tourne sur ton serveur : **aucune discussion ni aucun email n'est envoyé à une entreprise d'IA**.
+- L'API d'Ollama n'a pas de mot de passe : elle n'est **jamais publiée sur Internet** (réseau Docker interne uniquement ; un test le vérifie).
+- Seul un modèle réellement installé peut être choisi dans les réglages.
+- Les petits modèles locaux résistent moins bien que les grandes IA aux emails piégés : c'est pour ça que les protections importantes ne dépendent **pas** de l'IA (lecture seule, envoi uniquement sur ton clic).
+- Recherche web (optionnelle) : seuls les mots recherchés partent vers ollama.com ; les résultats sont traités comme non fiables.
 
 ## 2. Accès à Syrius
 
@@ -61,6 +71,5 @@ Lancer : `./scripts/security_check.sh`
 
 - Garde le fichier `.env` secret (`chmod 600 .env`) et ne le mets jamais sur GitHub (il est dans `.gitignore`).
 - Choisis un mot de passe Syrius unique et long.
-- Fixe une limite de dépense dans la console Anthropic.
 - Mets le serveur à jour (`sudo apt upgrade`) et Syrius (`git pull`).
 - Le jeton Outlook est stocké dans la base de Syrius (protégée par les droits fichiers du serveur) : un accès au serveur donne accès à ta boîte mail. Protège l'accès SSH (clé SSH, pas de mot de passe).

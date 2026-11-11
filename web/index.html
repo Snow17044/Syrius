@@ -89,14 +89,14 @@
       <h4>Cerveau</h4>
       <label>Style de réponse
         <select id="s-effort">
-          <option value="low">⚡ Rapide (recommandé)</option>
-          <option value="medium">⚖ Équilibré</option>
-          <option value="high">🧠 Approfondi (plus lent)</option>
+          <option value="low">⚡ Rapide (répond directement)</option>
+          <option value="high">🧠 Réfléchi (réfléchit avant, plus lent)</option>
         </select></label>
-      <label class="switch"><input id="s-fast" type="checkbox"><span>Mode turbo (réponses ~2× plus rapides, coût ×2)</span></label>
+      <label>Modèle d'IA (installé sur ton serveur)
+        <select id="s-model-choice"></select></label>
       <label class="switch"><input id="s-web" type="checkbox"><span>Recherche sur le web</span></label>
+      <p class="muted small" id="s-web-note"></p>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
-      <p class="muted small" id="s-model"></p>
 
       <h4>Emails</h4>
       <p id="s-email" class="muted small"></p>

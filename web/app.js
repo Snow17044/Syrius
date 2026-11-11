@@ -378,11 +378,13 @@ $("#open-settings").addEventListener("click", async () => {
   const s = state.settings;
   $("#s-name").value = s.user_name || "";
   $("#s-custom").value = s.custom_instructions || "";
-  $("#s-effort").value = s.effort || "low";
-  $("#s-fast").checked = !!s.fast_mode;
-  $("#s-web").checked = !!s.web_search;
+  $("#s-effort").value = s.effort === "low" ? "low" : "high";
+  $("#s-web").checked = !!s.web_search && s.web_search_available;
+  $("#s-web").disabled = !s.web_search_available;
+  $("#s-web-note").textContent = s.web_search_available ? ""
+    : "Pour l'activer : clé gratuite Ollama dans le fichier .env (voir README).";
   $("#s-voice").checked = !!s.voice_reply;
-  $("#s-model").textContent = "Modèle : " + s.model;
+  await renderModels(s);
   $("#s-email").textContent = s.email_enabled
     ? "✅ Boîte mail connectée (lecture seule ; chaque envoi demande ta confirmation)."
     : "Non configurés. Voir le guide d'installation (README, section Emails).";
@@ -391,6 +393,24 @@ $("#open-settings").addEventListener("click", async () => {
   closeDrawer();
   $("#settings").showModal();
 });
+
+async function renderModels(s) {
+  const sel = $("#s-model-choice");
+  sel.replaceChildren();
+  let installed = [];
+  try { installed = (await api("/api/models")).installed; } catch (_) { /* ignore */ }
+  const def = document.createElement("option");
+  def.value = "";
+  def.textContent = `Par défaut (${s.default_model})`;
+  sel.appendChild(def);
+  for (const name of installed) {
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = name;
+    sel.appendChild(o);
+  }
+  sel.value = installed.includes(s.model) ? s.model : "";
+}
 
 async function renderMemories() {
   const list = await api("/api/memories");
@@ -426,7 +446,7 @@ $("#settings-save").addEventListener("click", async () => {
           user_name: $("#s-name").value.trim(),
           custom_instructions: $("#s-custom").value,
           effort: $("#s-effort").value,
-          fast_mode: $("#s-fast").checked,
+          model: $("#s-model-choice").value,
           web_search: $("#s-web").checked,
           voice_reply: $("#s-voice").checked,
         }),

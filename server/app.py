@@ -238,10 +238,19 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None) -> FastAPI
     # ------------------------------------------------------------------ réglages & mémoire
     @app.get("/api/settings", dependencies=[Depends(require_auth)])
     async def get_settings():
-        return {**db.get_settings(), "email_enabled": cfg.email_enabled, "model": cfg.model}
+        return {**db.get_settings(), "email_enabled": cfg.email_enabled,
+                "web_search_available": bool(cfg.web_search_key), "default_model": cfg.model}
+
+    @app.get("/api/models", dependencies=[Depends(require_auth)])
+    async def list_models():
+        return {"installed": await agent.list_models(), "default": cfg.model}
 
     @app.put("/api/settings", dependencies=[Depends(require_auth)])
     async def put_settings(body: dict):
+        model = body.get("model")
+        if model:  # seul un modèle réellement installé peut être choisi
+            if not isinstance(model, str) or model not in await agent.list_models():
+                raise HTTPException(400, "Modèle non installé sur le serveur.")
         try:
             return db.update_settings(body)
         except ValueError as e:
