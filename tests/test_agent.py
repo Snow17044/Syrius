@@ -306,3 +306,15 @@ def test_upstash_valeurs_inversees_ou_sans_https(cfg, url, token):
     db = open_database(cfg)
     assert isinstance(db, RedisDatabase)
     assert db.r.url == "https://abc.upstash.io" and db.r.token == "jeton-secret-tres-long-1234567"
+
+
+def test_erreur_base_message_clair(make_client, monkeypatch):
+    from server.store_redis import RedisError
+    c = make_client(password=False)
+    c.app.state.cfg.setup_code = "code-secret-vercel"
+
+    def boom(*a, **k):
+        raise RedisError("Base de données : erreur 403 – jeton Upstash en lecture seule")
+    monkeypatch.setattr(c.db, "set_secret", boom)
+    r = c.post("/api/setup", json={"code": "code-secret-vercel", "password": "nouveau-mdp-123"}, headers=H)
+    assert r.status_code == 503 and "lecture seule" in r.json()["detail"]

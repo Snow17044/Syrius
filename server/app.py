@@ -13,7 +13,7 @@ from . import auth
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
-from .store_redis import RedisDatabase, UpstashREST
+from .store_redis import RedisDatabase, RedisError, UpstashREST
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -104,6 +104,12 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         agent.executor.email.db = db
 
     app = FastAPI(title="Syrius", docs_url=None, redoc_url=None, openapi_url=None)
+
+    @app.exception_handler(RedisError)
+    async def database_error(request: Request, exc: RedisError):
+        # Message clair pour l'utilisateur et le journal (jamais de secret dedans).
+        logging.getLogger("syrius").error("ERREUR BASE : %s (sur %s)", exc, request.url.path)
+        return JSONResponse({"detail": str(exc)}, status_code=503)
     app.state.db = db
     app.state.agent = agent
     app.state.cfg = cfg
