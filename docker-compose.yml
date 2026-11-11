@@ -1,0 +1,30 @@
+# Lance Syrius 24h/24 :  docker compose up -d
+services:
+  syrius:
+    build: .
+    restart: unless-stopped        # redémarre tout seul (panne, reboot du serveur…)
+    env_file: .env
+    volumes:
+      - syrius-data:/data          # discussions, mémoire, réglages
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Pas de "ports:" ici : Syrius n'est joignable que via Caddy.
+
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      SYRIUS_DOMAIN: ${SYRIUS_DOMAIN:?Indique SYRIUS_DOMAIN dans .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [syrius]
+
+volumes:
+  syrius-data:
+  caddy-data:
+  caddy-config:

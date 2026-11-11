@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#05080f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Syrius">
+  <title>Syrius</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/markdown.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <!-- Écran de connexion -->
+  <section id="login" class="screen hidden" aria-label="Connexion">
+    <div class="login-box">
+      <div class="orb big" aria-hidden="true"><span></span></div>
+      <h1>SYRIUS</h1>
+      <p class="muted">Identification requise.</p>
+      <form id="login-form" autocomplete="on">
+        <input id="login-password" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+        <button type="submit" class="primary">Se connecter</button>
+      </form>
+      <p id="login-error" class="error" role="alert"></p>
+    </div>
+  </section>
+
+  <!-- Application -->
+  <section id="app" class="screen hidden">
+    <aside id="drawer" aria-label="Discussions">
+      <div class="drawer-head">
+        <div class="brand"><div class="orb small" aria-hidden="true"><span></span></div>SYRIUS</div>
+        <button id="close-drawer" class="icon-btn" aria-label="Fermer le menu">✕</button>
+      </div>
+      <button id="new-chat-drawer" class="primary wide">＋ Nouvelle discussion</button>
+      <input id="search" type="search" placeholder="Rechercher une discussion…" aria-label="Rechercher">
+      <ul id="conv-list"></ul>
+      <div class="drawer-foot">
+        <button id="open-settings" class="ghost wide">⚙ Réglages</button>
+        <button id="logout" class="ghost wide">⎋ Déconnexion</button>
+      </div>
+    </aside>
+    <div id="backdrop" class="hidden"></div>
+
+    <main id="main">
+      <header class="topbar">
+        <button id="open-drawer" class="icon-btn" aria-label="Ouvrir le menu">☰</button>
+        <h2 id="conv-title">Syrius</h2>
+        <button id="new-chat" class="icon-btn" aria-label="Nouvelle discussion">✎</button>
+      </header>
+
+      <div id="messages" aria-live="polite">
+        <div id="empty" class="empty">
+          <div class="orb big" aria-hidden="true"><span></span></div>
+          <p id="greeting" class="greeting">À votre service.</p>
+          <div class="chips">
+            <button class="chip" data-prompt="Résume mes emails non lus">📬 Mes emails non lus</button>
+            <button class="chip" data-prompt="Quelles sont les actus importantes aujourd'hui ?">📰 Actus du jour</button>
+            <button class="chip" data-prompt="Aide-moi à organiser ma journée">🗓 Organiser ma journée</button>
+            <button class="chip" data-prompt="Qu'est-ce que tu sais de moi ?">🧠 Ce que tu sais de moi</button>
+          </div>
+        </div>
+      </div>
+
+      <form id="composer">
+        <button type="button" id="mic" class="icon-btn hidden" aria-label="Parler">🎙</button>
+        <textarea id="input" rows="1" placeholder="Parle à Syrius…" aria-label="Message" maxlength="20000"></textarea>
+        <button type="submit" id="send" class="send" aria-label="Envoyer">➤</button>
+        <button type="button" id="stop" class="send hidden" aria-label="Arrêter">■</button>
+      </form>
+    </main>
+  </section>
+
+  <!-- Réglages -->
+  <dialog id="settings">
+    <form method="dialog" class="sheet" id="settings-form">
+      <header class="sheet-head"><h3>Réglages</h3><button class="icon-btn" value="close" aria-label="Fermer">✕</button></header>
+
+      <h4>Profil</h4>
+      <label>Ton prénom<input id="s-name" type="text" maxlength="60" autocomplete="given-name"></label>
+      <label>Ce que Syrius doit savoir / comment il doit répondre
+        <textarea id="s-custom" rows="3" maxlength="2000" placeholder="Ex. : Je suis étudiant(e), réponds-moi en bref, vouvoie-moi…"></textarea></label>
+
+      <h4>Cerveau</h4>
+      <label>Style de réponse
+        <select id="s-effort">
+          <option value="low">⚡ Rapide (recommandé)</option>
+          <option value="medium">⚖ Équilibré</option>
+          <option value="high">🧠 Approfondi (plus lent)</option>
+        </select></label>
+      <label class="switch"><input id="s-fast" type="checkbox"><span>Mode turbo (réponses ~2× plus rapides, coût ×2)</span></label>
+      <label class="switch"><input id="s-web" type="checkbox"><span>Recherche sur le web</span></label>
+      <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
+      <p class="muted small" id="s-model"></p>
+
+      <h4>Emails</h4>
+      <p id="s-email" class="muted small"></p>
+
+      <h4>Mémoire</h4>
+      <p class="muted small">Ce que Syrius a retenu sur toi. Supprime ce que tu veux.</p>
+      <ul id="memory-list"></ul>
+
+      <h4>Sécurité</h4>
+      <details>
+        <summary>Changer le mot de passe</summary>
+        <input id="pw-current" type="password" autocomplete="current-password" placeholder="Mot de passe actuel">
+        <input id="pw-new" type="password" autocomplete="new-password" placeholder="Nouveau (10 caractères min.)">
+        <button type="button" id="pw-save" class="ghost wide">Changer</button>
+        <p id="pw-msg" class="small"></p>
+      </details>
+
+      <button type="button" id="settings-save" class="primary wide">Enregistrer</button>
+      <p id="settings-msg" class="small"></p>
+    </form>
+  </dialog>
+
+  <!-- Menu d'une discussion -->
+  <dialog id="conv-menu">
+    <div class="sheet">
+      <header class="sheet-head"><h3 id="conv-menu-title">Discussion</h3></header>
+      <button id="cm-rename" class="ghost wide">✎ Renommer</button>
+      <button id="cm-pin" class="ghost wide">📌 Épingler</button>
+      <button id="cm-delete" class="danger wide">🗑 Supprimer</button>
+      <button id="cm-close" class="ghost wide">Annuler</button>
+    </div>
+  </dialog>
+
+  <template id="tpl-action">
+    <div class="action-card">
+      <div class="action-title">✉ Brouillon d'email — en attente de ta confirmation</div>
+      <div class="action-field"><b>À :</b> <span class="a-to"></span></div>
+      <div class="action-field"><b>Sujet :</b> <span class="a-subject"></span></div>
+      <pre class="a-body"></pre>
+      <div class="action-buttons">
+        <button class="primary a-send">Envoyer</button>
+        <button class="ghost a-cancel">Annuler</button>
+      </div>
+      <p class="a-status small"></p>
+    </div>
+  </template>
+</body>
+</html>
