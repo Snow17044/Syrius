@@ -29,9 +29,11 @@ class Config:
     redis_token: str = field(default_factory=lambda: _env("UPSTASH_REDIS_REST_TOKEN") or _env("KV_REST_API_TOKEN"))
 
     # Cerveaux IA gratuits (au moins un des trois)
-    groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
+    # Accepte aussi les noms courts (ex. « groq ») si la variable a été nommée autrement dans Vercel.
+    groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY") or _env("GROQ_KEY") or _env("groq")
+                              or _env("GROQ"))
     groq_model: str = field(default_factory=lambda: _env("SYRIUS_GROQ_MODEL", "openai/gpt-oss-120b"))
-    gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY"))
+    gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY") or _env("gemini") or _env("GEMINI"))
     gemini_model: str = field(default_factory=lambda: _env("SYRIUS_GEMINI_MODEL", "gemini-flash-latest"))
     ollama_url: str = field(default_factory=lambda: _env("SYRIUS_OLLAMA_URL"))
     ollama_model: str = field(default_factory=lambda: _env("SYRIUS_OLLAMA_MODEL", "qwen3:8b"))

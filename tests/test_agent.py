@@ -262,3 +262,10 @@ async def test_cerveau_injoignable():
 def test_url_invalide():
     with pytest.raises(ValueError):
         Provider("x", "X", "file:///etc/passwd", "m")
+
+
+def test_cle_groq_nom_court(monkeypatch):
+    from server.config import Config
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("groq", "gsk_test")
+    assert Config().groq_api_key == "gsk_test"
