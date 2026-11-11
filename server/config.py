@@ -5,8 +5,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+def _clean(value: str) -> str:
+    """Nettoie une valeur collée à la main : espaces, guillemets, « NOM=valeur »."""
+    v = value.strip()
+    if "=" in v and v.split("=", 1)[0].strip().isupper() and " " not in v.split("=", 1)[0].strip():
+        v = v.split("=", 1)[1].strip()  # ex. UPSTASH_REDIS_REST_URL="https://..."
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+        v = v[1:-1].strip()
+    return v
+
+
 def _env(name: str, default: str = "") -> str:
-    return os.environ.get(name, default).strip()
+    return _clean(os.environ.get(name, default))
 
 
 def _bool(name: str, default: bool) -> bool:

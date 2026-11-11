@@ -269,3 +269,19 @@ def test_cle_groq_nom_court(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.setenv("groq", "gsk_test")
     assert Config().groq_api_key == "gsk_test"
+
+
+def test_valeurs_collees_nettoyees(monkeypatch):
+    from server.config import Config
+    monkeypatch.setenv("UPSTASH_REDIS_REST_URL", 'UPSTASH_REDIS_REST_URL="https://abc.upstash.io"')
+    monkeypatch.setenv("UPSTASH_REDIS_REST_TOKEN", "  'jeton'  ")
+    c = Config()
+    assert c.redis_url == "https://abc.upstash.io" and c.redis_token == "jeton"
+
+
+def test_adresse_upstash_invalide_ne_fait_pas_planter(cfg):
+    from fastapi.testclient import TestClient
+    from server.app import create_app
+    cfg.redis_url, cfg.redis_token = "pas-une-adresse", "x"
+    r = TestClient(create_app(cfg), base_url="https://testserver").get("/health")
+    assert r.status_code == 200 and r.json()["stockage"] == "temporaire"

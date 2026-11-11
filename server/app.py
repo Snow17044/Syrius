@@ -55,7 +55,10 @@ class PasswordChange(BaseModel):
 def open_database(cfg: Config):
     """Upstash Redis si configuré (obligatoire sur Vercel), sinon SQLite local."""
     if cfg.redis_url and cfg.redis_token:
-        return RedisDatabase(UpstashREST(cfg.redis_url, cfg.redis_token))
+        try:
+            return RedisDatabase(UpstashREST(cfg.redis_url, cfg.redis_token))
+        except ValueError as e:  # adresse mal copiée : on démarre quand même et on le signale
+            logging.getLogger("syrius").error("Base Upstash ignorée : %s", e)
     if cfg.behind_vercel:
         logging.getLogger("syrius").warning(
             "Upstash non configuré : les données seront PERDUES à chaque redémarrage (voir README).")
@@ -134,7 +137,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
     @app.get("/health")
     async def health():
-        return {"ok": True}
+        return {"ok": True, "stockage": "upstash" if isinstance(db, RedisDatabase) else "temporaire",
+                "cerveaux": [b["name"] for b in agent.brains()]}
 
     # ------------------------------------------------------------------ connexion
     @app.get("/api/session")
