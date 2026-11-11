@@ -54,9 +54,19 @@ class PasswordChange(BaseModel):
 
 def open_database(cfg: Config):
     """Upstash Redis si configuré (obligatoire sur Vercel), sinon SQLite local."""
-    if cfg.redis_url and cfg.redis_token:
+    url, token = cfg.redis_url, cfg.redis_token
+    if token.startswith("https://") and not url.startswith("https://"):
+        url, token = token, url  # les deux valeurs ont été inversées
+    if url and "://" not in url and url.rstrip("/").endswith(".upstash.io"):
+        url = "https://" + url  # adresse copiée sans « https:// »
+    if url and token:
+        if not url.startswith("https://"):
+            # Diagnostic sans révéler de secret : seulement la forme de la valeur.
+            shape = ("vide" if not url else f"{len(url)} caractères, commence par « {url[:6]}… »"
+                     if url.startswith(("redis", "rediss", "http:")) else f"{len(url)} caractères")
+            logging.getLogger("syrius").error("UPSTASH_REDIS_REST_URL ne ressemble pas à une adresse : %s", shape)
         try:
-            return RedisDatabase(UpstashREST(cfg.redis_url, cfg.redis_token))
+            return RedisDatabase(UpstashREST(url, token))
         except ValueError as e:  # adresse mal copiée : on démarre quand même et on le signale
             logging.getLogger("syrius").error("Base Upstash ignorée : %s", e)
     if cfg.behind_vercel:

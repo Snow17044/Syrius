@@ -285,3 +285,14 @@ def test_adresse_upstash_invalide_ne_fait_pas_planter(cfg):
     cfg.redis_url, cfg.redis_token = "pas-une-adresse", "x"
     r = TestClient(create_app(cfg), base_url="https://testserver").get("/health")
     assert r.status_code == 200 and r.json()["stockage"] == "temporaire"
+
+
+@pytest.mark.parametrize("url,token", [("jeton-secret", "https://abc.upstash.io"),
+                                       ("abc.upstash.io", "jeton-secret")])
+def test_upstash_valeurs_inversees_ou_sans_https(cfg, url, token):
+    from server.app import open_database
+    from server.store_redis import RedisDatabase
+    cfg.redis_url, cfg.redis_token = url, token
+    db = open_database(cfg)
+    assert isinstance(db, RedisDatabase)
+    assert db.r.url == "https://abc.upstash.io" and db.r.token == "jeton-secret"
