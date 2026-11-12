@@ -139,7 +139,7 @@ def test_outils_email_absents_si_non_configures(make_client):
     login(c)
     ask(c, new_conv(c), "test")
     names = {t["function"]["name"] for t in c.fake.requests[0]["tools"]}
-    assert "read_email" not in names and "remember" in names and "web_search" not in names
+    assert "read_email" not in names and "remember" in names and "web_search" in names
 
 
 def test_aucun_cerveau_configure(make_client):

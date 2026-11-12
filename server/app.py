@@ -1,12 +1,13 @@
 """Serveur web de Syrius (API + application téléphone)."""
 import asyncio
 import hmac
+import html
 import logging
 import re
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import auth
@@ -14,6 +15,7 @@ from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
 from .store_redis import RedisDatabase, RedisError, UpstashREST
+from .tools import gmail
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -125,7 +127,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                 return JSONResponse({"detail": "Requête refusée"}, status_code=403)
         response: Response = await call_next(request)
         h = response.headers
-        h["Content-Security-Policy"] = CSP
+        if "content-security-policy" not in h:  # une page peut fixer une politique plus stricte
+            h["Content-Security-Policy"] = CSP
         h["X-Content-Type-Options"] = "nosniff"
         h["X-Frame-Options"] = "DENY"
         h["Referrer-Policy"] = "no-referrer"
@@ -315,10 +318,50 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/api/settings", dependencies=[Depends(require_auth)])
     async def get_settings():
         return {**db.get_settings(), "email_enabled": cfg.email_enabled,
-                "outlook": cfg.email_auth == "outlook" and bool(cfg.ms_client_id),
-                "web_search_available": bool(cfg.web_search_key)}
+                "outlook": cfg.email_mode == "outlook" and bool(cfg.ms_client_id),
+                "google": cfg.email_mode == "google",
+                "google_connected": cfg.email_mode == "google" and gmail.is_connected(db),
+                "web_search_available": True}
 
     # Connexion Outlook / Hotmail depuis l'app (code à entrer sur le site de Microsoft)
+    # Connexion Gmail (OAuth Google). La page de Google s'ouvre dans le navigateur du téléphone ;
+    # le retour est protégé par un « state » aléatoire, à usage unique, valable 15 minutes.
+    def google_redirect_uri(request: Request) -> str:
+        host = request.headers.get("host", "")
+        scheme = "https" if (cfg.behind_vercel or cfg.cookie_secure) else request.url.scheme
+        return f"{scheme}://{host}/api/email/google/callback"
+
+    @app.post("/api/email/google/start", dependencies=[Depends(require_auth)])
+    async def google_start(request: Request):
+        try:
+            return {"url": await asyncio.to_thread(gmail.start_url, cfg, db, google_redirect_uri(request))}
+        except EmailError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.get("/api/email/google/callback")
+    async def google_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+        if error:
+            ok, text = False, "Connexion annulée."
+        else:
+            try:
+                await asyncio.to_thread(gmail.finish, cfg, db, code[:1000], state[:200], google_redirect_uri(request))
+                ok, text = True, "Gmail est connecté à Syrius."
+            except EmailError as e:
+                ok, text = False, str(e)
+        page = ("<!doctype html><html lang=fr><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                "<title>Syrius</title><body style='background:#05080f;color:#e6f1ff;font:18px system-ui;"
+                "display:grid;place-items:center;height:90vh;text-align:center'><div><p style='font-size:48px'>"
+                + ("✅" if ok else "⚠️") + "</p><p>" + html.escape(text) +
+                "</p><p>Tu peux fermer cette page et retourner dans l'application Syrius.</p></div></body></html>")
+        resp = HTMLResponse(page, status_code=200 if ok else 400)
+        resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
+        return resp
+
+    @app.post("/api/email/google/disconnect", dependencies=[Depends(require_auth)])
+    async def google_disconnect():
+        gmail.disconnect(db)
+        return {"ok": True}
+
     @app.post("/api/email/outlook/start", dependencies=[Depends(require_auth)])
     async def outlook_login_start():
         try:
