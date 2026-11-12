@@ -99,40 +99,42 @@ _FENCE = re.compile(r"```[a-zA-Z]*\s*(.*?)```", re.S)
 MAX_SCAN = 60_000
 
 
-def _unwrap(obj):
+def _unwrap(obj, key: str = "nodes"):
     for _ in range(3):  # {"name": "show_diagram", "arguments": {...}} et variantes
-        if not isinstance(obj, dict) or "nodes" in obj:
+        if not isinstance(obj, dict) or key in obj:
             break
-        inner = obj.get("arguments") or obj.get("parameters") or obj.get("input") or obj.get("diagram")
+        inner = obj.get("arguments") or obj.get("parameters") or obj.get("input") or obj.get("diagram") \
+            or obj.get("model")
         if isinstance(inner, str):
             try:
                 inner = json.loads(inner)
             except ValueError:
                 return None
         obj = inner
-    return obj if isinstance(obj, dict) and isinstance(obj.get("nodes"), list) else None
+    return obj if isinstance(obj, dict) and isinstance(obj.get(key), list) else None
 
 
-def extract_from_text(text: str) -> tuple[str, dict | None]:
-    """Renvoie (texte sans le code du schéma, schéma validé) ou (texte inchangé, None)."""
-    if "nodes" not in text or len(text) > MAX_SCAN:
+def find_json_object(text: str, key: str, check) -> tuple[str, dict | None]:
+    """Cherche dans le texte un objet JSON contenant la liste `key` et accepté par `check`
+    (qui renvoie l'événement validé ou lève ValueError). Renvoie (texte nettoyé, événement)."""
+    if key not in text or len(text) > MAX_SCAN:
         return text, None
     decoder = json.JSONDecoder()
-    spans = [(m.start(), m.end(), m.group(1)) for m in _FENCE.finditer(text)]
-    for start, end, body in spans:  # d'abord les blocs de code ```json … ```
-        body = body.strip()
+    for m in _FENCE.finditer(text):  # d'abord les blocs de code ```json … ```
+        body = m.group(1).strip()
+        if "{" not in body:
+            continue
         try:
-            obj, _ = decoder.raw_decode(body[body.find("{"):]) if "{" in body else (None, 0)
+            obj, _ = decoder.raw_decode(body[body.find("{"):])
         except ValueError:
             continue
-        found = _unwrap(obj)
+        found = _unwrap(obj, key)
         if found:
             try:
-                event = validate({k: v for k, v in found.items() if k in ("title", "style", "nodes", "links")}
-                                 | {"title": found.get("title") or "Schéma"})
-            except DiagramError:
+                event = check(found)
+            except ValueError:
                 continue
-            return (text[:start] + text[end:]).strip(), event
+            return (text[:m.start()] + text[m.end():]).strip(), event
     i = text.find("{")
     while i != -1:  # puis un objet JSON écrit directement dans le texte
         try:
@@ -140,15 +142,24 @@ def extract_from_text(text: str) -> tuple[str, dict | None]:
         except ValueError:
             i = text.find("{", i + 1)
             continue
-        found = _unwrap(obj)
+        found = _unwrap(obj, key)
         if found:
             try:
-                event = validate({k: v for k, v in found.items() if k in ("title", "style", "nodes", "links")}
-                                 | {"title": found.get("title") or "Schéma"})
-            except DiagramError:
+                event = check(found)
+            except ValueError:
                 return text, None
-            before = re.sub(r"show_diagram\s*\(?\s*$", "", text[:i])
+            before = re.sub(r"show_\w+\s*\(?\s*$", "", text[:i])
             after = re.sub(r"^\s*\)", "", text[i + length:])
             return (before + after).strip(), event
         i = text.find("{", i + length)
     return text, None
+
+
+def _check_diagram(found: dict) -> dict:
+    return validate({k: v for k, v in found.items() if k in ("title", "style", "nodes", "links")}
+                    | {"title": found.get("title") or "Schéma"})
+
+
+def extract_from_text(text: str) -> tuple[str, dict | None]:
+    """Renvoie (texte sans le code du schéma, schéma validé) ou (texte inchangé, None)."""
+    return find_json_object(text, "nodes", _check_diagram)

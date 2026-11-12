@@ -310,6 +310,7 @@ async function sendMessage(text) {
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
         else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
         else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
+        else if (ev.type === "model") { addDiagramCard(view, ev); if (window.SyriusModel) window.SyriusModel.show(ev); }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
         else if (ev.type === "error") { gotError = true; showError(view, ev.message); }
@@ -358,8 +359,12 @@ function addDiagramCard(view, ev) {
   const card = document.createElement("button");
   card.type = "button";
   card.className = "action-card map-card";
-  card.textContent = `🧠 Schéma 3D : ${String(ev.title || "").slice(0, 60)} — ouvrir`;
-  card.addEventListener("click", () => window.SyriusHolo && window.SyriusHolo.show(ev));
+  const isModel = ev.type === "model";
+  card.textContent = `${isModel ? "🧊 Maquette 3D" : "🧠 Schéma 3D"} : ${String(ev.title || "").slice(0, 60)} — ouvrir`;
+  card.addEventListener("click", () => {
+    if (isModel) { if (window.SyriusModel) window.SyriusModel.show(ev); }
+    else if (window.SyriusHolo) window.SyriusHolo.show(ev);
+  });
   view.bubble.appendChild(card);
 }
 

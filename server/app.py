@@ -26,6 +26,7 @@ STATIC_FILES = {
     "leaflet.js": "text/javascript", "leaflet.css": "text/css", "hud.js": "text/javascript",
     "maplibre-gl.js": "text/javascript", "maplibre-gl-worker.js": "text/javascript",
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
+    "three.min.js": "text/javascript", "model3d.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 

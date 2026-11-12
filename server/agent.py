@@ -10,7 +10,7 @@ from pathlib import Path
 from .config import Config
 from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, providers_from_config
-from .tools import diagram
+from .tools import diagram, model3d
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
@@ -114,6 +114,13 @@ def display_messages(stored: list[dict]) -> list[dict]:
                                                       if k in ("title", "style", "nodes", "links")}))
                 except diagram.DiagramError:
                     pass
+            elif (b.get("type") == "tool_use" and b.get("name") == "show_model") or b.get("type") == "model":
+                data = b.get("input") if b.get("type") == "tool_use" else b.get("data")
+                try:  # les maquettes 3D aussi
+                    diagrams.append(model3d.validate({k: v for k, v in (data or {}).items()
+                                                      if k in ("title", "description", "parts", "facts")}))
+                except model3d.ModelError:
+                    pass
         if out and out[-1]["role"] == "assistant":  # fusionne les étapes d'une même réponse
             prev = out[-1]
             prev["text"] = "\n\n".join(t for t in [prev["text"], *texts] if t)
@@ -126,7 +133,8 @@ def display_messages(stored: list[dict]) -> list[dict]:
 
 _THINK_TAGS = re.compile(r"<think>.*?</think>\s*", re.S)
 # Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
-_WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme|hologramme", re.I)
+_WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme", re.I)
+_WANTS_MODEL = re.compile(r"\b3 ?d\b|maquette|mod[èe]le 3|en relief|hologramme", re.I)
 
 
 class Agent:
@@ -199,8 +207,11 @@ class Agent:
             while providers:
                 provider = providers[0]
                 req = dict(body)
-                if _step == 0 and _WANTS_DIAGRAM.search(user_text) and not tool_retry:
-                    req["tool_choice"] = {"type": "function", "function": {"name": "show_diagram"}}
+                if _step == 0 and not tool_retry:
+                    forced = "show_diagram" if _WANTS_DIAGRAM.search(user_text) else \
+                        "show_model" if _WANTS_MODEL.search(user_text) else ""
+                    if forced:
+                        req["tool_choice"] = {"type": "function", "function": {"name": forced}}
                 if provider.reasoning:
                     req["reasoning_effort"] = effort
                 try:
@@ -237,13 +248,15 @@ class Agent:
                      [c["name"] for c in state["calls"]] or "aucun")
             text = _THINK_TAGS.sub("", state["text"])
             extra: list[dict] = []
-            if not any(c["name"] == "show_diagram" for c in state["calls"]):
-                cleaned, found = diagram.extract_from_text(text)
-                if found:  # le modèle a écrit le schéma au lieu de le dessiner : on le dessine
-                    text = cleaned
-                    extra = [{"type": "diagram", "data": found}]
-                    yield {"type": "text_replace", "text": text}
-                    yield found
+            if not any(c["name"] in ("show_diagram", "show_model") for c in state["calls"]):
+                for mod, kind in ((diagram, "diagram"), (model3d, "model")):
+                    cleaned, found = mod.extract_from_text(text)
+                    if found:  # le modèle a écrit le schéma / la maquette au lieu de le dessiner
+                        text = cleaned
+                        extra = [{"type": kind, "data": found}]
+                        yield {"type": "text_replace", "text": text}
+                        yield found
+                        break
             content = ([{"type": "text", "text": text}] if text else []) + extra + state["calls"]
             assistant_msg = {"role": "assistant", "content": content or [{"type": "text", "text": ""}]}
             self.db.add_messages(conversation_id, to_save + [assistant_msg])

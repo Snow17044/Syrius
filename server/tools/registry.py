@@ -10,7 +10,7 @@ from ..config import Config
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
-from . import diagram, places, web
+from . import diagram, model3d, places, web
 from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -58,6 +58,30 @@ BASE_TOOLS = [
                          "from": {"type": "string"}, "to": {"type": "string"},
                          "label": {"type": "string"}}}}},
           ["title", "nodes"]),
+    _tool("show_model",
+          "Affiche une MAQUETTE 3D holographique d'un objet, bâtiment, monument, véhicule, animal, molécule, "
+          "planète, machine… (ex. tour Eiffel, pyramide, fusée, voiture, atome). Construis l'objet avec des "
+          "formes simples bien placées (20 à 80 pièces) : proportions réalistes, axe Y vers le haut, sol à "
+          "y = 0, unité = mètre (ou échelle cohérente). Utilise-le dès qu'on demande de montrer, afficher ou "
+          "voir quelque chose en 3D.",
+          {"title": {"type": "string", "description": "Nom de l'objet"},
+           "description": {"type": "string", "description": "Une ou deux phrases sur l'objet"},
+           "facts": {"type": "array", "items": {"type": "string"},
+                     "description": "3 à 6 infos clés courtes (ex. « Hauteur : 330 m »)"},
+           "parts": {"type": "array", "description": "Les pièces de la maquette",
+                     "items": {"type": "object", "properties": {
+                         "shape": {"type": "string", "description": "box (size = largeur, hauteur, profondeur), "
+                                   "cylinder (size = rayon haut, hauteur, rayon bas), cone (size = rayon, hauteur), "
+                                   "sphere (size = rayon), torus (size = rayon, épaisseur), pyramid (size = "
+                                   "largeur, hauteur, profondeur), capsule (size = rayon, longueur)"},
+                         "pos": {"type": "array", "items": {"type": "number"},
+                                 "description": "Centre [x, y, z] de la pièce"},
+                         "size": {"type": "array", "items": {"type": "number"}},
+                         "rot": {"type": "array", "items": {"type": "number"},
+                                 "description": "Rotation [x, y, z] en degrés (facultatif)"},
+                         "color": {"type": "string", "description": "Couleur #rrggbb"},
+                         "name": {"type": "string", "description": "Nom de la partie (facultatif)"}}}}},
+          ["title", "parts"]),
 ]
 
 EMAIL_TOOLS = [
@@ -104,6 +128,7 @@ TOOL_LABELS = {
     "web_read": "Je lis la page",
     "show_places": "J'affiche la carte",
     "show_diagram": "Je dessine le schéma 3D",
+    "show_model": "Je construis la maquette 3D",
     **DEVICE_LABELS,
 }
 
@@ -250,6 +275,14 @@ class ToolExecutor:
                 raise InvalidInput(str(e)) from None
             return (f"Schéma « {event['title']} » affiché en 3D ({len(event['nodes'])} idées). "
                     "Résume-le en une ou deux phrases, sans le recopier."), False, event
+
+        if name == "show_model":
+            try:
+                event = model3d.validate(args)
+            except model3d.ModelError as e:
+                raise InvalidInput(str(e)) from None
+            return (f"Maquette 3D « {event['title']} » affichée ({len(event['parts'])} pièces). "
+                    "Présente-la en deux ou trois phrases, sans recopier les pièces."), False, event
 
         if name == "web_read":
             a = _check(args, {"url": str}, ["url"])
