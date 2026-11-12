@@ -190,11 +190,24 @@
   }
 
   // ------------------------------------------------------------------ scène
+  // Une erreur de dessin ne doit jamais figer l'hologramme : on la note et on continue.
   function frame(t) {
     if (!st) return;
+    try {
+      drawFrame(t);
+      st.errors = 0;
+    } catch (e) {
+      st.errors = (st.errors || 0) + 1;
+      if (st.errors === 1 && window.console) console.error("Hologramme :", e);
+    }
+    if (st && st.errors < 30) raf = requestAnimationFrame(frame);
+  }
+
+  function drawFrame(t) {
     const { ctx, canvas, plan } = st;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w < 40 || h < 120) return; // panneau pas encore affiché
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
       st.layouts = null;
@@ -213,7 +226,7 @@
     const PW = Math.min(300, w * 0.74);
     const coreY = Math.max(36, h * 0.1);
     const panelTop = coreY + 50;
-    const maxH = h - panelTop - 24;
+    const maxH = Math.max(140, h - panelTop - 24);
     if (!st.layouts) st.layouts = plan.panels.map((p) => layoutPanel(ctx, p, PW, maxH));
 
     // Étoiles (défilent avec la rotation)
@@ -228,7 +241,7 @@
     for (let i = 3; i >= 1; i--) {
       ctx.strokeStyle = `rgba(56,217,255,${0.08 * i})`;
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.ellipse(w / 2, floorY, w * 0.15 * i * ease, 6 * i * ease, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(w / 2, floorY, Math.max(0.1, w * 0.15 * i * ease), Math.max(0.1, 6 * i * ease), 0, 0, Math.PI * 2); ctx.stroke();
     }
 
     // Panneaux sur un anneau 3D
@@ -301,8 +314,6 @@
     ctx.fillStyle = "rgba(8,34,56,.95)"; ctx.fill();
     ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(120,235,255,.8)"; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = "#ffffff"; ctx.fillText(title, w / 2, coreY + 32.5);
-
-    raf = requestAnimationFrame(frame);
   }
 
   // ------------------------------------------------------------------ navigation

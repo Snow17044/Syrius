@@ -135,3 +135,27 @@ async def test_agent_dessine_le_schema_ecrit_en_texte(make_client):
     conv = c.get(f"/api/conversations/{cid}").json()
     last = conv["messages"][-1]
     assert last["text"] == "Voilà :" and last["diagrams"][0]["title"] == "Permis"
+
+
+def _chat(c, text):
+    from tests.conftest import H, login
+    login(c)
+    cid = c.post("/api/conversations", headers=H).json()["id"]
+    return c.post(f"/api/conversations/{cid}/messages", json={"text": text}, headers=H)
+
+
+def test_demande_de_schema_force_l_outil(make_client):
+    from tests.conftest import reply
+    c = make_client([reply(tool_calls=[("show_diagram", PLAN)]), reply("Voilà ton plan.")])
+    r = _chat(c, "Fais-moi un SCHÉMA pour passer le permis")
+    assert '"type": "diagram"' in r.text
+    first, second = c.fake.requests
+    assert first["tool_choice"] == {"type": "function", "function": {"name": "show_diagram"}}
+    assert "tool_choice" not in second  # seulement pour la première étape
+
+
+def test_message_normal_sans_obligation(make_client):
+    from tests.conftest import reply
+    c = make_client([reply("Bonjour !")])
+    _chat(c, "Quelle heure est-il ?")
+    assert "tool_choice" not in c.fake.requests[0]

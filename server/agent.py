@@ -125,6 +125,8 @@ def display_messages(stored: list[dict]) -> list[dict]:
 
 
 _THINK_TAGS = re.compile(r"<think>.*?</think>\s*", re.S)
+# Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
+_WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme|hologramme", re.I)
 
 
 class Agent:
@@ -197,6 +199,8 @@ class Agent:
             while providers:
                 provider = providers[0]
                 req = dict(body)
+                if _step == 0 and _WANTS_DIAGRAM.search(user_text) and not tool_retry:
+                    req["tool_choice"] = {"type": "function", "function": {"name": "show_diagram"}}
                 if provider.reasoning:
                     req["reasoning_effort"] = effort
                 try:
