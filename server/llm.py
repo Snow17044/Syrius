@@ -21,6 +21,10 @@ class RetryableError(LLMError):
     """Limite atteinte ou panne passagère : on peut essayer un autre cerveau."""
 
 
+class TooLargeError(RetryableError):
+    """Demande trop lourde pour la limite par minute : on peut réessayer en plus léger."""
+
+
 @dataclass
 class Provider:
     name: str        # identifiant court : groq, gemini, local
@@ -45,7 +49,7 @@ def _http_error_message(provider: Provider, code: int, detail: str) -> LLMError:
     if code == 404:  # modèle retiré : on passe au suivant
         return RetryableError(f"{provider.label} : modèle « {provider.model} » introuvable.")
     if code == 413:  # demande trop grosse pour la limite par minute de ce modèle
-        return RetryableError(f"{provider.label} : demande trop lourde pour sa limite gratuite.")
+        return TooLargeError(f"{provider.label} : demande trop lourde pour sa limite gratuite.")
     low = detail.lower()
     if code == 400 and "model" in low and any(k in low for k in ("decommission", "not found", "does not exist",
                                                                    "not supported", "deprecated")):

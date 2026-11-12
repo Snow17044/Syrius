@@ -98,3 +98,62 @@ def test_three_intact_et_sans_html():
     src = open("web/model3d.js", encoding="utf-8").read()
     for danger in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function"):
         assert danger not in src
+
+
+# ---------------------------------------------------------------- format compact + symétrie
+def test_format_compact_une_ligne_par_piece():
+    m = model3d.validate({"title": "T", "parts": [
+        "box 0,30,0 8,60,8 0,0,-20 #8d6e4f Pilier nord 2",
+        "cone 0,80 2,10 gris",
+        "sphere 0,1,0 3",
+        "teapot 0,0,0 1",
+        "",
+    ]})
+    box, cone, sphere = m["parts"]
+    assert box == {"shape": "box", "pos": [0.0, 30.0, 0.0], "size": [8.0, 60.0, 8.0], "rot": [0.0, 0.0, -20.0],
+                   "color": "#8d6e4f", "name": "Pilier nord 2"}
+    assert cone["pos"] == [0.0, 80.0, 0.0] and cone["size"] == [2.0, 10.0, 1.0] and cone["color"] == "#94a3b8"
+    assert sphere["size"] == [3.0, 3.0, 3.0]
+
+
+def test_symetrie_xz_cree_4_pieces():
+    m = model3d.validate({"title": "T", "parts": ["box 40,30,40 8,60,8 10,0,-20 #8d6e4f sym:xz Pilier"]})
+    pos = sorted(tuple(p["pos"]) for p in m["parts"])
+    assert pos == [(-40, 30, -40), (-40, 30, 40), (40, 30, -40), (40, 30, 40)]
+    rots = {tuple(p["pos"]): p["rot"] for p in m["parts"]}
+    assert rots[(40.0, 30.0, 40.0)] == [10.0, 0.0, -20.0] and rots[(-40.0, 30.0, 40.0)] == [10.0, -0.0, 20.0]
+    assert rots[(40.0, 30.0, -40.0)] == [-10.0, -0.0, -20.0]
+
+
+def test_symetrie_ne_depasse_pas_la_limite():
+    m = model3d.validate({"title": "T", "parts": ["box 1,1,1 1 sym:xz"] * 500})
+    assert len(m["parts"]) == model3d.MAX_PARTS
+
+
+def test_demande_3d_legere(make_client):
+    c = make_client([reply(tool_calls=[("show_model", {"title": "T", "parts": ["box 0,1,0 1"]})]), reply("ok")])
+    _chat(c, "montre la tour Eiffel en 3D")
+    first, second = c.fake.requests
+    assert [t["function"]["name"] for t in first["tools"]] == ["show_model"]  # seulement l'outil utile
+    assert first["max_tokens"] <= 3000 and len(second["tools"]) > 5
+
+
+def test_demande_trop_lourde_reessaie_en_plus_leger(make_client):
+    from server.llm import TooLargeError
+    c = make_client([reply("Réponse légère.")])
+    calls = {"n": 0}
+    orig = c.fake.stream_chat
+
+    async def flaky(provider, body):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            c.fake.requests.append({**body, "_provider": provider.name})
+            raise TooLargeError("Groq : demande trop lourde pour sa limite gratuite.")
+        async for chunk in orig(provider, body):
+            yield chunk
+    c.fake.stream_chat = flaky
+    c.agent.llm = c.fake
+    _cid, r = _chat(c, "bonjour")
+    assert "légère." in r.text
+    assert [q["_provider"] for q in c.fake.requests] == ["groq", "groq"]  # même cerveau, sans changer
+    assert c.fake.requests[1]["max_tokens"] < c.fake.requests[0]["max_tokens"]

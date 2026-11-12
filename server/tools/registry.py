@@ -59,28 +59,18 @@ BASE_TOOLS = [
                          "label": {"type": "string"}}}}},
           ["title", "nodes"]),
     _tool("show_model",
-          "Affiche une MAQUETTE 3D holographique d'un objet, bâtiment, monument, véhicule, animal, molécule, "
-          "planète, machine… (ex. tour Eiffel, pyramide, fusée, voiture, atome). Construis l'objet avec des "
-          "formes simples bien placées (20 à 80 pièces) : proportions réalistes, axe Y vers le haut, sol à "
-          "y = 0, unité = mètre (ou échelle cohérente). Utilise-le dès qu'on demande de montrer, afficher ou "
-          "voir quelque chose en 3D.",
-          {"title": {"type": "string", "description": "Nom de l'objet"},
-           "description": {"type": "string", "description": "Une ou deux phrases sur l'objet"},
-           "facts": {"type": "array", "items": {"type": "string"},
-                     "description": "3 à 6 infos clés courtes (ex. « Hauteur : 330 m »)"},
-           "parts": {"type": "array", "description": "Les pièces de la maquette",
-                     "items": {"type": "object", "properties": {
-                         "shape": {"type": "string", "description": "box (size = largeur, hauteur, profondeur), "
-                                   "cylinder (size = rayon haut, hauteur, rayon bas), cone (size = rayon, hauteur), "
-                                   "sphere (size = rayon), torus (size = rayon, épaisseur), pyramid (size = "
-                                   "largeur, hauteur, profondeur), capsule (size = rayon, longueur)"},
-                         "pos": {"type": "array", "items": {"type": "number"},
-                                 "description": "Centre [x, y, z] de la pièce"},
-                         "size": {"type": "array", "items": {"type": "number"}},
-                         "rot": {"type": "array", "items": {"type": "number"},
-                                 "description": "Rotation [x, y, z] en degrés (facultatif)"},
-                         "color": {"type": "string", "description": "Couleur #rrggbb"},
-                         "name": {"type": "string", "description": "Nom de la partie (facultatif)"}}}}},
+          "Affiche une MAQUETTE 3D holographique d'un objet, monument, véhicule, animal, molécule, planète… "
+          "Utilise-le dès qu'on demande de montrer / voir quelque chose en 3D. Construis un objet reconnaissable "
+          "(15 à 60 lignes), proportions réelles, axe Y vers le haut, sol à y = 0.",
+          {"title": {"type": "string"},
+           "description": {"type": "string", "description": "Une phrase sur l'objet"},
+           "facts": {"type": "array", "items": {"type": "string"}, "description": "3 à 5 infos clés courtes"},
+           "parts": {"type": "array", "items": {"type": "string"},
+                     "description": "Une ligne par pièce : « forme x,y,z taille [rotX,rotY,rotZ] #couleur "
+                                    "[sym:x|z|xz] nom ». Formes et tailles : box l,h,p · cylinder rHaut,h,rBas · "
+                                    "cone r,h · sphere r · torus r,épaisseur · pyramid l,h,p · capsule r,long. "
+                                    "sym:xz copie la pièce en 4 (symétrie gauche/droite et avant/arrière). "
+                                    "Ex. « box 40,30,40 8,60,8 0,0,-20 #8d6e4f sym:xz Pilier »."}},
           ["title", "parts"]),
 ]
 

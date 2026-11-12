@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import Config
 from .db import Database
-from .llm import ChatClient, LLMError, RetryableError, providers_from_config
+from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
 from .tools import diagram, model3d
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
@@ -131,6 +131,9 @@ def display_messages(stored: list[dict]) -> list[dict]:
     return out
 
 
+# Les offres gratuites limitent les jetons PAR MINUTE (demande + réponse réservée) : on reste sobre.
+MAX_TOKENS = 3000
+SMALL_TOKENS = 1600
 _THINK_TAGS = re.compile(r"<think>.*?</think>\s*", re.S)
 # Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
 _WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme", re.I)
@@ -200,22 +203,24 @@ class Agent:
         for _step in range(MAX_STEPS):
             system = build_system(settings, self.db.list_memories())  # les souvenirs peuvent changer
             body = {"messages": to_openai(history, system), "tools": build_tools(self.cfg, settings),
-                    "max_tokens": 8000}
+                    "max_tokens": MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None
             tool_retry = False
+            shrink = False
             while providers:
                 provider = providers[0]
                 req = dict(body)
                 if _step == 0 and not tool_retry:
                     forced = "show_diagram" if _WANTS_DIAGRAM.search(user_text) else \
                         "show_model" if _WANTS_MODEL.search(user_text) else ""
-                    if forced and provider.name == "mistral":
-                        # Mistral : on ne lui laisse que l'outil voulu, et il doit l'utiliser.
+                    if forced:
+                        # On n'envoie que l'outil voulu (demande bien plus légère) et il doit être utilisé.
                         req["tools"] = [t for t in req["tools"] if t["function"]["name"] == forced]
-                        req["tool_choice"] = "any"
-                    elif forced:
-                        req["tool_choice"] = {"type": "function", "function": {"name": forced}}
+                        req["tool_choice"] = "any" if provider.name == "mistral" else \
+                            {"type": "function", "function": {"name": forced}}
+                if shrink:
+                    req["max_tokens"] = SMALL_TOKENS
                 if "qwen3" in provider.model and "groq.com" in provider.base_url:
                     req["reasoning_format"] = "hidden"  # pas de « réflexions » affichées dans la réponse
                 if provider.reasoning:
@@ -229,6 +234,10 @@ class Agent:
                     last_error = e
                     if state["streamed"] or state["calls"]:
                         break  # coupure en plein milieu : on ne mélange pas deux cerveaux
+                    if isinstance(e, TooLargeError) and not shrink:
+                        shrink = True  # même cerveau, demande plus légère
+                        continue
+                    shrink = False
                     providers = providers[1:]  # limite atteinte : on passe au cerveau suivant
                     if providers:
                         yield {"type": "tool", "name": "switch",
