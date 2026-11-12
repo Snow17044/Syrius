@@ -161,6 +161,14 @@ def providers_from_config(cfg) -> list[Provider]:
             out.append(Provider("groq" if i == 0 else f"groq{i + 1}", groq_label(model),
                                 "https://api.groq.com/openai/v1", model, cfg.groq_api_key,
                                 reasoning=model.startswith("openai/gpt-oss")))
+    if cfg.github_models_token:
+        for i, model in enumerate(cfg.github_models):
+            out.append(Provider("github" if i == 0 else f"github{i + 1}", f"GitHub · {model.split('/')[-1][:24]}",
+                                "https://models.github.ai/inference", model, cfg.github_models_token,
+                                reasoning=False))
+    if cfg.openrouter_api_key:
+        out.append(Provider("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", cfg.openrouter_model,
+                            cfg.openrouter_api_key, reasoning=False))
     if cfg.gemini_api_key:
         out.append(Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
                             cfg.gemini_model, cfg.gemini_api_key))

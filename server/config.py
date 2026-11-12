@@ -51,6 +51,14 @@ class Config:
     mistral_api_key: str = field(default_factory=lambda: _env("MISTRAL_API_KEY") or _env("MISTRAL_KEY")
                                  or _env("mistral") or _env("MISTRAL"))
     mistral_model: str = field(default_factory=lambda: _env("SYRIUS_MISTRAL_MODEL", "mistral-small-latest"))
+    # GitHub Models (gratuit avec un compte GitHub, jeton « Models: read ») : relais après Groq.
+    github_models_token: str = field(default_factory=lambda: _env("GITHUB_MODELS_TOKEN") or _env("GITHUB_TOKEN_MODELS"))
+    github_models: list = field(default_factory=lambda: [
+        m.strip() for m in _env("SYRIUS_GITHUB_MODELS", "openai/gpt-4.1-mini,meta/Llama-3.3-70B-Instruct").split(",")
+        if m.strip()][:4])
+    # OpenRouter (modèles « :free », ~50 messages/jour) : dernier relais en ligne.
+    openrouter_api_key: str = field(default_factory=lambda: _env("OPENROUTER_API_KEY") or _env("openrouter"))
+    openrouter_model: str = field(default_factory=lambda: _env("SYRIUS_OPENROUTER_MODEL", "openrouter/free"))
     gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY") or _env("gemini") or _env("GEMINI"))
     gemini_model: str = field(default_factory=lambda: _env("SYRIUS_GEMINI_MODEL", "gemini-flash-latest"))
     ollama_url: str = field(default_factory=lambda: _env("SYRIUS_OLLAMA_URL"))

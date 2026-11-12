@@ -83,3 +83,18 @@ def test_limite_atteinte_bascule_sur_le_modele_suivant(cfg, make_db):
     r = c.post(f"/api/conversations/{cid}/messages", json={"text": "salut"}, headers=H)
     assert "Je passe sur" in r.text and "secours." in r.text
     assert [q["_provider"] for q in fake.requests] == ["groq", "groq2"]
+
+
+def test_relais_github_et_openrouter(monkeypatch):
+    for k in ("MISTRAL_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "g")
+    monkeypatch.setenv("GITHUB_MODELS_TOKEN", "gh")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or")
+    ps = providers_from_config(Config())
+    names = [p.name for p in ps]
+    assert names[0] == "groq" and names[-3:] == ["github", "github2", "openrouter"]
+    gh = ps[-3]
+    assert gh.base_url == "https://models.github.ai/inference" and gh.model == "openai/gpt-4.1-mini" and gh.api_key == "gh"
+    assert ps[-1].base_url == "https://openrouter.ai/api/v1" and ps[-1].model == "openrouter/free"
+    assert not any(p.reasoning for p in ps[-3:])
