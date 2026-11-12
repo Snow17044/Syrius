@@ -24,6 +24,8 @@ STATIC_FILES = {
     "app.js": "text/javascript", "style.css": "text/css", "sw.js": "text/javascript",
     "manifest.webmanifest": "application/manifest+json", "markdown.js": "text/javascript",
     "leaflet.js": "text/javascript", "leaflet.css": "text/css", "hud.js": "text/javascript",
+    "maplibre-gl.js": "text/javascript", "maplibre-gl-worker.js": "text/javascript",
+    "maplibre-gl.css": "text/css",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -186,6 +188,25 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             raise HTTPException(404) from None
         return Response(png, media_type="image/png",
                         headers={"Cache-Control": "private, max-age=604800"})
+
+    @app.get("/map3d/t/{z}/{x}/{y}.pbf", dependencies=[Depends(require_auth)])
+    def tile_3d(z: int, x: int, y: int):
+        """Carte 3D : données vectorielles relayées (voir tools/tiles.py)."""
+        try:
+            data = tiles.fetch_vector(z, x, y)
+        except tiles.TileError:
+            raise HTTPException(404) from None
+        return Response(data, media_type="application/x-protobuf",
+                        headers={"Cache-Control": "private, max-age=604800"})
+
+    @app.get("/map3d/fonts/{fontstack}/{rng}.pbf", dependencies=[Depends(require_auth)])
+    def glyphs_3d(fontstack: str, rng: str):
+        try:
+            data = tiles.fetch_glyphs(fontstack, rng)
+        except tiles.TileError:
+            raise HTTPException(404) from None
+        return Response(data, media_type="application/x-protobuf",
+                        headers={"Cache-Control": "private, max-age=2592000"})
 
     @app.get("/health")
     async def health():

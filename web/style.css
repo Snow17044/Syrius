@@ -197,6 +197,11 @@ details input { margin-top: 8px; }
 .hud-meta { font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud-go { flex: none; border: 1px solid var(--accent); background: rgba(56, 217, 255, .12); color: var(--accent);
   border-radius: 999px; padding: 6px 12px; font-size: .85rem; cursor: pointer; }
+.hud-pin3d { width: 30px; height: 30px; cursor: pointer; }
+.hud-me3d { width: 18px; height: 18px; }
+#hud-map .maplibregl-ctrl-attrib { background: rgba(5, 10, 20, .7); color: var(--muted); font-size: 9px; }
+#hud-map .maplibregl-ctrl-attrib a { color: var(--muted); }
+#hud-map .maplibregl-ctrl-attrib-button { filter: invert(1); }
 .leaflet-container .leaflet-control-attribution { background: rgba(5, 10, 20, .7); color: var(--muted); font-size: 9px; }
 .leaflet-container .leaflet-control-attribution a { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .hud-scan::after, .hud-me, #hud { animation: none; } }
