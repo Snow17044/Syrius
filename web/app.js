@@ -617,6 +617,43 @@ window.syriusBriefing = async () => {
   if (reply && !state.settings.voice_reply) speak(reply);
 };
 
+// ------------------------------------------------------------------ « Hey Syrius »
+let wakeTimer = null;
+function refreshWakeBox() {
+  const ok = Native && appFeatures().includes("wake");
+  $("#wake-box").classList.toggle("hidden", !ok);
+  if (!ok) return;
+  let w = {};
+  try { w = JSON.parse(Native.wakeInfo()); } catch (_) { /* */ }
+  const busy = !!(w.downloading || w.installing);
+  $("#wake-download").classList.toggle("hidden", !!w.ready || busy);
+  $("#wake-progress").classList.toggle("hidden", !w.downloading);
+  if (w.downloading) {
+    $("#wake-progress progress").value = w.progress || 0;
+    $("#wake-progress span").textContent = `${w.progress || 0} %`;
+  }
+  $("#wake-on").disabled = !w.ready;
+  $("#wake-on").checked = !!w.enabled;
+  $("#wake-status").textContent = w.error ? "⚠ " + w.error
+    : w.installing ? "🔒 Vérification et installation…"
+    : w.downloading ? "Téléchargement…"
+    : !w.ready ? "Installe d'abord la reconnaissance vocale."
+    : w.enabled ? "✅ Syrius écoute « Hey Syrius »." : "Prêt. Active l'écoute ci-dessus.";
+  clearTimeout(wakeTimer);
+  if (busy && $("#settings").open) wakeTimer = setTimeout(refreshWakeBox, 1500);
+}
+$("#wake-download").addEventListener("click", () => {
+  const r = Native.wakeDownload();
+  if (r !== "ok") alert(r);
+  setTimeout(refreshWakeBox, 500);
+});
+$("#wake-on").addEventListener("change", (e) => {
+  const r = Native.wakeEnable(e.target.checked);
+  if (r !== "ok") { $("#wake-status").textContent = "⚠ " + r; e.target.checked = false; return; }
+  setTimeout(refreshWakeBox, 300);
+});
+$("#wake-battery").addEventListener("click", () => Native.batterySettings());
+
 function refreshBriefingBox() {
   const ok = Native && appFeatures().includes("briefing");
   $("#briefing-box").classList.toggle("hidden", !ok);
@@ -732,6 +769,7 @@ $("#open-settings").addEventListener("click", async () => {
   closeDrawer();
   refreshLocalBox();
   refreshBriefingBox();
+  refreshWakeBox();
   $("#settings").showModal();
 });
 

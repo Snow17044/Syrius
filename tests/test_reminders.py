@@ -76,3 +76,16 @@ def test_android_rappels_securises():
     assert 'id.matches("[0-9a-f]{6,20}")' in java and "FLAG_IMMUTABLE" in java
     manifest = open("android/app/src/main/AndroidManifest.xml", encoding="utf-8").read()
     assert '<receiver android:name=".AlarmReceiver" android:exported="false" />' in manifest
+
+
+def test_hey_syrius_securise():
+    java = open("android/app/src/main/java/fr/syrius/app/WakeModel.java", encoding="utf-8").read()
+    assert 'SHA256 = "cabf6180e177eb9b3a9a9d43a437bd5e549f3a7d09525e5d69a3fed787be12ad"' in java
+    assert "getCanonicalPath().startsWith(base)" in java and "MAX_UNZIPPED" in java  # zip protégé
+    svc = open("android/app/src/main/java/fr/syrius/app/WakeService.java", encoding="utf-8").read()
+    assert 'url.startsWith("https://")' in svc and '"X-Syrius", "1"' in svc
+    manifest = open("android/app/src/main/AndroidManifest.xml", encoding="utf-8").read()
+    assert 'android:name=".WakeService" android:exported="false"' in manifest
+    main = open("android/app/src/main/java/fr/syrius/app/MainActivity.java", encoding="utf-8").read()
+    for fn in ("wakeInfo", "wakeDownload", "wakeEnable", "wakeDelete", "batterySettings"):
+        assert "trusted()" in main.split(fn + "(")[1][:300], fn

@@ -195,6 +195,18 @@
       <label class="switch"><input id="s-location" type="checkbox"><span>Partager ma position approximative (cartes « près de moi »)</span></label>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
 
+      <div id="wake-box" class="hidden">
+        <h4>🎙 « Hey Syrius » (même app fermée)</h4>
+        <p class="muted small">Dis « Hey Syrius » : un bip, tu parles, il répond à voix haute, même écran éteint.
+          Le mot-clé est reconnu sur ton téléphone, rien n'est envoyé avant. Consomme un peu plus de batterie ;
+          une notification « Syrius vous écoute » reste affichée.</p>
+        <button type="button" id="wake-download" class="ghost wide">⬇ Installer la reconnaissance vocale (42 Mo)</button>
+        <div id="wake-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+        <label class="switch"><input id="wake-on" type="checkbox"><span>Écouter « Hey Syrius » en permanence</span></label>
+        <button type="button" id="wake-battery" class="ghost wide">🔋 Ne pas couper Syrius (réglage batterie)</button>
+        <p id="wake-status" class="small"></p>
+      </div>
+
       <div id="briefing-box" class="hidden">
         <h4>☀️ Briefing du matin</h4>
         <p class="muted small">Chaque jour, une notification : touche-la et Syrius te lit la météo, tes rappels et les actus.</p>
