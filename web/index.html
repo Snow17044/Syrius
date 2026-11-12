@@ -11,7 +11,10 @@
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/static/leaflet.css">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/leaflet.js" defer></script>
+  <script src="/static/hud.js" defer></script>
   <script src="/static/markdown.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
@@ -82,6 +85,23 @@
     </main>
   </section>
 
+  <!-- Panneau holographique (carte) -->
+  <section id="hud" class="hidden" aria-label="Carte">
+    <div class="hud-frame">
+      <header class="hud-head">
+        <div><span class="hud-tag">◈ SYRIUS · CARTOGRAPHIE</span><div id="hud-query" class="hud-query"></div></div>
+        <button id="hud-close" class="icon-btn" aria-label="Fermer la carte">✕</button>
+      </header>
+      <div class="hud-map-wrap">
+        <div id="hud-map"></div>
+        <div class="hud-scan" aria-hidden="true"></div>
+        <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+        <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+      </div>
+      <ol id="hud-list"></ol>
+    </div>
+  </section>
+
   <!-- Réglages -->
   <dialog id="settings">
     <form method="dialog" class="sheet" id="settings-form">
@@ -103,6 +123,7 @@
       <p class="muted small">Si sa limite gratuite du jour est atteinte, Syrius passe tout seul sur un autre.</p>
       <label class="switch"><input id="s-web" type="checkbox"><span>Recherche sur le web</span></label>
       <p class="muted small" id="s-web-note"></p>
+      <label class="switch"><input id="s-location" type="checkbox"><span>Partager ma position approximative (cartes « près de moi »)</span></label>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
 
       <h4>Emails</h4>

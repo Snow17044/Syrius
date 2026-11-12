@@ -1,9 +1,10 @@
 // Service worker : démarre l'app instantanément (interface en cache).
 // Les données (/api) ne sont JAMAIS mises en cache : elles restent sur ton serveur.
 "use strict";
-const VERSION = "syrius-v2";
+const VERSION = "syrius-v3";
 const SHELL = ["/", "/static/style.css", "/static/app.js", "/static/markdown.js",
-  "/static/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png"];
+  "/static/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png",
+  "/static/leaflet.js", "/static/leaflet.css", "/static/hud.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
