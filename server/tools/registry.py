@@ -34,19 +34,24 @@ BASE_TOOLS = [
     _tool("forget", "Supprime un souvenir par son numéro (voir la liste des souvenirs).",
           {"memory_id": {"type": "integer"}}, ["memory_id"]),
     _tool("show_diagram",
-          "Dessine un SCHÉMA 3D holographique dans l'app pour visualiser une idée, un projet, un plan, "
-          "un concept, des étapes ou une organisation. Utilise-le dès qu'on demande un schéma, une carte "
-          "mentale, un plan visuel, ou d'organiser / expliquer une idée visuellement.",
+          "Dessine un SCHÉMA 3D holographique dans l'app : un PLAN D'ACTION CONCRET pour une idée, un projet, "
+          "un objectif, un concept ou une organisation. Utilise-le dès qu'on demande un schéma, une carte "
+          "mentale, un plan, des étapes, ou d'organiser / visualiser une idée. Contenu attendu : idée centrale "
+          "(kind objectif), puis 3 à 6 PHASES dans l'ordre chronologique (kind phase), chacune avec 2 à 4 "
+          "ÉTAPES concrètes (kind etape/action/outil/budget/delai/risque) commençant par un verbe, et pour "
+          "CHAQUE étape une note pratique : comment faire, avec quoi, combien ça coûte, combien de temps. "
+          "La numérotation (1, 1.1, 1.2…) est ajoutée automatiquement selon l'ordre des idées.",
           {"title": {"type": "string", "description": "Titre court du schéma"},
            "style": {"type": "string", "enum": list(diagram.STYLES),
-                     "description": "carte = carte mentale autour d'une idée centrale ; etapes = processus "
-                                    "dans l'ordre ; arbre = hiérarchie"},
-           "nodes": {"type": "array", "description": "Les idées (2 à 30). La première est l'idée centrale.",
+                     "description": "carte = plan en phases autour de l'objectif (par défaut) ; etapes = suite "
+                                    "linéaire ; arbre = hiérarchie / organisation"},
+           "nodes": {"type": "array", "description": "Les idées (2 à 30), dans l'ordre. La première est l'objectif.",
                      "items": {"type": "object", "properties": {
-                         "id": {"type": "string", "description": "Identifiant court unique, ex. n1"},
-                         "label": {"type": "string", "description": "Texte court (2 à 5 mots)"},
-                         "parent": {"type": "string", "description": "id de l'idée parente (vide pour la centrale)"},
-                         "note": {"type": "string", "description": "Détail facultatif, une phrase"}},
+                         "id": {"type": "string", "description": "Identifiant court unique, ex. p1, p1e2"},
+                         "label": {"type": "string", "description": "Texte court et concret (2 à 6 mots)"},
+                         "parent": {"type": "string", "description": "id de l'idée parente (vide pour l'objectif)"},
+                         "kind": {"type": "string", "enum": list(diagram.KINDS)},
+                         "note": {"type": "string", "description": "Détail concret : comment, outil, coût, durée"}},
                          "required": ["id", "label"]}},
            "links": {"type": "array", "description": "Liens supplémentaires facultatifs entre idées",
                      "items": {"type": "object", "properties": {

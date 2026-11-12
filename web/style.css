@@ -205,11 +205,29 @@ details input { margin-top: 8px; }
 .leaflet-container .leaflet-control-attribution { background: rgba(5, 10, 20, .7); color: var(--muted); font-size: 9px; }
 .leaflet-container .leaflet-control-attribution a { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .hud-scan::after, .hud-me, #hud, #holo { animation: none; } }
-.holo-wrap { height: 58dvh; background: radial-gradient(ellipse at 50% 60%, rgba(20, 70, 110, .55), #030a14 70%); }
+.holo-wrap { height: 48dvh; min-height: 280px; flex: none;
+  background: radial-gradient(ellipse at 50% 70%, rgba(24, 90, 140, .55), rgba(3, 10, 20, .2) 55%, #02060d 100%); }
 #holo-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 .holo-actions { display: flex; gap: 4px; }
-.holo-detail { margin: 10px 4px 0; padding: 10px 12px; border-radius: 12px; font-size: .92rem;
-  border: 1px solid rgba(56, 217, 255, .4); background: rgba(56, 217, 255, .08); }
-.holo-detail strong { color: var(--accent); }
-.holo-hint { margin: 8px 4px 0; font-size: .75rem; color: var(--muted); text-align: center; }
+.holo-detail { margin: 10px 2px 0; padding: 10px 12px; border-radius: 12px; font-size: .9rem; line-height: 1.4;
+  border: 1px solid var(--accent); background: rgba(56, 217, 255, .08); box-shadow: 0 0 18px rgba(56, 217, 255, .15);
+  display: flex; flex-direction: column; gap: 4px; }
+.holo-detail.hidden { display: none; }
+.holo-detail strong { color: #fff; }
+.holo-plan-head .hud-tag { white-space: nowrap; }
+.holo-plan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 4px 6px; }
+.holo-hint { font-size: .72rem; color: var(--muted); }
+.holo-plan { list-style: none; margin: 0; padding: 0 2px 4px; overflow-y: auto; min-height: 0; flex: 1; }
+.holo-step { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; margin-bottom: 6px; border-radius: 12px;
+  cursor: pointer; border: 1px solid rgba(56, 217, 255, .12); border-left: 3px solid var(--c, var(--accent));
+  background: linear-gradient(90deg, rgba(56, 217, 255, .06), transparent); transition: background .2s; }
+.holo-step.phase { background: linear-gradient(90deg, rgba(56, 217, 255, .14), rgba(56, 217, 255, .02)); }
+.holo-step.phase .holo-step-title { font-weight: 700; font-size: .98rem; }
+.holo-step.active { background: rgba(56, 217, 255, .16); border-color: var(--c, var(--accent)); }
+.holo-num { flex: none; min-width: 26px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
+  font-size: .75rem; font-weight: 800; color: #03101c; background: var(--c, var(--accent));
+  box-shadow: 0 0 10px var(--c, var(--accent)); }
+.holo-step-title { font-weight: 600; }
+.holo-step-note { font-size: .82rem; color: var(--muted); margin-top: 2px; line-height: 1.35; }
 .map-card { display: block; width: 100%; text-align: left; color: var(--text); cursor: pointer; font: inherit; }
+#holo .hud-frame { height: 94dvh; max-height: 94dvh; }

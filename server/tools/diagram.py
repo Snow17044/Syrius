@@ -6,11 +6,12 @@ et l'app ne l'affiche que comme du texte (jamais comme du HTML).
 from __future__ import annotations
 
 STYLES = ("carte", "etapes", "arbre")
+KINDS = ("objectif", "phase", "etape", "action", "outil", "budget", "delai", "risque", "idee", "ressource", "personne")
 MAX_NODES = 30
 MAX_LINKS = 40
 MAX_TITLE = 80
 MAX_LABEL = 48
-MAX_NOTE = 220
+MAX_NOTE = 300
 MAX_ID = 24
 
 
@@ -45,16 +46,17 @@ def validate(args) -> dict:
 
     nodes, ids = [], set()
     for n in raw_nodes:
-        if not isinstance(n, dict) or set(n) - {"id", "label", "parent", "note"}:
-            raise DiagramError("chaque idée : id, label, parent (facultatif), note (facultative)")
+        if not isinstance(n, dict) or set(n) - {"id", "label", "parent", "note", "kind"}:
+            raise DiagramError("chaque idée : id, label, parent, note, kind (facultatifs sauf id et label)")
         nid = _text(n.get("id"), MAX_ID, "id")
         if nid in ids:
             raise DiagramError(f"id en double : {nid}")
         ids.add(nid)
         parent = n.get("parent")
         parent = _text(parent, MAX_ID, "parent", required=False) if parent not in (None, "") else ""
-        nodes.append({"id": nid, "label": _text(n.get("label"), MAX_LABEL, "label"),
-                      "parent": parent, "note": _text(n.get("note"), MAX_NOTE, "note", required=False)})
+        kind = n.get("kind") if n.get("kind") in KINDS else ""
+        nodes.append({"id": nid, "label": _text(n.get("label"), MAX_LABEL, "label"), "parent": parent,
+                      "note": _text(n.get("note"), MAX_NOTE, "note", required=False), "kind": kind})
 
     by_id = {n["id"]: n for n in nodes}
     for n in nodes:

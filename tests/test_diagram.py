@@ -88,3 +88,9 @@ def test_dessin_sans_html():
     src = open("web/diagram.js", encoding="utf-8").read()
     for danger in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function"):
         assert danger not in src
+
+
+def test_types_d_idees():
+    d = diagram.validate({"title": "x", "nodes": [{"id": "c", "label": "C", "kind": "objectif"},
+                                                  {"id": "a", "label": "A", "parent": "c", "kind": "<script>"}]})
+    assert d["nodes"][0]["kind"] == "objectif" and d["nodes"][1]["kind"] == ""
