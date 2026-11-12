@@ -321,7 +321,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                 "outlook": cfg.email_mode == "outlook" and bool(cfg.ms_client_id),
                 "google": cfg.email_mode == "google",
                 "google_connected": cfg.email_mode == "google" and gmail.is_connected(db),
-                "web_search_available": bool(cfg.web_search_key)}
+                "web_search_available": True}
 
     # Connexion Outlook / Hotmail depuis l'app (code à entrer sur le site de Microsoft)
     # Connexion Gmail (OAuth Google). La page de Google s'ouvre dans le navigateur du téléphone ;

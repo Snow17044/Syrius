@@ -14,7 +14,9 @@ from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
 
-UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search"}
+UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read"}
+WEB_TOOLS = {"web_search", "web_read"}
+MAX_WEB_CALLS = 8  # pages / recherches web maximum par réponse
 MAX_STEPS = 8          # allers-retours max avec les outils pour une seule question
 MAX_HISTORY = 40       # messages gardés en contexte (au-delà, les plus anciens sont oubliés)
 PERSONA_FILE = Path(__file__).with_name("persona.md")
@@ -164,6 +166,7 @@ class Agent:
         providers = self.llm.ordered(settings.get("brain", ""))
         effort = "high" if settings.get("effort") == "high" else "low"
         untrusted_seen = False
+        web_calls = 0
 
         for _step in range(MAX_STEPS):
             system = build_system(settings, self.db.list_memories())  # les souvenirs peuvent changer
@@ -215,7 +218,12 @@ class Agent:
             if any(c["name"] in UNTRUSTED_TOOLS for c in state["calls"]):
                 untrusted_seen = True  # même si l'action téléphone est demandée dans le même lot
             for call in state["calls"]:
-                result, is_error, ui_event = await self.executor.run(call["name"], call["input"])
+                if call["name"] in WEB_TOOLS:
+                    web_calls += 1
+                if call["name"] in WEB_TOOLS and web_calls > MAX_WEB_CALLS:
+                    result, is_error, ui_event = "Limite de pages web atteinte pour cette réponse.", True, None
+                else:
+                    result, is_error, ui_event = await self.executor.run(call["name"], call["input"])
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:

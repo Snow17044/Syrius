@@ -472,8 +472,7 @@ $("#open-settings").addEventListener("click", async () => {
   $("#s-effort").value = s.effort === "low" ? "low" : "high";
   $("#s-web").checked = !!s.web_search && s.web_search_available;
   $("#s-web").disabled = !s.web_search_available;
-  $("#s-web-note").textContent = s.web_search_available ? ""
-    : "Pour l'activer : clé gratuite Ollama dans le fichier .env (voir README).";
+  $("#s-web-note").textContent = "Internet passe par un pare-feu : pages publiques uniquement, contenu jamais pris pour un ordre.";
   $("#s-voice").checked = !!s.voice_reply;
   await renderBrains(s);
   $("#outlook-box").classList.toggle("hidden", !s.outlook);
