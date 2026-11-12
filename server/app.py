@@ -16,16 +16,21 @@ from .config import Config, config as default_config
 from .db import Database
 from .store_redis import RedisDatabase, RedisError, UpstashREST
 from .tools import gmail
+from .tools.places import round_location
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 STATIC_FILES = {
     "app.js": "text/javascript", "style.css": "text/css", "sw.js": "text/javascript",
     "manifest.webmanifest": "application/manifest+json", "markdown.js": "text/javascript",
+    "leaflet.js": "text/javascript", "leaflet.css": "text/css", "hud.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
-CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+# Seule exception aux ressources externes : les images de la carte (tuiles CARTO / OpenStreetMap).
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
+       "img-src 'self' data: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com "
+       "https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com; "
        "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
        "frame-ancestors 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self'")
 
@@ -38,6 +43,7 @@ class LoginBody(BaseModel):
 
 class MessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+    location: dict | None = None  # position approximative envoyée par l'app (jamais enregistrée)
 
 
 class ConversationPatch(BaseModel):
@@ -132,7 +138,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         h["X-Content-Type-Options"] = "nosniff"
         h["X-Frame-Options"] = "DENY"
         h["Referrer-Policy"] = "no-referrer"
-        h["Permissions-Policy"] = "camera=(), geolocation=(), microphone=(self)"
+        h["Permissions-Policy"] = "camera=(), geolocation=(self), microphone=(self)"
         h["Cross-Origin-Opener-Policy"] = "same-origin"
         if cfg.cookie_secure:
             h["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -270,7 +276,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
         async def stream():
             try:
-                async for event in agent.chat(cid, body.text):
+                loc = round_location(body.location) if db.get_settings().get("location", True) else None
+                async for event in agent.chat(cid, body.text, loc):
                     yield sse(event)
                 if first and conv["title"] == "Nouvelle discussion" and db.get_messages(cid):
                     title = agent.make_title(body.text)

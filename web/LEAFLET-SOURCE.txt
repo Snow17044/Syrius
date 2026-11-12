@@ -1,0 +1,4 @@
+leaflet.js et leaflet.css : bibliothèque de cartes Leaflet 1.9.4 (licence BSD-2-Clause),
+copiées telles quelles depuis le paquet officiel npm « leaflet » (publié le 2023-05-18).
+Intégrité du paquet vérifiée : sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==
+Les empreintes SHA-256 des fichiers sont contrôlées par tests/test_places.py.

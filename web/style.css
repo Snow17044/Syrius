@@ -151,3 +151,53 @@ details input { margin-top: 8px; }
 #memory-list li { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 6px 0; font-size: .9rem; }
 #memory-list li span { flex: 1; }
 #memory-list button { background: none; border: 0; color: var(--danger); width: 36px; height: 36px; cursor: pointer; }
+
+/* ---------- Panneau holographique (carte) ---------- */
+#hud { position: fixed; inset: 0; z-index: 40; background: rgba(2, 6, 14, .82); backdrop-filter: blur(6px);
+  display: flex; align-items: flex-end; justify-content: center; animation: hud-in .35s ease-out; }
+@keyframes hud-in { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: none; } }
+.hud-frame { width: 100%; max-width: 720px; max-height: 92dvh; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, rgba(10, 30, 52, .96), rgba(5, 12, 24, .98));
+  border: 1px solid rgba(56, 217, 255, .55); border-bottom: 0; border-radius: 20px 20px 0 0;
+  box-shadow: 0 0 40px rgba(56, 217, 255, .25), inset 0 0 30px rgba(56, 217, 255, .08);
+  padding: 12px 12px calc(env(safe-area-inset-bottom) + 10px); }
+@media (min-width: 640px) { #hud { align-items: center; } .hud-frame { border-radius: 20px; border-bottom: 1px solid rgba(56, 217, 255, .55); } }
+.hud-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.hud-tag { font-size: .72rem; letter-spacing: .25em; color: var(--accent); text-shadow: var(--glow); }
+.hud-query { font-weight: 600; margin-top: 2px; }
+.hud-map-wrap { position: relative; height: 46dvh; min-height: 240px; border-radius: 14px; overflow: hidden;
+  border: 1px solid rgba(56, 217, 255, .35); }
+#hud-map { position: absolute; inset: 0; background: #050a14; }
+#hud-map .leaflet-tile-pane { filter: hue-rotate(185deg) saturate(1.6) brightness(1.15); }
+.hud-scan { position: absolute; inset: 0; pointer-events: none; z-index: 500;
+  background: repeating-linear-gradient(0deg, rgba(56, 217, 255, .05) 0 1px, transparent 1px 4px); }
+.hud-scan::after { content: ""; position: absolute; left: 0; right: 0; height: 30%;
+  background: linear-gradient(180deg, transparent, rgba(56, 217, 255, .16), transparent);
+  animation: hud-sweep 3.5s linear infinite; }
+@keyframes hud-sweep { from { top: -30%; } to { top: 100%; } }
+.hud-corner { position: absolute; width: 18px; height: 18px; border: 2px solid var(--accent); z-index: 501;
+  filter: drop-shadow(0 0 6px var(--accent)); }
+.hud-corner.tl { top: 6px; left: 6px; border-right: 0; border-bottom: 0; }
+.hud-corner.tr { top: 6px; right: 6px; border-left: 0; border-bottom: 0; }
+.hud-corner.bl { bottom: 6px; left: 6px; border-right: 0; border-top: 0; }
+.hud-corner.br { bottom: 6px; right: 6px; border-left: 0; border-top: 0; }
+.hud-pin { display: grid !important; place-items: center; border-radius: 50%; font-weight: 700; color: #021019;
+  background: radial-gradient(circle, #bff4ff 0 35%, var(--accent) 70%); box-shadow: 0 0 14px var(--accent), 0 0 4px #fff; }
+.hud-me { border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255, 255, 255, .3), 0 0 16px #fff;
+  animation: hud-pulse 1.6s ease-out infinite; }
+@keyframes hud-pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.6), 0 0 16px #fff; } 100% { box-shadow: 0 0 0 14px rgba(255,255,255,0), 0 0 16px #fff; } }
+#hud-list { list-style: none; margin: 10px 0 0; padding: 0; overflow-y: auto; }
+.hud-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; cursor: pointer;
+  border: 1px solid transparent; }
+.hud-item.active, .hud-item:active { border-color: rgba(56, 217, 255, .5); background: rgba(56, 217, 255, .08); }
+.hud-num { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: .85rem; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); box-shadow: var(--glow); }
+.hud-info { flex: 1; min-width: 0; }
+.hud-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-meta { font-size: .8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-go { flex: none; border: 1px solid var(--accent); background: rgba(56, 217, 255, .12); color: var(--accent);
+  border-radius: 999px; padding: 6px 12px; font-size: .85rem; cursor: pointer; }
+.leaflet-container .leaflet-control-attribution { background: rgba(5, 10, 20, .7); color: var(--muted); font-size: 9px; }
+.leaflet-container .leaflet-control-attribution a { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .hud-scan::after, .hud-me, #hud { animation: none; } }
+.map-card { display: block; width: 100%; text-align: left; color: var(--text); cursor: pointer; font: inherit; }

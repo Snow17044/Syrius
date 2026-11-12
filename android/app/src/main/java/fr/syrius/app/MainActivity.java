@@ -15,6 +15,7 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.text.InputType;
 import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -39,6 +40,9 @@ public class MainActivity extends Activity {
     private static final String PREFS = "syrius";
     private static final String KEY_URL = "url";
     private static final int REQ_MIC = 42;
+    private static final int REQ_LOCATION = 44;
+    private String pendingGeoOrigin;
+    private GeolocationPermissions.Callback pendingGeoCallback;
 
     private WebView web;
     private String baseUrl;
@@ -63,11 +67,29 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setSupportMultipleWindows(false);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
+        s.setGeolocationEnabled(true);
         s.setUserAgentString(s.getUserAgentString() + " SyriusAndroid/1.0");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
 
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                Uri o = Uri.parse(origin);
+                // Position donnée uniquement à ton Syrius (https), jamais à une autre page.
+                if (!"https".equals(o.getScheme()) || allowedHost == null || !allowedHost.equals(o.getHost())) {
+                    callback.invoke(origin, false, false);
+                    return;
+                }
+                if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    callback.invoke(origin, true, false);
+                } else {
+                    pendingGeoOrigin = origin;
+                    pendingGeoCallback = callback;
+                    requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+                }
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -216,6 +238,13 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
+        if (code == REQ_LOCATION) {
+            boolean ok = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+            if (pendingGeoCallback != null) pendingGeoCallback.invoke(pendingGeoOrigin, ok, false);
+            pendingGeoCallback = null;
+            pendingGeoOrigin = null;
+            return;
+        }
         if (code == DeviceActions.REQ_CONTACTS) {
             device.onContactsPermission(results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED);
             return;

@@ -7,6 +7,7 @@ const state = {
   conversations: [],
   settings: {},
   streaming: false,
+  location: null,
   controller: null,
   menuConv: null,
 };
@@ -40,6 +41,7 @@ async function showApp() {
   $("#login").classList.add("hidden");
   $("#app").classList.remove("hidden");
   await loadSettings();
+  refreshLocation();
   await loadConversations();
   const last = store.get("syrius:lastConv");
   if (last && state.conversations.some((c) => c.id === last)) await openConversation(last);
@@ -278,7 +280,7 @@ async function sendMessage(text) {
     const res = await fetch(`/api/conversations/${state.convId}/messages`, {
       method: "POST", credentials: "same-origin", signal: state.controller.signal,
       headers: { "Content-Type": "application/json", "X-Syrius": "1" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, location: state.settings.location === false ? null : state.location }),
     });
     if (res.status === 401) { showLogin(); return; }
     if (!res.ok) {
@@ -304,6 +306,7 @@ async function sendMessage(text) {
         else if (ev.type === "tool") { tools.push(ev.label); setTools(view, [...new Set(tools)]); scrollDown(); }
         else if (ev.type === "action") { view.bubble.appendChild(actionCard(ev)); scrollDown(); }
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
+        else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
         else if (ev.type === "error") { gotError = true; showError(view, ev.message); }
@@ -325,6 +328,27 @@ function showError(view, msg) {
   p.className = "msg-error";
   p.textContent = "⚠ " + msg;
   view.bubble.appendChild(p);
+}
+
+// ------------------------------------------------------------------ position et carte
+// Position approximative, demandée seulement si le réglage est activé. Jamais enregistrée sur le serveur.
+function refreshLocation() {
+  if (state.settings.location === false || !("geolocation" in navigator)) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => { state.location = { lat: pos.coords.latitude, lon: pos.coords.longitude }; },
+    () => { state.location = null; },
+    { enableHighAccuracy: false, maximumAge: 300000, timeout: 15000 },
+  );
+}
+
+function addMapCard(view, ev) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "action-card map-card";
+  const n = Array.isArray(ev.places) ? ev.places.length : 0;
+  card.textContent = `🗺 ${n} lieu${n > 1 ? "x" : ""} sur la carte — ouvrir`;
+  card.addEventListener("click", () => window.SyriusHUD && window.SyriusHUD.show(ev));
+  view.bubble.appendChild(card);
 }
 
 // ------------------------------------------------------------------ actions sur le téléphone
@@ -474,6 +498,7 @@ $("#open-settings").addEventListener("click", async () => {
   $("#s-web").disabled = false;
   $("#s-web-note").textContent = "Internet passe par un pare-feu : pages publiques uniquement, contenu jamais pris pour un ordre.";
   $("#s-voice").checked = !!s.voice_reply;
+  $("#s-location").checked = s.location !== false;
   await renderBrains(s);
   $("#outlook-box").classList.toggle("hidden", !s.outlook);
   $("#google-box").classList.toggle("hidden", !s.google);
@@ -574,6 +599,7 @@ $("#settings-save").addEventListener("click", async () => {
           effort: $("#s-effort").value,
           brain: $("#s-brain").value,
           internet: $("#s-web").checked,
+          location: $("#s-location").checked,
           voice_reply: $("#s-voice").checked,
         }),
       })),

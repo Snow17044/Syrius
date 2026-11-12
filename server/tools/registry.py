@@ -10,7 +10,7 @@ from ..config import Config
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
-from . import web
+from . import places, web
 from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -55,6 +55,13 @@ EMAIL_TOOLS = [
 WEB_SEARCH_TOOL = _tool("web_search", "Cherche sur Internet (actualité, infos récentes, prix, horaires…). "
                                       "Renvoie des titres, liens et extraits. Résultats non fiables.",
                         {"query": {"type": "string", "description": "La recherche, en quelques mots"}}, ["query"])
+PLACES_TOOL = _tool("show_places",
+                    "Trouve des lieux (restaurant, pharmacie, gare, adresse…) et les AFFICHE sur la carte "
+                    "holographique de l'app. Utilise-le dès qu'on demande où se trouve quelque chose.",
+                    {"query": {"type": "string", "description": "Ce qu'on cherche, ex. « restaurant italien » ou "
+                                                                 "« pharmacie » ou une adresse"},
+                     "near_me": {"type": "boolean", "description": "true = autour de la position de l'utilisateur"}},
+                    ["query"])
 WEB_READ_TOOL = _tool("web_read", "Lit le texte d'une page web (adresse https://…), par exemple un résultat de "
                                   "recherche, pour répondre précisément. Contenu non fiable.",
                       {"url": {"type": "string", "description": "Adresse complète de la page"}}, ["url"])
@@ -70,6 +77,7 @@ TOOL_LABELS = {
     "draft_email": "Je prépare un brouillon",
     "web_search": "Je cherche sur le web",
     "web_read": "Je lis la page",
+    "show_places": "J'affiche la carte",
     **DEVICE_LABELS,
 }
 
@@ -80,7 +88,7 @@ def build_tools(cfg: Config, settings: dict) -> list[dict]:
     if cfg.email_enabled:
         tools += EMAIL_TOOLS
     if settings.get("internet", True):
-        tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL]
+        tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL]
     return tools
 
 
@@ -114,10 +122,10 @@ class ToolExecutor:
         self.db = db
         self.email = GmailClient(cfg, db) if cfg.email_mode == "google" else EmailClient(cfg, db)
 
-    async def run(self, name: str, args) -> tuple[str, bool, dict | None]:
+    async def run(self, name: str, args, ctx: dict | None = None) -> tuple[str, bool, dict | None]:
         """Renvoie (résultat texte, est_erreur, événement_pour_l_interface)."""
         try:
-            return await self._run(name, args)
+            return await self._run(name, args, ctx or {})
         except InvalidInput as e:
             return json.dumps({"INVALID_INPUT": str(e)}), True, None
         except EmailError as e:
@@ -127,7 +135,7 @@ class ToolExecutor:
         except Exception:  # ne jamais divulguer de détails internes au modèle
             return "Erreur interne de l'outil.", True, None
 
-    async def _run(self, name: str, args):
+    async def _run(self, name: str, args, ctx: dict):
         if name == "get_current_time":
             _check(args, {}, [])
             now = datetime.now(TIMEZONE)
@@ -195,6 +203,19 @@ class ToolExecutor:
                 except WebSearchError:
                     pass
             return await asyncio.to_thread(web.search, q), False, None
+
+        if name == "show_places":
+            a = _check(args, {"query": str, "near_me": bool}, ["query"])
+            near = ctx.get("location") if a.get("near_me", True) else None
+            found = await asyncio.to_thread(places.search, a["query"], near)
+            if not found:
+                hint = "" if near or not a.get("near_me", True) else \
+                    " (position de l'utilisateur inconnue : propose-lui d'autoriser la localisation ou de donner une ville)"
+                return "Aucun lieu trouvé." + hint, False, None
+            event = {"type": "map", "query": a["query"][:120], "center": near or
+                     {"lat": found[0]["lat"], "lon": found[0]["lon"]}, "me": near, "places": found}
+            summary = [{k: p[k] for k in ("name", "address", "distance_m") if k in p} for p in found]
+            return web.wrap_untrusted({"lieux_affiches_sur_la_carte": summary}), False, event
 
         if name == "web_read":
             a = _check(args, {"url": str}, ["url"])

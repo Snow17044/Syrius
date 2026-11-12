@@ -14,8 +14,8 @@ from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
 
-UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read"}
-WEB_TOOLS = {"web_search", "web_read"}
+UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read", "show_places"}
+WEB_TOOLS = {"web_search", "web_read", "show_places"}
 MAX_WEB_CALLS = 8  # pages / recherches web maximum par réponse
 MAX_STEPS = 8          # allers-retours max avec les outils pour une seule question
 MAX_HISTORY = 40       # messages gardés en contexte (au-delà, les plus anciens sont oubliés)
@@ -151,7 +151,8 @@ class Agent:
                                    "name": name, "input": args})
             yield {"type": "tool", "name": name, "label": TOOL_LABELS.get(name, name)}
 
-    async def chat(self, conversation_id: str, user_text: str) -> AsyncIterator[dict]:
+    async def chat(self, conversation_id: str, user_text: str,
+                   location: dict | None = None) -> AsyncIterator[dict]:
         if not self.llm.providers:
             yield {"type": "error", "message": "Aucun cerveau configuré : ajoute une clé GROQ_API_KEY "
                                                "ou GEMINI_API_KEY (voir README)."}
@@ -233,7 +234,8 @@ class Agent:
                 if call["name"] in WEB_TOOLS and web_calls > MAX_WEB_CALLS:
                     result, is_error, ui_event = "Limite de pages web atteinte pour cette réponse.", True, None
                 else:
-                    result, is_error, ui_event = await self.executor.run(call["name"], call["input"])
+                    result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
+                                                                         {"location": location})
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:
