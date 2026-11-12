@@ -470,8 +470,8 @@ $("#open-settings").addEventListener("click", async () => {
   $("#s-name").value = s.user_name || "";
   $("#s-custom").value = s.custom_instructions || "";
   $("#s-effort").value = s.effort === "low" ? "low" : "high";
-  $("#s-web").checked = !!s.web_search && s.web_search_available;
-  $("#s-web").disabled = !s.web_search_available;
+  $("#s-web").checked = s.internet !== false;
+  $("#s-web").disabled = false;
   $("#s-web-note").textContent = "Internet passe par un pare-feu : pages publiques uniquement, contenu jamais pris pour un ordre.";
   $("#s-voice").checked = !!s.voice_reply;
   await renderBrains(s);
@@ -573,7 +573,7 @@ $("#settings-save").addEventListener("click", async () => {
           custom_instructions: $("#s-custom").value,
           effort: $("#s-effort").value,
           brain: $("#s-brain").value,
-          web_search: $("#s-web").checked,
+          internet: $("#s-web").checked,
           voice_reply: $("#s-voice").checked,
         }),
       })),

@@ -124,7 +124,7 @@ def test_menu_des_discussions(make_client):
 def test_reglages_appliques(make_client):
     c = make_client([reply("ok")])
     login(c)
-    r = c.put("/api/settings", json={"effort": "high", "brain": "gemini", "web_search": False}, headers=H)
+    r = c.put("/api/settings", json={"effort": "high", "brain": "gemini", "internet": False}, headers=H)
     assert r.status_code == 200
     ask(c, new_conv(c), "test")
     req = c.fake.requests[0]
@@ -318,3 +318,40 @@ def test_erreur_base_message_clair(make_client, monkeypatch):
     monkeypatch.setattr(c.db, "set_secret", boom)
     r = c.post("/api/setup", json={"code": "code-secret-vercel", "password": "nouveau-mdp-123"}, headers=H)
     assert r.status_code == 503 and "lecture seule" in r.json()["detail"]
+
+
+def test_appel_outil_invalide_reessaye_une_fois(make_client):
+    from server.llm import LLMError
+    c = make_client([reply("Voici la réponse.")])
+    calls = {"n": 0}
+    orig = c.fake.stream_chat
+
+    async def flaky(provider, body):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise LLMError("Groq : Tool call validation failed: attempted to call tool 'web_search'")
+        async for chunk in orig(provider, body):
+            yield chunk
+    c.fake.stream_chat = flaky
+    login(c)
+    ev = ask(c, new_conv(c), "Météo ?")
+    assert "".join(e["text"] for e in ev if e["type"] == "text") == "Voici la réponse."
+    assert calls["n"] == 2
+
+
+def test_internet_desactive_le_modele_est_prevenu(make_client):
+    c = make_client([reply("ok")])
+    login(c)
+    c.put("/api/settings", json={"internet": False}, headers=H)
+    ask(c, new_conv(c), "Actu ?")
+    req = c.fake.requests[0]
+    assert not any(t["function"]["name"].startswith("web_") for t in req["tools"])
+    assert "Internet est DÉSACTIVÉ" in req["messages"][0]["content"]
+
+
+def test_ancien_reglage_web_bloque_ignore(make_client):
+    c = make_client([reply("ok")])
+    login(c)
+    c.db.update_settings({"web_search": False})  # ancien réglage, ignoré désormais
+    ask(c, new_conv(c), "Actu ?")
+    assert any(t["function"]["name"] == "web_search" for t in c.fake.requests[0]["tools"])

@@ -59,7 +59,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "user_name": "",
     "effort": "low",          # low = réponse directe (rapide) ; high = réfléchit avant de répondre
     "brain": "",              # cerveau préféré (groq, gemini, local) ; vide = automatique
-    "web_search": True,
+    "internet": True,         # recherche web + lecture de pages (pare-feu)
     "voice_reply": False,     # lecture vocale des réponses (dans le téléphone)
     "custom_instructions": "",
 }

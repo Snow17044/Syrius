@@ -38,6 +38,9 @@ def build_system(settings: dict, memories: list[dict]) -> str:
         parts.append(f"Prénom de l'utilisateur : {settings['user_name']}")
     if settings.get("custom_instructions"):
         parts.append("Préférences données par l'utilisateur dans les réglages :\n" + settings["custom_instructions"])
+    if settings.get("internet", True) is False:
+        parts.append("Internet est DÉSACTIVÉ dans les réglages : tu n'as pas les outils web_search / web_read. "
+                     "Si on te demande une info récente, dis-le et propose d'activer Internet dans les réglages.")
     if memories:
         parts.append("Souvenirs (numéro : contenu) :\n" + "\n".join(f"{m['id']} : {m['content']}" for m in memories))
     else:
@@ -174,6 +177,7 @@ class Agent:
                     "max_tokens": 8000}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None
+            tool_retry = False
             while providers:
                 provider = providers[0]
                 req = dict(body)
@@ -194,6 +198,12 @@ class Agent:
                                "label": f"{e} Je passe sur {providers[0].label}."}
                 except LLMError as e:
                     last_error = e
+                    # Le modèle a appelé un outil inexistant ou mal formé : on réessaie une fois.
+                    if "validation failed" in str(e).lower() and not state["streamed"] and not tool_retry:
+                        tool_retry = True
+                        state = {"text": "", "calls": [], "streamed": False}
+                        last_error = None
+                        continue
                     break
             if last_error is not None:
                 yield {"type": "error", "message": str(last_error)}
