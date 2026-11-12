@@ -223,7 +223,9 @@ def test_dossier_email_non_autorise():
     ("forget", {"memory_id": True}),
     ("draft_email", {"to": "a@b.fr", "subject": "x"}),
     ("outil_inexistant", {}),
-    ("web_search", {"query": "météo"}),  # pas de clé configurée -> refusé
+    ("web_read", {"url": "http://169.254.169.254/latest/meta-data/"}),  # pare-feu
+    ("web_read", {"url": "file:///etc/passwd"}),
+    ("web_search", {"query": "   "}),
 ])
 async def test_entrees_d_outils_invalides_rejetees(cfg, name, args):
     from server.db import Database
