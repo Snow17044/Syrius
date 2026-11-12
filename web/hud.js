@@ -3,8 +3,9 @@
 "use strict";
 
 (function () {
-  const TILES = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-  const ATTRIBUTION = "© OpenStreetMap · © CARTO";
+  // Cartes OpenStreetMap (gratuites, sans clé). Assombries en CSS pour l'effet holographique.
+  const TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const ATTRIBUTION = "© OpenStreetMap";
   let map = null;
   let layer = null;
 
@@ -44,7 +45,9 @@
 
     if (!map) {
       map = L.map("hud-map", { zoomControl: false, attributionControl: true });
-      L.tileLayer(TILES, { subdomains: "abcd", maxZoom: 19, attribution: ATTRIBUTION }).addTo(map);
+      // OpenStreetMap exige l'en-tête « Referer » : on l'envoie (origine seulement) pour les cartes.
+      L.tileLayer(TILES, { maxZoom: 19, attribution: ATTRIBUTION,
+        referrerPolicy: "strict-origin-when-cross-origin" }).addTo(map);
     }
     if (layer) layer.remove();
     layer = L.layerGroup().addTo(map);

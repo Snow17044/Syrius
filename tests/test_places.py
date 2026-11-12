@@ -95,9 +95,9 @@ def test_leaflet_intact():
 
 def test_csp_n_autorise_que_les_images_de_carte(make_client):
     csp = make_client().get("/").headers["content-security-policy"]
-    assert "script-src 'self';" in csp and "basemaps.cartocdn.com" in csp
+    assert "script-src 'self';" in csp and "img-src 'self' data: https://tile.openstreetmap.org;" in csp
     script_part = csp.split("script-src")[1].split(";")[0]
-    assert "cartocdn" not in script_part and "unsafe" not in csp
+    assert "openstreetmap" not in script_part and "unsafe" not in csp
 
 
 def test_hud_n_insere_jamais_de_html():

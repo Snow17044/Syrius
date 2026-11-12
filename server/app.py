@@ -27,10 +27,9 @@ STATIC_FILES = {
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
-# Seule exception aux ressources externes : les images de la carte (tuiles CARTO / OpenStreetMap).
+# Seule exception aux ressources externes : les images de la carte (tuiles OpenStreetMap).
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
-       "img-src 'self' data: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com "
-       "https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com; "
+       "img-src 'self' data: https://tile.openstreetmap.org; "
        "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
        "frame-ancestors 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self'")
 
