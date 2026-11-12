@@ -1,154 +1,73 @@
-// Hologramme de Syrius : plan d'action en 3D dessiné sur un <canvas>, sans bibliothèque externe.
+// Hologramme de Syrius : plan d'action en carrousel 3D, dessiné sur un <canvas> (aucune bibliothèque).
+// L'objectif brille en haut ; chaque phase est un panneau lumineux qui tourne autour.
+// Un seul panneau est face à l'utilisateur : tout reste lisible, même avec beaucoup d'étapes.
 // Le texte est dessiné avec fillText ou inséré avec textContent (jamais comme du HTML).
-// Gestes : glisser = tourner, pincer / molette = zoomer, toucher une idée = voir son détail.
 "use strict";
 
 (function () {
   const COLORS = ["#38d9ff", "#7cf3c8", "#ffd166", "#ff8fab", "#b69cff", "#6fb3ff", "#9ef06c", "#ffa36c"];
   const ICONS = { objectif: "🎯", phase: "◆", etape: "▸", action: "✔", outil: "🛠", budget: "€", delai: "⏱",
     risque: "⚠", idee: "💡", ressource: "📚", personne: "👤" };
-  const INTRO_MS = 1400;
+  const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  const INTRO_MS = 1100;
   let st = null;
   let raf = 0;
-
-  // ------------------------------------------------------------------ vecteurs
-  const v = (x, y, z) => ({ x, y, z });
-  const add = (a, b) => v(a.x + b.x, a.y + b.y, a.z + b.z);
-  const sub = (a, b) => v(a.x - b.x, a.y - b.y, a.z - b.z);
-  const mul = (a, k) => v(a.x * k, a.y * k, a.z * k);
-  const len = (a) => Math.hypot(a.x, a.y, a.z) || 1e-6;
-  const norm = (a) => mul(a, 1 / len(a));
-  const lerp = (a, b, k) => add(a, mul(sub(b, a), k));
-
-  function rng(seed) { // pseudo-aléatoire déterministe : même schéma = même forme
-    let s = seed >>> 0 || 1;
-    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  }
 
   function rgba(hex, a) {
     const n = parseInt(hex.slice(1), 16);
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
   }
 
-  // ------------------------------------------------------------------ graphe + numérotation
-  function buildGraph(d) {
-    const steps = d.style === "etapes";
-    const nodes = d.nodes.map((n) => ({ ...n, children: [], depth: 0, pos: v(0, 0, 0), num: "" }));
+  function rng(seed) {
+    let s = seed >>> 0 || 1;
+    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  }
+
+  // ------------------------------------------------------------------ structure : objectif → panneaux
+  function buildPlan(d) {
+    const nodes = d.nodes.map((n) => ({ ...n, children: [] }));
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const root = nodes.find((n) => !n.parent) || nodes[0];
-    nodes.forEach((n) => { if (n !== root && byId.has(n.parent)) byId.get(n.parent).children.push(n); });
-    const order = [root];
-    for (let i = 0; i < order.length; i++) {
-      order[i].children.forEach((c) => { c.depth = order[i].depth + 1; order.push(c); });
-    }
-    nodes.forEach((n) => { if (!order.includes(n)) { n.depth = 1; root.children.push(n); order.push(n); } });
-
-    root.color = "#e9fbff";
-    if (steps) {
-      nodes.filter((n) => n !== root).forEach((n, i) => { n.num = String(i + 1); n.color = COLORS[i % COLORS.length]; });
-    } else {
-      const number = (n, prefix) => n.children.forEach((c, i) => {
-        c.num = prefix ? `${prefix}.${i + 1}` : String(i + 1);
-        number(c, c.num);
-      });
-      number(root, "");
-      root.children.forEach((c, i) => {
-        const paint = (n) => { n.color = COLORS[i % COLORS.length]; n.children.forEach(paint); };
-        paint(c);
-      });
-    }
-    const edges = [];
-    if (steps) {
-      const seq = [root, ...nodes.filter((n) => n !== root)];
-      seq.slice(1).forEach((n, i) => edges.push({ a: seq[i], b: n, tree: true }));
-    } else {
-      nodes.forEach((n) => { if (n !== root && byId.has(n.parent)) edges.push({ a: byId.get(n.parent), b: n, tree: true }); });
-    }
-    (d.links || []).forEach((l) => {
-      if (byId.has(l.from) && byId.has(l.to)) edges.push({ a: byId.get(l.from), b: byId.get(l.to), label: l.label || "" });
+    nodes.forEach((n) => {
+      if (n === root) return;
+      (byId.has(n.parent) ? byId.get(n.parent) : root).children.push(n);
     });
-    return { nodes, root, edges, order, steps };
+    let panels;
+    if (d.style === "etapes") { // chaque idée = un panneau, dans l'ordre donné
+      panels = nodes.filter((n) => n !== root).map((n, i) => ({ node: n, num: String(i + 1), items: [] }));
+    } else {
+      panels = root.children.map((n, i) => {
+        const items = [];
+        const walk = (x, prefix, depth) => x.children.forEach((c, j) => {
+          const num = `${prefix}.${j + 1}`;
+          items.push({ node: c, num, depth });
+          walk(c, num, depth + 1);
+        });
+        walk(n, String(i + 1), 0);
+        return { node: n, num: String(i + 1), items };
+      });
+    }
+    panels.forEach((p, i) => { p.color = COLORS[i % COLORS.length]; });
+    return { root, panels };
   }
 
-  // ------------------------------------------------------------------ disposition 3D
-  function layout(g, style, seedText) {
-    let seed = 7;
-    for (const ch of seedText) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
-    const rand = rng(seed);
-    if (style === "etapes") { // spirale montante : on suit le chemin du bas vers le haut
-      const seq = [g.root, ...g.nodes.filter((n) => n !== g.root)];
-      seq.forEach((node, i) => {
-        const a = i * 0.95;
-        node.pos = v(Math.cos(a) * 200, (i - (seq.length - 1) / 2) * 60, Math.sin(a) * 200);
-      });
-      return;
+  // ------------------------------------------------------------------ texte
+  function wrap(ctx, text, maxW, maxLines) {
+    const words = String(text).split(" ");
+    const lines = [];
+    let cur = "";
+    for (const wd of words) {
+      const t = cur ? cur + " " + wd : wd;
+      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = wd; } else cur = t;
     }
-    if (style === "arbre") { // étages superposés, chaque étage en cercle
-      const levels = [];
-      g.order.forEach((node) => { (levels[node.depth] = levels[node.depth] || []).push(node); });
-      levels.forEach((lv, d) => {
-        lv.forEach((node, i) => {
-          const a = (i / lv.length) * Math.PI * 2 + d * 0.5;
-          const r = d === 0 ? 0 : 90 + d * 95;
-          node.pos = v(Math.cos(a) * r, 170 - d * 140, Math.sin(a) * r);
-        });
-      });
-      return;
+    if (cur) lines.push(cur);
+    if (lines.length > maxLines) {
+      lines.length = maxLines;
+      let last = lines[maxLines - 1];
+      while (last.length > 1 && ctx.measureText(last + "…").width > maxW) last = last.slice(0, -1);
+      lines[maxLines - 1] = last.trimEnd() + "…";
     }
-    // Plan : les phases tournent autour de l'objectif dans l'ordre (comme une horloge),
-    // leurs étapes s'éloignent vers l'extérieur ; puis relaxation pour éviter les chevauchements.
-    g.root.pos = v(0, 0, 0);
-    const k = g.root.children.length;
-    g.root.children.forEach((c, i) => {
-      const a = (i / Math.max(k, 1)) * Math.PI * 2 - Math.PI / 2;
-      const dir = v(Math.cos(a), (i % 2 ? 0.28 : -0.28), Math.sin(a));
-      c.pos = mul(norm(dir), 235);
-      const spread = c.children.length;
-      c.children.forEach((cc, j) => {
-        const off = (j - (spread - 1) / 2) * 0.55;
-        const side = v(-dir.z, 0, dir.x);
-        cc.pos = add(c.pos, add(mul(norm(dir), 150), add(mul(side, off * 150), v(0, (rand() - 0.5) * 80, 0))));
-        const deep = (n, base) => n.children.forEach((x, m) => {
-          x.pos = add(base, v((rand() - 0.5) * 120, -60 - m * 40, (rand() - 0.5) * 120));
-          deep(x, x.pos);
-        });
-        deep(cc, cc.pos);
-      });
-    });
-    const n = g.nodes.length;
-    for (let it = 0; it < 220; it++) {
-      const f = g.nodes.map(() => v(0, 0, 0));
-      for (let i = 0; i < n; i++) {
-        for (let j = i + 1; j < n; j++) {
-          const dvec = sub(g.nodes[i].pos, g.nodes[j].pos);
-          const dist = Math.max(len(dvec), 25);
-          const push = mul(norm(dvec), 16000 / (dist * dist));
-          f[i] = add(f[i], push);
-          f[j] = sub(f[j], push);
-        }
-      }
-      g.edges.forEach((e) => {
-        if (!e.tree) return;
-        const ia = g.nodes.indexOf(e.a), ib = g.nodes.indexOf(e.b);
-        const dvec = sub(e.b.pos, e.a.pos);
-        const want = e.a === g.root ? 245 : 150;
-        const pull = mul(norm(dvec), (len(dvec) - want) * 0.05);
-        f[ia] = add(f[ia], pull);
-        f[ib] = sub(f[ib], pull);
-      });
-      g.nodes.forEach((node, i) => { if (node !== g.root) node.pos = add(node.pos, mul(f[i], 0.8)); });
-    }
-  }
-
-  // ------------------------------------------------------------------ projection
-  function project(p, cam, w, h) {
-    const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-    const x1 = p.x * cy - p.z * sy, z1 = p.x * sy + p.z * cy;
-    const y2 = p.y * cp - z1 * sp, z2 = p.y * sp + z1 * cp;
-    const dist = 760 / cam.zoom;
-    const s = 700 / (dist + z2);
-    const k = Math.min(w, h) / 430;
-    return { x: w / 2 + x1 * s * k, y: h / 2 - y2 * s * k, s, z: z2 };
+    return lines;
   }
 
   function roundRect(ctx, x, y, w, h, r) {
@@ -161,347 +80,342 @@
     ctx.closePath();
   }
 
-  function wrap(ctx, text, maxW, maxLines) {
-    const words = text.split(" ");
-    const lines = [];
-    let cur = "";
-    words.forEach((wd) => {
-      const t = cur ? cur + " " + wd : wd;
-      if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = wd; } else cur = t;
-    });
-    if (cur) lines.push(cur);
-    if (lines.length > maxLines) {
-      lines.length = maxLines;
-      lines[maxLines - 1] = lines[maxLines - 1].replace(/.{0,2}$/, "…");
+  // Mise en page d'un panneau (calculée une fois par taille d'écran), en coordonnées locales.
+  function layoutPanel(ctx, p, W, maxH) {
+    const pad = 16;
+    const inner = W - pad * 2;
+    const rows = [];
+    let y = pad;
+    ctx.font = `800 13px ${FONT}`;
+    const badgeW = p.num ? ctx.measureText(p.num).width + 18 : 0;
+    ctx.font = `700 17px ${FONT}`;
+    const titleLines = wrap(ctx, p.node.label, inner - badgeW - 30, 2);
+    rows.push({ t: "head", y, titleLines, badgeW });
+    y += titleLines.length * 21 + 8;
+    if (p.node.note) {
+      ctx.font = `13px ${FONT}`;
+      const noteLines = wrap(ctx, p.node.note, inner, p.items.length ? 2 : 6);
+      rows.push({ t: "note", y, lines: noteLines });
+      y += noteLines.length * 17 + 6;
     }
-    return lines;
+    if (p.items.length) {
+      rows.push({ t: "sep", y: y + 4 });
+      y += 14;
+    }
+    let shown = 0;
+    for (const it of p.items) {
+      const indent = it.depth * 14;
+      ctx.font = `800 11px ${FONT}`;
+      const numW = ctx.measureText(it.num).width + 14;
+      ctx.font = `600 14px ${FONT}`;
+      const tl = wrap(ctx, (ICONS[it.node.kind] ? ICONS[it.node.kind] + " " : "") + it.node.label,
+        inner - indent - numW - 8, 2);
+      ctx.font = `12px ${FONT}`;
+      const nl = it.node.note ? wrap(ctx, it.node.note, inner - indent - numW - 8, 2) : [];
+      const h = tl.length * 18 + nl.length * 15 + 10;
+      if (y + h > maxH - pad - 18) break;
+      rows.push({ t: "item", y, it, indent, numW, tl, nl });
+      y += h;
+      shown += 1;
+    }
+    if (shown < p.items.length) {
+      rows.push({ t: "more", y, n: p.items.length - shown });
+      y += 18;
+    }
+    return { rows, H: Math.min(maxH, y + pad) };
   }
 
-  // ------------------------------------------------------------------ dessin
-  function drawScene(t) {
+  function drawPanel(ctx, p, L, W, color, focus) {
+    const H = L.H;
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "rgba(14,44,72,.95)");
+    bg.addColorStop(1, "rgba(4,14,28,.95)");
+    ctx.shadowColor = color; ctx.shadowBlur = focus ? 26 : 8;
+    roundRect(ctx, 0, 0, W, H, 16);
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = focus ? 1.6 : 1;
+    ctx.strokeStyle = rgba(color, focus ? 0.95 : 0.5);
+    ctx.stroke();
+    const top = ctx.createLinearGradient(0, 0, W, 0);
+    top.addColorStop(0, rgba(color, 0)); top.addColorStop(0.5, rgba(color, 1)); top.addColorStop(1, rgba(color, 0));
+    ctx.fillStyle = top; ctx.fillRect(18, 0, W - 36, 2);
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    [[8, 22, 8, 8, 22, 8], [W - 22, 8, W - 8, 8, W - 8, 22], [8, H - 22, 8, H - 8, 22, H - 8],
+      [W - 22, H - 8, W - 8, H - 8, W - 8, H - 22]].forEach((c) => {
+      ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(c[2], c[3]); ctx.lineTo(c[4], c[5]); ctx.stroke();
+    });
+
+    const pad = 16;
+    ctx.textBaseline = "top"; ctx.textAlign = "left";
+    L.rows.forEach((r) => {
+      if (r.t === "head") {
+        let x = pad;
+        if (p.num) {
+          roundRect(ctx, x, r.y + 1, r.badgeW, 21, 10.5);
+          ctx.fillStyle = color; ctx.fill();
+          ctx.fillStyle = "#03101c"; ctx.font = `800 13px ${FONT}`;
+          ctx.fillText(p.num, x + 9, r.y + 5);
+          x += r.badgeW + 8;
+        }
+        ctx.fillStyle = color; ctx.font = `15px ${FONT}`;
+        ctx.fillText(ICONS[p.node.kind] || "◆", x, r.y + 3);
+        x += 22;
+        ctx.fillStyle = "#ffffff"; ctx.font = `700 17px ${FONT}`;
+        r.titleLines.forEach((ln, i) => ctx.fillText(ln, x, r.y + 2 + i * 21));
+      } else if (r.t === "note") {
+        ctx.fillStyle = "#a9c9da"; ctx.font = `13px ${FONT}`;
+        r.lines.forEach((ln, i) => ctx.fillText(ln, pad, r.y + i * 17));
+      } else if (r.t === "sep") {
+        const g = ctx.createLinearGradient(pad, 0, W - pad, 0);
+        g.addColorStop(0, rgba(color, 0.6)); g.addColorStop(1, rgba(color, 0));
+        ctx.fillStyle = g; ctx.fillRect(pad, r.y, W - pad * 2, 1);
+      } else if (r.t === "item") {
+        const x0 = pad + r.indent;
+        roundRect(ctx, x0, r.y + 1, r.numW, 17, 8.5);
+        ctx.fillStyle = rgba(color, 0.18); ctx.fill();
+        ctx.strokeStyle = rgba(color, 0.7); ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = color; ctx.font = `800 11px ${FONT}`;
+        ctx.fillText(r.it.num, x0 + 7, r.y + 4);
+        const tx = x0 + r.numW + 8;
+        ctx.fillStyle = "#e6f8ff"; ctx.font = `600 14px ${FONT}`;
+        r.tl.forEach((ln, i) => ctx.fillText(ln, tx, r.y + i * 18));
+        ctx.fillStyle = "#8fb3c6"; ctx.font = `12px ${FONT}`;
+        r.nl.forEach((ln, i) => ctx.fillText(ln, tx, r.y + r.tl.length * 18 + 1 + i * 15));
+      } else if (r.t === "more") {
+        ctx.fillStyle = rgba(color, 0.9); ctx.font = `600 12px ${FONT}`;
+        ctx.fillText(`+ ${r.n} autre${r.n > 1 ? "s" : ""} étape${r.n > 1 ? "s" : ""} · voir la liste`, pad, r.y);
+      }
+    });
+  }
+
+  // ------------------------------------------------------------------ scène
+  function frame(t) {
     if (!st) return;
-    const { ctx, canvas, g, cam } = st;
+    const { ctx, canvas, plan } = st;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+      st.layouts = null;
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    if (st.spin) cam.yaw += 0.0028;
     const intro = Math.min(1, (t - st.t0) / INTRO_MS);
     const ease = 1 - Math.pow(1 - intro, 3);
-    const pulse = (Math.sin(t / 450) + 1) / 2;
+    const n = plan.panels.length;
 
-    // Étoiles (parallaxe avec la rotation).
+    if (!st.dragging) { // retour doux vers le panneau visé
+      const d = st.target - st.angle;
+      st.angle = Math.abs(d) < 0.001 ? st.target : st.angle + d * 0.14;
+    }
+
+    const PW = Math.min(300, w * 0.74);
+    const coreY = Math.max(36, h * 0.1);
+    const panelTop = coreY + 50;
+    const maxH = h - panelTop - 24;
+    if (!st.layouts) st.layouts = plan.panels.map((p) => layoutPanel(ctx, p, PW, maxH));
+
+    // Étoiles (défilent avec la rotation)
     st.stars.forEach((s) => {
-      const p = project(s.p, cam, w, h);
-      if (p.z < -600) return;
+      const x = ((s.x - st.angle * 60) % w + w) % w;
       ctx.fillStyle = `rgba(160,225,255,${s.a * (0.6 + 0.4 * Math.sin(t / 900 + s.ph))})`;
-      ctx.fillRect(p.x, p.y, s.r, s.r);
+      ctx.fillRect(x, s.y * h, s.r, s.r);
     });
 
-    // Plateau holographique : cercles + rayons.
-    const floorY = st.floorY;
-    ctx.lineWidth = 1;
-    for (let r = 1; r <= 4; r++) {
-      ctx.beginPath();
-      for (let a = 0; a <= 72; a++) {
-        const ang = (a / 72) * Math.PI * 2;
-        const p = project(v(Math.cos(ang) * r * 85 * ease, floorY, Math.sin(ang) * r * 85 * ease), cam, w, h);
-        if (a) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y);
-      }
-      ctx.strokeStyle = `rgba(56,217,255,${0.26 - r * 0.05})`;
-      ctx.stroke();
-    }
-    for (let a = 0; a < 12; a++) {
-      const ang = (a / 12) * Math.PI * 2 + t / 9000;
-      const p1 = project(v(Math.cos(ang) * 40, floorY, Math.sin(ang) * 40), cam, w, h);
-      const p2 = project(v(Math.cos(ang) * 340 * ease, floorY, Math.sin(ang) * 340 * ease), cam, w, h);
-      ctx.strokeStyle = "rgba(56,217,255,.07)";
-      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    // Plateau holographique
+    const floorY = h - 12;
+    for (let i = 3; i >= 1; i--) {
+      ctx.strokeStyle = `rgba(56,217,255,${0.08 * i})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(w / 2, floorY, w * 0.15 * i * ease, 6 * i * ease, 0, 0, Math.PI * 2); ctx.stroke();
     }
 
-    // Positions animées (les idées « jaillissent » de l'objectif à l'ouverture).
-    const pos = new Map(g.nodes.map((n) => {
-      const delay = Math.min(0.5, n.depth * 0.18);
-      const k = Math.max(0, Math.min(1, (intro - delay) / (1 - delay)));
-      const kk = 1 - Math.pow(1 - k, 3);
-      return [n, lerp(g.root.pos, n.pos, kk)];
-    }));
-    const P = new Map(g.nodes.map((n) => [n, project(pos.get(n), cam, w, h)]));
+    // Panneaux sur un anneau 3D
+    const R = PW * 1.05;
+    const step = n > 1 ? Math.min((Math.PI * 2) / n, 0.78) : 0; // écart entre panneaux voisins
+    const items = plan.panels.map((p, i) => {
+      let d = n > 1 ? i - st.angle : 0;
+      d = ((d % n) + n) % n;
+      if (d > n / 2) d -= n; // distance la plus courte sur l'anneau
+      const a = d * step;
+      const x = Math.sin(a) * R, z = Math.cos(a) * R;
+      const s = 900 / (900 + (R - z) * 1.25);
+      return { p, i, a, d, x, z, s, L: st.layouts[i] };
+    }).filter((it) => Math.abs(it.d) < 2.3).sort((A, B) => A.z - B.z);
 
-    // Faisceau du projecteur sous l'objectif.
-    const rp = P.get(g.root);
-    const base = project(v(pos.get(g.root).x, floorY, pos.get(g.root).z), cam, w, h);
-    const beam = ctx.createLinearGradient(base.x, base.y, rp.x, rp.y);
-    beam.addColorStop(0, "rgba(56,217,255,.35)"); beam.addColorStop(1, "rgba(56,217,255,0)");
-    ctx.fillStyle = beam;
-    ctx.beginPath(); ctx.moveTo(base.x - 34, base.y); ctx.lineTo(base.x + 34, base.y);
-    ctx.lineTo(rp.x + 8, rp.y); ctx.lineTo(rp.x - 8, rp.y); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "rgba(56,217,255,.25)";
-    ctx.beginPath(); ctx.ellipse(base.x, base.y, 40 * base.s, 12 * base.s, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Liens courbes + impulsions d'énergie (du parent vers l'enfant).
-    const edges = g.edges.slice().sort((a, b) => (P.get(b.a).z + P.get(b.b).z) - (P.get(a.a).z + P.get(a.b).z));
-    edges.forEach((e, idx) => {
-      const A = pos.get(e.a), B = pos.get(e.b);
-      const mid = add(lerp(A, B, 0.5), v(0, 28, 0));
-      const a = P.get(e.a), b = P.get(e.b), m = project(mid, cam, w, h);
-      const depth = Math.max(0.3, Math.min(1, 1.35 - (a.z + b.z) / 1000));
-      const col = e.tree ? e.b.color : "#ffffff";
-      const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-      grad.addColorStop(0, rgba(e.tree ? e.a.color : col, 0.15 * depth));
-      grad.addColorStop(1, rgba(col, (e.tree ? 0.75 : 0.45) * depth));
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = e.tree ? 2.2 : 1.2;
-      ctx.setLineDash(e.tree ? [] : [6, 6]);
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(m.x, m.y, b.x, b.y); ctx.stroke();
-      ctx.setLineDash([]);
-      if (e.tree && intro >= 1) {
-        const u = ((t / 1700) + idx * 0.37) % 1;
-        const qx = (1 - u) * (1 - u) * a.x + 2 * (1 - u) * u * m.x + u * u * b.x;
-        const qy = (1 - u) * (1 - u) * a.y + 2 * (1 - u) * u * m.y + u * u * b.y;
-        const glow = ctx.createRadialGradient(qx, qy, 0, qx, qy, 7);
-        glow.addColorStop(0, rgba("#ffffff", 0.95 * depth)); glow.addColorStop(1, rgba(col, 0));
-        ctx.fillStyle = glow;
-        ctx.beginPath(); ctx.arc(qx, qy, 7, 0, Math.PI * 2); ctx.fill();
-      }
-      if (e.label) {
-        ctx.font = "600 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = rgba("#cfefff", 0.85 * depth);
-        ctx.fillText(e.label, m.x, m.y - 6);
+    // Faisceaux de l'objectif vers les panneaux
+    items.forEach((it) => {
+      const front = Math.cos(it.a);
+      if (front < -0.2) return;
+      const px = w / 2 + it.x * it.s * ease, py = panelTop + 2;
+      const g = ctx.createLinearGradient(w / 2, coreY, px, py);
+      g.addColorStop(0, "rgba(255,255,255,.5)"); g.addColorStop(1, rgba(it.p.color, 0.08 + 0.4 * Math.max(0, front)));
+      ctx.strokeStyle = g; ctx.lineWidth = 1 + Math.max(0, front) * 1.5;
+      ctx.beginPath(); ctx.moveTo(w / 2, coreY); ctx.lineTo(px, py); ctx.stroke();
+      if (front > 0.9 && intro >= 1) {
+        const u = (t / 1300) % 1;
+        const qx = w / 2 + (px - w / 2) * u, qy = coreY + (py - coreY) * u;
+        const gl = ctx.createRadialGradient(qx, qy, 0, qx, qy, 6);
+        gl.addColorStop(0, "#fff"); gl.addColorStop(1, rgba(it.p.color, 0));
+        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(qx, qy, 6, 0, Math.PI * 2); ctx.fill();
       }
     });
 
-    // Idées : orbe + carte lumineuse (numéro, icône, titre).
     st.hits = [];
-    const nodes = g.nodes.slice().sort((a, b) => P.get(b).z - P.get(a).z);
-    nodes.splice(nodes.indexOf(g.root), 1); nodes.push(g.root); // l'objectif reste lisible
-    if (st.selected) { nodes.splice(nodes.indexOf(st.selected), 1); nodes.push(st.selected); } // au premier plan
-    nodes.forEach((n) => {
-      const p = P.get(n);
-      const isRoot = n === g.root, sel = n === st.selected;
-      const depth = Math.max(0.4, Math.min(1, 1.3 - p.z / 800));
-      const alpha = depth * Math.min(1, intro * 1.6);
-      const r = Math.max(3, (isRoot ? 13 : n.depth === 1 ? 8 : 5) * p.s);
-      ctx.globalAlpha = alpha;
-
-      // Orbe
-      const orb = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.6);
-      orb.addColorStop(0, "#ffffff"); orb.addColorStop(0.25, n.color); orb.addColorStop(1, rgba(n.color, 0));
-      ctx.fillStyle = orb;
-      ctx.beginPath(); ctx.arc(p.x, p.y, r * 2.6, 0, Math.PI * 2); ctx.fill();
-      if (isRoot) { // anneaux tournants autour de l'objectif
-        ctx.strokeStyle = rgba(n.color, 0.7); ctx.lineWidth = 1.5;
-        for (let i = 0; i < 2; i++) {
-          ctx.beginPath();
-          ctx.ellipse(p.x, p.y, r * (3.4 + i * 1.2), r * (1.1 + i * 0.4), t / (1800 + i * 900) * (i ? -1 : 1), 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
-
-      // Étapes : simple pastille numérotée (le texte complet est dans la liste et au toucher).
-      const full = isRoot || sel || (g.steps ? (n.kind === "phase" || g.nodes.length <= 9) : n.depth === 1);
-      if (!full) {
-        const fsb = Math.round(11 * Math.max(0.8, Math.min(1.1, p.s)));
-        ctx.font = `800 ${fsb}px system-ui, sans-serif`;
-        const icon = ICONS[n.kind] || "▸";
-        const label = n.num || "•";
-        const bw = ctx.measureText(label).width + fsb + 18;
-        const bh = fsb + 8;
-        const bx = p.x - bw / 2, by = p.y + r * 1.4 + 3;
-        ctx.shadowColor = n.color; ctx.shadowBlur = 8;
-        roundRect(ctx, bx, by, bw, bh, bh / 2);
-        ctx.fillStyle = "rgba(4,16,30,.9)"; ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = rgba(n.color, 0.8); ctx.lineWidth = 1; ctx.stroke();
-        ctx.textBaseline = "middle"; ctx.textAlign = "left";
-        ctx.fillStyle = n.color;
-        ctx.font = `${fsb}px system-ui, sans-serif`;
-        ctx.fillText(icon, bx + 7, by + bh / 2 + 0.5);
-        ctx.font = `800 ${fsb}px system-ui, sans-serif`;
-        ctx.fillStyle = "#e2f8ff";
-        ctx.fillText(label, bx + 7 + fsb + 3, by + bh / 2 + 0.5);
-        st.hits.push({ n, x0: Math.min(bx, p.x - r * 2) - 6, y0: p.y - r * 2 - 6, x1: Math.max(bx + bw, p.x + r * 2) + 6, y1: by + bh + 6 });
-        ctx.globalAlpha = 1;
-        return;
-      }
-
-      // Carte
-      const scale = Math.max(0.72, Math.min(1.15, p.s * 1.05));
-      const fs = Math.round((isRoot ? 15 : n.depth === 1 ? 13 : 11.5) * scale);
-      ctx.font = `${isRoot || n.depth === 1 ? 700 : 600} ${fs}px system-ui, sans-serif`;
-      const icon = ICONS[n.kind] || (isRoot ? "🎯" : n.depth === 1 ? "◆" : "▸");
-      const head = n.num ? `${n.num}` : "";
-      const maxW = (isRoot ? 170 : n.depth === 1 ? 140 : 124) * scale;
-      const lines = wrap(ctx, n.label, maxW, 2);
-      const textW = Math.max(...lines.map((l) => ctx.measureText(l).width));
-      const badgeW = head ? ctx.measureText(head).width + 12 : 0;
-      const iconW = fs + 6;
-      const padX = 8 * scale, padY = 6 * scale, lh = fs + 3;
-      const cw = padX * 2 + iconW + textW + (badgeW ? badgeW + 6 : 0);
-      const ch = padY * 2 + lines.length * lh - 3;
-      const cx = p.x - cw / 2, cy = isRoot ? p.y - r * 3.6 - ch : p.y + r * 1.6 + 4; // objectif : au-dessus
-
-      ctx.shadowColor = n.color; ctx.shadowBlur = sel ? 22 : isRoot ? 18 : 10;
-      roundRect(ctx, cx, cy, cw, ch, 9 * scale);
-      ctx.fillStyle = isRoot ? "rgba(10,40,64,.92)" : "rgba(4,16,30,.86)";
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.lineWidth = sel ? 2 : 1;
-      ctx.strokeStyle = rgba(n.color, sel ? 1 : 0.55 + 0.25 * pulse * (isRoot ? 1 : 0));
-      ctx.stroke();
-      // liseré lumineux en haut de la carte
-      ctx.fillStyle = rgba(n.color, 0.85);
-      ctx.fillRect(cx + 10 * scale, cy, cw - 20 * scale, 1.5);
-
-      let x = cx + padX;
-      ctx.textBaseline = "middle"; ctx.textAlign = "left";
-      if (badgeW) {
-        roundRect(ctx, x, cy + ch / 2 - (fs + 4) / 2, badgeW, fs + 4, (fs + 4) / 2);
-        ctx.fillStyle = n.color; ctx.fill();
-        ctx.fillStyle = "#03101c";
-        ctx.font = `800 ${Math.round(fs * 0.85)}px system-ui, sans-serif`;
-        ctx.fillText(head, x + 6, cy + ch / 2 + 0.5);
-        x += badgeW + 6;
-      }
-      ctx.font = `${fs}px system-ui, sans-serif`;
-      ctx.fillStyle = n.color;
-      ctx.fillText(icon, x, cy + ch / 2 + 0.5);
-      x += iconW;
-      ctx.font = `${isRoot || n.depth === 1 ? 700 : 600} ${fs}px system-ui, sans-serif`;
-      ctx.fillStyle = isRoot ? "#ffffff" : "#e2f8ff";
-      lines.forEach((ln, i) => ctx.fillText(ln, x, cy + padY + lh / 2 + i * lh - 1));
-
-      st.hits.push({ n, x0: Math.min(cx, p.x - r * 2), y0: p.y - r * 2, x1: Math.max(cx + cw, p.x + r * 2), y1: cy + ch });
-      ctx.globalAlpha = 1;
+    items.forEach((it) => {
+      const front = Math.cos(it.a);
+      if (front < -0.2) return; // panneaux de dos : invisibles
+      const sx = Math.max(0.1, Math.abs(front)); // le panneau pivote sur lui-même
+      const sc = it.s * (0.75 + 0.25 * ease);
+      const cx = w / 2 + it.x * it.s * ease;
+      const bob = Math.sin(t / 1400 + it.i) * 3;
+      const alpha = Math.pow(Math.max(0, front), 4) * Math.min(1, intro * 1.5); // voisins en retrait
+      ctx.save();
+      ctx.globalAlpha = Math.max(0.05, alpha);
+      ctx.translate(cx, panelTop + bob);
+      ctx.scale(sc * sx, sc);
+      ctx.translate(-PW / 2, 0);
+      drawPanel(ctx, it.p, it.L, PW, it.p.color, front > 0.95);
+      ctx.restore();
+      st.hits.push({ i: it.i, x0: cx - (PW / 2) * sc * sx, x1: cx + (PW / 2) * sc * sx, front });
     });
-    raf = requestAnimationFrame(drawScene);
+
+    // Objectif : noyau lumineux + anneaux + titre
+    const pulse = (Math.sin(t / 500) + 1) / 2;
+    const core = ctx.createRadialGradient(w / 2, coreY, 0, w / 2, coreY, 26);
+    core.addColorStop(0, "#ffffff"); core.addColorStop(0.3, "#9ff0ff"); core.addColorStop(1, "rgba(56,217,255,0)");
+    ctx.fillStyle = core; ctx.beginPath(); ctx.arc(w / 2, coreY, 26, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(120,235,255,.75)"; ctx.lineWidth = 1.3;
+    for (let i = 0; i < 2; i++) {
+      ctx.beginPath();
+      ctx.ellipse(w / 2, coreY, 30 + i * 9 + pulse * 2, 9 + i * 3, (t / (1600 + i * 700)) * (i ? -1 : 1), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.font = `700 14px ${FONT}`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const title = wrap(ctx, ICONS.objectif + " " + plan.root.label, w - 110, 1)[0];
+    const tw = ctx.measureText(title).width + 24;
+    ctx.shadowColor = "#38d9ff"; ctx.shadowBlur = 14;
+    roundRect(ctx, w / 2 - tw / 2, coreY + 19, tw, 26, 13);
+    ctx.fillStyle = "rgba(8,34,56,.95)"; ctx.fill();
+    ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(120,235,255,.8)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = "#ffffff"; ctx.fillText(title, w / 2, coreY + 32.5);
+
+    raf = requestAnimationFrame(frame);
   }
 
-  // ------------------------------------------------------------------ détail + liste du plan
-  function select(n, fromList) {
+  // ------------------------------------------------------------------ navigation
+  function index(v) {
+    const n = st.plan.panels.length;
+    return ((Math.round(v) % n) + n) % n;
+  }
+
+  function go(to) {
     if (!st) return;
-    st.selected = n;
-    const box = document.getElementById("holo-detail");
-    box.replaceChildren();
+    st.target = Math.round(to);
+    const idx = index(st.target);
+    const p = st.plan.panels[idx];
+    [...document.getElementById("holo-dots").children].forEach((d, i) => d.classList.toggle("on", i === idx));
+    document.getElementById("holo-count").textContent =
+      `${st.plan.panels.length > 1 ? `${idx + 1} / ${st.plan.panels.length} · ` : ""}${p ? p.node.label : ""}`;
     document.querySelectorAll(".holo-step.active").forEach((x) => x.classList.remove("active"));
-    if (!n) { box.classList.add("hidden"); return; }
-    const t = document.createElement("strong");
-    t.textContent = `${n.num ? n.num + " · " : ""}${ICONS[n.kind] ? ICONS[n.kind] + " " : ""}${n.label}`;
-    box.append(t);
-    if (n.note) {
-      const p = document.createElement("span");
-      p.textContent = n.note;
-      box.append(p);
-    }
-    box.style.borderColor = n.color;
-    box.classList.remove("hidden");
-    const li = st.items.get(n);
-    if (li) {
-      li.classList.add("active");
-      if (!fromList) li.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
+    const li = st.listItems[idx];
+    if (li) li.classList.add("active");
   }
 
-  function buildPlan(g) {
+  function goIndex(i) { // chemin le plus court vers le panneau i
+    const n = st.plan.panels.length;
+    let d = i - index(st.target);
+    if (d > n / 2) d -= n;
+    if (d < -n / 2) d += n;
+    go(st.target + d);
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function buildList(plan) {
     const list = document.getElementById("holo-plan");
     list.replaceChildren();
-    const items = new Map();
-    const dfs = [];
-    const walk = (n) => n.children.forEach((c) => { dfs.push(c); walk(c); });
-    walk(g.root);
-    const seq = g.steps ? g.nodes.filter((n) => n !== g.root) : dfs;
-    seq.forEach((n) => {
-      const li = document.createElement("li");
-      li.className = "holo-step" + (n.depth === 1 && !g.steps ? " phase" : "");
-      li.style.setProperty("--c", n.color);
-      li.style.marginLeft = g.steps ? "0" : `${Math.max(0, n.depth - 1) * 16}px`;
-      const num = document.createElement("span");
-      num.className = "holo-num";
-      num.textContent = n.num;
-      const body = document.createElement("div");
-      const title = document.createElement("div");
-      title.className = "holo-step-title";
-      title.textContent = (ICONS[n.kind] ? ICONS[n.kind] + " " : "") + n.label;
-      body.append(title);
-      if (n.note) {
-        const note = document.createElement("div");
-        note.className = "holo-step-note";
-        note.textContent = n.note;
-        body.append(note);
+    const out = plan.panels.map((p, i) => {
+      const group = el("li", "holo-step phase");
+      group.style.setProperty("--c", p.color);
+      const head = el("div", "holo-step-row");
+      const body = el("div");
+      body.append(el("div", "holo-step-title", p.node.label));
+      if (p.node.note) body.append(el("div", "holo-step-note", p.node.note));
+      head.append(el("span", "holo-num", p.num || "•"), body);
+      group.append(head);
+      if (p.items.length) {
+        const ul = el("ul", "holo-sub");
+        p.items.forEach((it) => {
+          const li = el("li");
+          li.style.paddingLeft = `${it.depth * 14}px`;
+          const b = el("div");
+          b.append(el("div", "holo-sub-title", (ICONS[it.node.kind] ? ICONS[it.node.kind] + " " : "") + it.node.label));
+          if (it.node.note) b.append(el("div", "holo-step-note", it.node.note));
+          li.append(el("span", "holo-subnum", it.num), b);
+          ul.append(li);
+        });
+        group.append(ul);
       }
-      li.append(num, body);
-      li.addEventListener("click", () => {
-        st.spin = false;
-        select(n, true);
-        // Tourne la caméra vers l'idée choisie.
-        st.turnTo = Math.atan2(n.pos.x, n.pos.z) + Math.PI;
+      group.addEventListener("click", () => {
+        goIndex(i);
+        document.getElementById("holo-canvas").scrollIntoView({ block: "nearest", behavior: "smooth" });
       });
-      items.set(n, li);
-      list.appendChild(li);
+      list.append(group);
+      return group;
     });
-    return items;
+    document.getElementById("holo-dots").replaceChildren(...plan.panels.map((p, i) => {
+      const d = el("button", "holo-dot");
+      d.type = "button";
+      d.setAttribute("aria-label", `Phase ${i + 1}`);
+      d.style.setProperty("--c", p.color);
+      d.addEventListener("click", () => goIndex(i));
+      return d;
+    }));
+    return out;
   }
 
-  // ------------------------------------------------------------------ gestes
   function bindGestures(canvas) {
-    const pts = new Map();
-    let moved = false, pinch0 = 0, zoom0 = 1;
+    let startX = 0, startAngle = 0, moved = false, id = null;
     canvas.addEventListener("pointerdown", (e) => {
       if (!st) return;
-      canvas.setPointerCapture(e.pointerId);
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      moved = false; st.spin = false; st.turnTo = null;
-      if (pts.size === 2) {
-        const [a, b] = [...pts.values()];
-        pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = st.cam.zoom;
-      }
+      id = e.pointerId;
+      canvas.setPointerCapture(id);
+      startX = e.clientX; startAngle = st.angle; moved = false; st.dragging = true;
     });
     canvas.addEventListener("pointermove", (e) => {
-      const prev = pts.get(e.pointerId);
-      if (!prev || !st) return;
-      const cur = { x: e.clientX, y: e.clientY };
-      pts.set(e.pointerId, cur);
-      if (pts.size === 2) {
-        const [a, b] = [...pts.values()];
-        if (pinch0) st.cam.zoom = Math.max(0.45, Math.min(2.8, zoom0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch0));
-        moved = true;
-        return;
-      }
-      const dx = cur.x - prev.x, dy = cur.y - prev.y;
-      if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-      st.cam.yaw += dx * 0.008;
-      st.cam.pitch = Math.max(-0.3, Math.min(1.2, st.cam.pitch + dy * 0.006));
+      if (!st || e.pointerId !== id) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 6) moved = true;
+      if (moved) st.angle = startAngle - dx / (canvas.clientWidth * 0.6);
     });
     const up = (e) => {
-      pts.delete(e.pointerId);
-      if (pts.size < 2) pinch0 = 0;
-      if (!moved && pts.size === 0 && st) {
-        const r = canvas.getBoundingClientRect();
-        const x = e.clientX - r.left, y = e.clientY - r.top;
-        const hit = (st.hits || []).slice().reverse().find((h) => x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1);
-        select(hit ? hit.n : null);
+      if (!st || e.pointerId !== id) return;
+      id = null; st.dragging = false;
+      const dx = e.clientX - startX;
+      if (moved) {
+        let to = Math.round(st.angle);
+        if (to === Math.round(startAngle) && Math.abs(dx) > 30) to += dx < 0 ? 1 : -1;
+        go(to);
+        return;
       }
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const side = st.hits.filter((hh) => hh.front < 0.95 && x >= hh.x0 && x <= hh.x1)
+        .sort((a, b) => b.front - a.front)[0];
+      if (side) goIndex(side.i);
+      else if (x < r.width * 0.15) go(st.target - 1);
+      else if (x > r.width * 0.85) go(st.target + 1);
     };
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
-    canvas.addEventListener("wheel", (e) => {
-      if (!st) return;
-      e.preventDefault();
-      st.spin = false;
-      st.cam.zoom = Math.max(0.45, Math.min(2.8, st.cam.zoom * (e.deltaY < 0 ? 1.1 : 0.9)));
-    }, { passive: false });
-  }
-
-  function animateTurn() { // rotation douce vers l'idée choisie dans la liste
-    if (st && st.turnTo != null) {
-      let d = st.turnTo - st.cam.yaw;
-      d = Math.atan2(Math.sin(d), Math.cos(d));
-      if (Math.abs(d) < 0.01) st.turnTo = null; else st.cam.yaw += d * 0.08;
-    }
-    if (st) requestAnimationFrame(animateTurn);
   }
 
   // ------------------------------------------------------------------ ouverture / fermeture
@@ -514,36 +428,30 @@
 
   function show(d) {
     if (!d || !Array.isArray(d.nodes) || d.nodes.length < 2) return;
+    const plan = buildPlan(d);
+    if (!plan.panels.length) return;
     document.getElementById("holo").classList.remove("hidden");
     document.getElementById("holo-title").textContent = String(d.title || "").slice(0, 80);
     const canvas = document.getElementById("holo-canvas");
-    const g = buildGraph(d);
-    layout(g, d.style, String(d.title || ""));
-    const c = g.nodes.reduce((acc, n) => add(acc, n.pos), v(0, 0, 0));
-    const center = mul(c, 1 / g.nodes.length);
-    g.nodes.forEach((n) => { n.pos = sub(n.pos, center); });
-    const radius = Math.max(...g.nodes.map((n) => len(n.pos)), 140);
     const rand = rng(42);
-    const stars = Array.from({ length: 140 }, () => {
-      const u = rand() * 2 - 1, a = rand() * Math.PI * 2, r = Math.sqrt(1 - u * u);
-      return { p: mul(v(Math.cos(a) * r, u, Math.sin(a) * r), 900 + rand() * 300), a: 0.25 + rand() * 0.5,
-        r: rand() < 0.15 ? 2 : 1, ph: rand() * 6 };
-    });
     cancelAnimationFrame(raf);
-    st = { canvas, ctx: canvas.getContext("2d"), g, selected: null, hits: [], spin: true, turnTo: null,
-      stars, t0: performance.now(), floorY: Math.min(...g.nodes.map((n) => n.pos.y)) - 70,
-      cam: { yaw: 0.5, pitch: 0.42, zoom: Math.max(0.32, Math.min(1.15, 205 / radius)) } };
-    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) { st.spin = false; st.t0 -= INTRO_MS; }
-    st.items = buildPlan(g);
-    select(null);
+    st = { canvas, ctx: canvas.getContext("2d"), plan, angle: -0.5, target: 0, dragging: false, hits: [],
+      layouts: null, t0: performance.now(),
+      stars: Array.from({ length: 90 }, () => ({ x: rand() * 2000, y: rand(), a: 0.2 + rand() * 0.5,
+        r: rand() < 0.15 ? 2 : 1, ph: rand() * 6 })) };
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) { st.t0 -= INTRO_MS; st.angle = 0; }
+    const multi = plan.panels.length > 1;
+    document.getElementById("holo-nav").classList.toggle("hidden", !multi);
+    st.listItems = buildList(plan);
+    go(0);
     if (!canvas.dataset.bound) { bindGestures(canvas); canvas.dataset.bound = "1"; }
-    raf = requestAnimationFrame(drawScene);
-    requestAnimationFrame(animateTurn);
+    raf = requestAnimationFrame(frame);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("holo-close").addEventListener("click", close);
-    document.getElementById("holo-spin").addEventListener("click", () => { if (st) st.spin = !st.spin; });
+    document.getElementById("holo-prev").addEventListener("click", () => st && go(st.target - 1));
+    document.getElementById("holo-next").addEventListener("click", () => st && go(st.target + 1));
   });
 
   window.SyriusHolo = { show, close };

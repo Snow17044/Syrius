@@ -205,29 +205,36 @@ details input { margin-top: 8px; }
 .leaflet-container .leaflet-control-attribution { background: rgba(5, 10, 20, .7); color: var(--muted); font-size: 9px; }
 .leaflet-container .leaflet-control-attribution a { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .hud-scan::after, .hud-me, #hud, #holo { animation: none; } }
-.holo-wrap { height: 48dvh; min-height: 280px; flex: none;
-  background: radial-gradient(ellipse at 50% 70%, rgba(24, 90, 140, .55), rgba(3, 10, 20, .2) 55%, #02060d 100%); }
-#holo-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
-.holo-actions { display: flex; gap: 4px; }
-.holo-detail { margin: 10px 2px 0; padding: 10px 12px; border-radius: 12px; font-size: .9rem; line-height: 1.4;
-  border: 1px solid var(--accent); background: rgba(56, 217, 255, .08); box-shadow: 0 0 18px rgba(56, 217, 255, .15);
-  display: flex; flex-direction: column; gap: 4px; }
-.holo-detail.hidden { display: none; }
-.holo-detail strong { color: #fff; }
+.holo-wrap { height: 52dvh; min-height: 340px; flex: none;
+  background: radial-gradient(ellipse at 50% 35%, rgba(24, 90, 140, .5), rgba(3, 10, 20, .3) 60%, #02060d 100%); }
+#holo-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; }
+.holo-nav { display: flex; align-items: center; gap: 8px; margin: 10px 2px 0; }
+.holo-nav.hidden { display: none; }
+.holo-arrow { flex: none; width: 44px; height: 44px; border-radius: 50%; font-size: 1.6rem; line-height: 1; cursor: pointer;
+  color: var(--accent); background: rgba(56, 217, 255, .1); border: 1px solid rgba(56, 217, 255, .5);
+  box-shadow: 0 0 12px rgba(56, 217, 255, .2); }
+.holo-arrow:active { background: rgba(56, 217, 255, .25); }
+.holo-nav-mid { flex: 1; min-width: 0; text-align: center; }
+.holo-dots { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.holo-dot { width: 9px; height: 9px; padding: 0; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--c, var(--accent)); opacity: .3; transition: all .25s; }
+.holo-dot.on { opacity: 1; width: 22px; border-radius: 5px; box-shadow: 0 0 10px var(--c, var(--accent)); }
+.holo-count { margin-top: 5px; font-size: .82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.holo-plan-head { margin: 14px 4px 8px; }
 .holo-plan-head .hud-tag { white-space: nowrap; }
-.holo-plan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 4px 6px; }
-.holo-hint { font-size: .72rem; color: var(--muted); }
 .holo-plan { list-style: none; margin: 0; padding: 0 2px 4px; overflow-y: auto; min-height: 0; flex: 1; }
-.holo-step { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; margin-bottom: 6px; border-radius: 12px;
-  cursor: pointer; border: 1px solid rgba(56, 217, 255, .12); border-left: 3px solid var(--c, var(--accent));
-  background: linear-gradient(90deg, rgba(56, 217, 255, .06), transparent); transition: background .2s; }
-.holo-step.phase { background: linear-gradient(90deg, rgba(56, 217, 255, .14), rgba(56, 217, 255, .02)); }
-.holo-step.phase .holo-step-title { font-weight: 700; font-size: .98rem; }
-.holo-step.active { background: rgba(56, 217, 255, .16); border-color: var(--c, var(--accent)); }
-.holo-num { flex: none; min-width: 26px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
-  font-size: .75rem; font-weight: 800; color: #03101c; background: var(--c, var(--accent));
-  box-shadow: 0 0 10px var(--c, var(--accent)); }
-.holo-step-title { font-weight: 600; }
-.holo-step-note { font-size: .82rem; color: var(--muted); margin-top: 2px; line-height: 1.35; }
-.map-card { display: block; width: 100%; text-align: left; color: var(--text); cursor: pointer; font: inherit; }
+.holo-step { padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; cursor: pointer;
+  border: 1px solid rgba(56, 217, 255, .12); border-left: 3px solid var(--c, var(--accent));
+  background: linear-gradient(90deg, rgba(56, 217, 255, .08), rgba(56, 217, 255, .01)); transition: background .2s, border-color .2s; }
+.holo-step.active { background: linear-gradient(90deg, rgba(56, 217, 255, .18), rgba(56, 217, 255, .03));
+  border-color: var(--c, var(--accent)); box-shadow: 0 0 16px rgba(56, 217, 255, .12); }
+.holo-step-row { display: flex; gap: 10px; align-items: flex-start; }
+.holo-num { flex: none; min-width: 26px; height: 22px; padding: 0 7px; border-radius: 999px; display: grid; place-items: center;
+  font-size: .78rem; font-weight: 800; color: #03101c; background: var(--c, var(--accent)); box-shadow: 0 0 10px var(--c, var(--accent)); }
+.holo-step-title { font-weight: 700; font-size: 1rem; }
+.holo-step-note { font-size: .82rem; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.holo-sub { list-style: none; margin: 8px 0 0; padding: 0 0 0 4px; }
+.holo-sub li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-top: 1px solid rgba(56, 217, 255, .08); }
+.holo-subnum { flex: none; min-width: 30px; font-size: .75rem; font-weight: 800; color: var(--c, var(--accent)); padding-top: 2px; }
+.holo-sub-title { font-weight: 600; font-size: .92rem; }
 #holo .hud-frame { height: 94dvh; max-height: 94dvh; }

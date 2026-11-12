@@ -110,10 +110,7 @@
     <div class="hud-frame">
       <header class="hud-head">
         <div><span class="hud-tag">◈ SYRIUS · HOLOGRAMME</span><div id="holo-title" class="hud-query"></div></div>
-        <div class="holo-actions">
-          <button id="holo-spin" class="icon-btn" aria-label="Rotation automatique">⟳</button>
-          <button id="holo-close" class="icon-btn" aria-label="Fermer le schéma">✕</button>
-        </div>
+        <button id="holo-close" class="icon-btn" aria-label="Fermer le schéma">✕</button>
       </header>
       <div class="hud-map-wrap holo-wrap">
         <canvas id="holo-canvas"></canvas>
@@ -121,9 +118,12 @@
         <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
         <span class="hud-corner bl"></span><span class="hud-corner br"></span>
       </div>
-      <p id="holo-detail" class="holo-detail hidden"></p>
-      <div class="holo-plan-head"><span class="hud-tag">◈ PLAN D'ACTION</span>
-        <span class="holo-hint">Glisse · pince · touche</span></div>
+      <div id="holo-nav" class="holo-nav">
+        <button id="holo-prev" class="holo-arrow" type="button" aria-label="Phase précédente">‹</button>
+        <div class="holo-nav-mid"><div id="holo-dots" class="holo-dots"></div><div id="holo-count" class="holo-count"></div></div>
+        <button id="holo-next" class="holo-arrow" type="button" aria-label="Phase suivante">›</button>
+      </div>
+      <div class="holo-plan-head"><span class="hud-tag">◈ PLAN D'ACTION COMPLET</span></div>
       <ol id="holo-plan" class="holo-plan"></ol>
     </div>
   </section>
