@@ -257,8 +257,12 @@ let localTimer = null;
 function refreshLocalBox() {
   const l = L();
   const box = $("#local-box");
-  if (!l || !l.available()) { box.classList.add("hidden"); return; }
-  box.classList.remove("hidden");
+  const inApp = !!window.SyriusAndroid;
+  const old = inApp && !(l && l.available()); // application installée trop ancienne
+  box.classList.toggle("hidden", !inApp);
+  $("#local-update").classList.toggle("hidden", !old);
+  $("#local-ui").classList.toggle("hidden", old);
+  if (!inApp || old) return;
   const i = l.info() || {};
   const sel = $("#local-model");
   if (!sel.options.length) {

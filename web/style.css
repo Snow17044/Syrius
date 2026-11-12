@@ -265,3 +265,5 @@ details input { margin-top: 8px; }
 .local-progress { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
 .local-progress.hidden { display: none; }
 .local-progress progress { flex: 1; height: 10px; accent-color: var(--accent); }
+.btn-link { display: block; text-align: center; text-decoration: none; padding: 10px; border-radius: 12px;
+  border: 1px solid var(--accent); color: var(--accent); margin: 6px 0 10px; }
