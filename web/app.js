@@ -342,7 +342,8 @@ const DEVICE_TEXT = {
 };
 
 function runDevice(ev) {
-  if (!Native || typeof Native.device !== "function") return "Disponible uniquement dans l'application Android Syrius.";
+  if (!Native) return "Tu es sur le site (navigateur), pas dans l'application Android Syrius : ouvre l'application téléchargée.";
+  if (typeof Native.device !== "function") return "Ton application Syrius est une ancienne version : désinstalle-la puis installe la nouvelle (voir le guide).";
   try { return Native.device(JSON.stringify({ action: ev.action, params: ev.params })) || "ok"; }
   catch (_) { return "Action impossible sur ce téléphone."; }
 }
