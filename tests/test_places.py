@@ -95,7 +95,7 @@ def test_leaflet_intact():
 
 def test_csp_n_autorise_que_les_images_de_carte(make_client):
     csp = make_client().get("/").headers["content-security-policy"]
-    assert "script-src 'self';" in csp and "img-src 'self' data: https://tile.openstreetmap.org;" in csp
+    assert "script-src 'self';" in csp and "img-src 'self' data:;" in csp
     script_part = csp.split("script-src")[1].split(";")[0]
     assert "openstreetmap" not in script_part and "unsafe" not in csp
 
@@ -114,3 +114,66 @@ def test_android_position_seulement_pour_syrius():
     manifest = open("android/app/src/main/AndroidManifest.xml", encoding="utf-8").read()
     assert "ACCESS_COARSE_LOCATION" in manifest and "ACCESS_FINE_LOCATION" not in manifest
     assert "ACCESS_BACKGROUND_LOCATION" not in manifest
+
+
+# ---------------------------------------------------------------- relais du fond de carte
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 50
+
+
+def _fake_open(calls, status=200, ctype="image/png", body=PNG):
+    def _open(scheme, host, ip, port, path, headers=None):
+        calls.append((scheme, host, ip, port, path, headers))
+        return status, {"content-type": ctype}, body
+    return _open
+
+
+def test_tuile_exige_une_connexion(make_client):
+    assert make_client().get("/tiles/3/4/2.png").status_code == 401
+
+
+def test_tuile_relayee(make_client, monkeypatch):
+    from server.tools import tiles, web
+    from tests.conftest import login
+    calls = []
+    monkeypatch.setattr(web, "resolve_public", lambda h, p: "203.0.113.5")
+    monkeypatch.setattr(web, "_open", _fake_open(calls))
+    c = make_client()
+    login(c)
+    r = c.get("/tiles/3/4/2.png")
+    assert r.status_code == 200 and r.content == PNG and r.headers["content-type"] == "image/png"
+    assert calls[0][:5] == ("https", tiles.HOST, "203.0.113.5", 443, "/3/4/2.png")
+    assert "User-Agent" in calls[0][5] and "Cookie" not in calls[0][5]
+
+
+def test_tuile_coordonnees_invalides(make_client, monkeypatch):
+    from server.tools import web
+    from tests.conftest import login
+    calls = []
+    monkeypatch.setattr(web, "resolve_public", lambda h, p: "203.0.113.5")
+    monkeypatch.setattr(web, "_open", _fake_open(calls))
+    c = make_client()
+    login(c)
+    for bad in ("/tiles/20/0/0.png", "/tiles/2/4/0.png", "/tiles/2/0/-1.png", "/tiles/a/0/0.png",
+                "/tiles/2/0/0.png/../../x", "/tiles/2/0/0%2F..%2F.png"):
+        assert c.get(bad).status_code in (404, 422), bad
+    assert calls == []
+
+
+def test_tuile_refuse_autre_chose_qu_une_image(make_client, monkeypatch):
+    from server.tools import tiles, web
+    from tests.conftest import login
+    monkeypatch.setattr(web, "resolve_public", lambda h, p: "203.0.113.5")
+    for kw in ({"ctype": "text/html"}, {"status": 403}, {"body": b"x" * (tiles.MAX_TILE_BYTES + 1)}):
+        monkeypatch.setattr(web, "_open", _fake_open([], **kw))
+        c = make_client()
+        login(c)
+        assert c.get("/tiles/1/0/0.png").status_code == 404
+
+
+def test_tuile_hote_interne_refuse(monkeypatch):
+    from server.tools import tiles, web
+    def deny(h, p):
+        raise web.WebError("Adresse interne refusée par le pare-feu.")
+    monkeypatch.setattr(web, "resolve_public", deny)
+    with pytest.raises(tiles.TileError):
+        tiles.fetch_tile(1, 0, 0)

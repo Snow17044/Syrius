@@ -107,12 +107,14 @@ class _PinnedHTTP(http.client.HTTPConnection):
         self.sock = socket.create_connection((self._ip, self.port), self.timeout)
 
 
-def _open(scheme: str, host: str, ip: str, port: int, path: str) -> tuple[int, dict, bytes]:
+def _open(scheme: str, host: str, ip: str, port: int, path: str,
+          headers: dict | None = None) -> tuple[int, dict, bytes]:
     cls = _PinnedHTTPS if scheme == "https" else _PinnedHTTP
     conn = cls(host, ip, port, TIMEOUT)
     try:
-        conn.request("GET", path, headers={"User-Agent": USER_AGENT, "Accept": "text/html,text/plain",
-                                           "Accept-Language": "fr,en;q=0.8", "Connection": "close"})
+        conn.request("GET", path, headers=headers or {
+            "User-Agent": USER_AGENT, "Accept": "text/html,text/plain",
+            "Accept-Language": "fr,en;q=0.8", "Connection": "close"})
         resp = conn.getresponse()
         headers = {k.lower(): v for k, v in resp.getheaders()}
         body = resp.read(MAX_BYTES + 1)

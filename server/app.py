@@ -15,7 +15,7 @@ from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
 from .store_redis import RedisDatabase, RedisError, UpstashREST
-from .tools import gmail
+from .tools import gmail, tiles
 from .tools.places import round_location
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
@@ -27,9 +27,8 @@ STATIC_FILES = {
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
-# Seule exception aux ressources externes : les images de la carte (tuiles OpenStreetMap).
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
-       "img-src 'self' data: https://tile.openstreetmap.org; "
+       "img-src 'self' data:; "
        "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
        "frame-ancestors 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self'")
 
@@ -177,6 +176,16 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if name not in ICON_FILES:
             raise HTTPException(404)
         return FileResponse(WEB_DIR / "icons" / name, media_type=ICON_FILES[name])
+
+    @app.get("/tiles/{z}/{x}/{y}.png", dependencies=[Depends(require_auth)])
+    def tile(z: int, x: int, y: int):
+        """Fond de carte relayé par le serveur (voir tools/tiles.py)."""
+        try:
+            png = tiles.fetch_tile(z, x, y)
+        except tiles.TileError:
+            raise HTTPException(404) from None
+        return Response(png, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=604800"})
 
     @app.get("/health")
     async def health():

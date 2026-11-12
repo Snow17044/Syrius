@@ -168,7 +168,7 @@ details input { margin-top: 8px; }
 .hud-map-wrap { position: relative; height: 46dvh; min-height: 240px; border-radius: 14px; overflow: hidden;
   border: 1px solid rgba(56, 217, 255, .35); }
 #hud-map { position: absolute; inset: 0; background: #050a14; }
-#hud-map .leaflet-tile-pane { filter: invert(1) hue-rotate(185deg) brightness(.85) contrast(1.1) saturate(.6) sepia(.25) hue-rotate(160deg); }
+#hud-map .leaflet-tile-pane { filter: grayscale(1) brightness(.42) contrast(1.6) sepia(1) hue-rotate(165deg) saturate(2.2); }
 .hud-scan { position: absolute; inset: 0; pointer-events: none; z-index: 500;
   background: repeating-linear-gradient(0deg, rgba(56, 217, 255, .05) 0 1px, transparent 1px 4px); }
 .hud-scan::after { content: ""; position: absolute; left: 0; right: 0; height: 30%;
