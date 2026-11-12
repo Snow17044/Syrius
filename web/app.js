@@ -186,6 +186,7 @@ async function openConversation(id) {
   for (const m of conv.messages) {
     const view = addMessage(m.role, m.text);
     if (m.tools && m.tools.length) setTools(view, [...new Set(m.tools)]);
+    (m.diagrams || []).forEach((d) => addDiagramCard(view, d));
   }
   if (!conv.messages.length) newConversationView();
   renderConversations();
@@ -203,8 +204,10 @@ function addMessage(role, text) {
   bubble.append(tools, body);
   wrap.appendChild(bubble);
   $("#messages").appendChild(wrap);
-  const view = { wrap, bubble, tools, body, text: text || "" };
+  const view = { wrap, bubble, tools, body, text: text || "", role };
   renderText(view, role);
+  state.views = (state.views || []).filter((v) => v.wrap.isConnected);
+  state.views.push(view);
   return view;
 }
 
@@ -237,7 +240,10 @@ $("#input").addEventListener("keydown", (e) => {
 });
 $("#input").addEventListener("input", autoGrow);
 function autoGrow() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
-$("#stop").addEventListener("click", () => state.controller?.abort());
+$("#stop").addEventListener("click", () => {
+  state.controller?.abort();
+  if (state.localRunning && window.SyriusLocal) window.SyriusLocal.stop();
+});
 
 function setStreaming(on) {
   state.streaming = on;
@@ -246,9 +252,101 @@ function setStreaming(on) {
   document.querySelectorAll(".orb.small").forEach((o) => o.classList.toggle("thinking", on));
 }
 
+// ------------------------------------------------------------------ IA hors ligne (sur le téléphone)
+let localTimer = null;
+function refreshLocalBox() {
+  const l = L();
+  const box = $("#local-box");
+  if (!l || !l.available()) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const i = l.info() || {};
+  const sel = $("#local-model");
+  if (!sel.options.length) {
+    (i.models || []).forEach((m) => sel.appendChild(new Option(m.label, m.id)));
+  }
+  if (i.installed) sel.value = i.installed;
+  const busy = !!(i.downloading || i.verifying);
+  $("#local-download").classList.toggle("hidden", busy);
+  $("#local-download").textContent = i.installed ? "🔁 Changer de modèle" : "⬇ Télécharger";
+  $("#local-delete").classList.toggle("hidden", !i.installed && !busy);
+  $("#local-delete").textContent = busy ? "✕ Annuler" : "🗑 Supprimer";
+  $("#local-progress").classList.toggle("hidden", !i.downloading);
+  if (i.downloading) {
+    $("#local-progress progress").value = i.progress || 0;
+    $("#local-progress span").textContent = `${i.progress || 0} %`;
+  }
+  $("#local-status").textContent = i.error ? "⚠ " + i.error
+    : i.verifying ? "🔒 Vérification de l'empreinte du fichier…"
+    : i.downloading ? "Téléchargement en cours (tu peux fermer cet écran, il continue)…"
+    : i.installed ? "✅ Installée et prête." : "Pas encore installée.";
+  $("#local-fallback").checked = l.prefs.fallback;
+  $("#local-force").checked = l.prefs.force;
+  clearTimeout(localTimer);
+  if (busy && $("#settings").open) localTimer = setTimeout(refreshLocalBox, 1500);
+}
+
+$("#local-download").addEventListener("click", () => {
+  const l = L();
+  const id = $("#local-model").value;
+  const m = ((l.info() || {}).models || []).find((x) => x.id === id);
+  const go = confirm(`Télécharger ${m ? m.label : "le modèle"} ? Utilise de préférence le Wi-Fi.`);
+  if (!go) return;
+  const r = window.SyriusAndroid.localDownload(id);
+  if (r !== "ok") alert(r);
+  setTimeout(refreshLocalBox, 500);
+});
+$("#local-delete").addEventListener("click", () => {
+  const i = L().info() || {};
+  if (i.downloading) window.SyriusAndroid.localCancel();
+  else if (confirm("Supprimer l'IA hors ligne de ce téléphone ?")) window.SyriusAndroid.localDelete();
+  setTimeout(refreshLocalBox, 300);
+});
+$("#local-fallback").addEventListener("change", (e) => { L().prefs.fallback = e.target.checked; });
+$("#local-force").addEventListener("change", (e) => { L().prefs.force = e.target.checked; });
+const L = () => window.SyriusLocal;
+function localWanted() {
+  const l = L();
+  return !!(l && l.ready() && (l.prefs.force || state.offline || !navigator.onLine));
+}
+
+async function answerLocally(view, note) {
+  const l = L();
+  const history = (state.views || []).filter((v) => v.wrap.isConnected && v !== view)
+    .map((v) => ({ role: v.role, text: v.text }));
+  setTools(view, [note || "📴 IA hors ligne (sur ton téléphone)"]);
+  setStreaming(true);
+  state.localRunning = true;
+  let pending = false;
+  try {
+    await l.chat(history, (full) => {
+      view.text = full;
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; renderText(view, "assistant"); scrollDown(); });
+    });
+  } catch (err) {
+    showError(view, err.message || "IA hors ligne indisponible.");
+  } finally {
+    state.localRunning = false;
+    setStreaming(false);
+    renderText(view, "assistant");
+    if (view.text && state.settings.voice_reply) speak(view.text);
+  }
+}
+
+async function sendLocal(text) {
+  $("#input").value = "";
+  autoGrow();
+  addMessage("user", text);
+  const view = addMessage("assistant", "");
+  scrollDown(true);
+  await answerLocally(view);
+}
+
 async function sendMessage(text) {
   text = (text || "").trim();
   if (!text || state.streaming) return;
+  if (localWanted()) return sendLocal(text);
   if (!state.convId) {
     const conv = await api("/api/conversations", { method: "POST" });
     state.convId = conv.id;
@@ -303,10 +401,13 @@ async function sendMessage(text) {
         let ev;
         try { ev = JSON.parse(chunk.slice(6)); } catch (_) { continue; }
         if (ev.type === "text") { view.text += ev.text; repaint(); }
+        else if (ev.type === "text_replace") { view.text = String(ev.text || ""); repaint(); }
         else if (ev.type === "tool") { tools.push(ev.label); setTools(view, [...new Set(tools)]); scrollDown(); }
         else if (ev.type === "action") { view.bubble.appendChild(actionCard(ev)); scrollDown(); }
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
         else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
+        else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
+        else if (ev.type === "model") { addDiagramCard(view, ev); if (window.SyriusModel) window.SyriusModel.show(ev); }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
         else if (ev.type === "error") { gotError = true; showError(view, ev.message); }
@@ -317,6 +418,13 @@ async function sendMessage(text) {
   } finally {
     setStreaming(false);
     renderText(view, "assistant");
+    const l = L();
+    if (gotError && !view.text && l && l.ready() && l.prefs.fallback) {
+      // Toutes les IA en ligne sont épuisées ou injoignables : le téléphone prend le relais.
+      view.bubble.querySelectorAll(".msg-error").forEach((e) => e.remove());
+      await answerLocally(view, "📴 IA en ligne indisponible → réponse hors ligne (sur ton téléphone)");
+      return;
+    }
     if (gotError && !view.text) $("#input").value = text; // on rend le message pour réessayer
     if (!gotError && view.text && state.settings.voice_reply) speak(view.text);
     loadConversations();
@@ -348,6 +456,19 @@ function addMapCard(view, ev) {
   const n = Array.isArray(ev.places) ? ev.places.length : 0;
   card.textContent = `🗺 ${n} lieu${n > 1 ? "x" : ""} sur la carte — ouvrir`;
   card.addEventListener("click", () => window.SyriusHUD && window.SyriusHUD.show(ev));
+  view.bubble.appendChild(card);
+}
+
+function addDiagramCard(view, ev) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "action-card map-card";
+  const isModel = ev.type === "model";
+  card.textContent = `${isModel ? "🧊 Maquette 3D" : "🧠 Schéma 3D"} : ${String(ev.title || "").slice(0, 60)} — ouvrir`;
+  card.addEventListener("click", () => {
+    if (isModel) { if (window.SyriusModel) window.SyriusModel.show(ev); }
+    else if (window.SyriusHolo) window.SyriusHolo.show(ev);
+  });
   view.bubble.appendChild(card);
 }
 
@@ -486,6 +607,7 @@ if (Native) {
 // ------------------------------------------------------------------ réglages
 async function loadSettings() {
   state.settings = await api("/api/settings");
+  state.offline = false;
 }
 
 $("#open-settings").addEventListener("click", async () => {
@@ -511,6 +633,7 @@ $("#open-settings").addEventListener("click", async () => {
   $("#settings-msg").textContent = "";
   await renderMemories();
   closeDrawer();
+  refreshLocalBox();
   $("#settings").showModal();
 });
 
@@ -638,6 +761,15 @@ if ("serviceWorker" in navigator) {
       }
     }
   } catch (_) {
+    const l = L();
+    if (l && l.ready()) { // pas de réseau : Syrius démarre en mode hors ligne
+      state.offline = true;
+      $("#login").classList.add("hidden");
+      $("#app").classList.remove("hidden");
+      newConversationView();
+      $("#conv-title").textContent = "📴 Syrius hors ligne";
+      return;
+    }
     showLogin();
     $("#login-error").textContent = "Serveur injoignable.";
   }

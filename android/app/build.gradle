@@ -47,3 +47,8 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+
+dependencies {
+    // IA hors ligne (Google MediaPipe, open source Apache 2.0) — version épinglée.
+    implementation "com.google.mediapipe:tasks-genai:0.10.27"
+}

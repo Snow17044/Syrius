@@ -21,6 +21,10 @@ class RetryableError(LLMError):
     """Limite atteinte ou panne passagère : on peut essayer un autre cerveau."""
 
 
+class TooLargeError(RetryableError):
+    """Demande trop lourde pour la limite par minute : on peut réessayer en plus léger."""
+
+
 @dataclass
 class Provider:
     name: str        # identifiant court : groq, gemini, local
@@ -42,8 +46,14 @@ def _http_error_message(provider: Provider, code: int, detail: str) -> LLMError:
         return RetryableError(f"{provider.label} : limite gratuite atteinte pour le moment.")
     if code in (401, 403):
         return LLMError(f"{provider.label} : clé API invalide ou refusée (voir README).")
-    if code == 404:
-        return LLMError(f"{provider.label} : modèle « {provider.model} » introuvable.")
+    if code == 404:  # modèle retiré : on passe au suivant
+        return RetryableError(f"{provider.label} : modèle « {provider.model} » introuvable.")
+    if code == 413:  # demande trop grosse pour la limite par minute de ce modèle
+        return TooLargeError(f"{provider.label} : demande trop lourde pour sa limite gratuite.")
+    low = detail.lower()
+    if code == 400 and "model" in low and any(k in low for k in ("decommission", "not found", "does not exist",
+                                                                   "not supported", "deprecated")):
+        return RetryableError(f"{provider.label} : modèle indisponible.")
     if code >= 500:
         return RetryableError(f"{provider.label} est momentanément indisponible.")
     return LLMError(f"{provider.label} a refusé la demande ({code}) : {detail[:150]}")
@@ -129,10 +139,36 @@ class ChatClient:
             stop.set()
 
 
+def groq_label(model: str) -> str:
+    name = model.split("/")[-1]
+    for key, label in (("gpt-oss-120b", "GPT-OSS 120B"), ("gpt-oss-20b", "GPT-OSS 20B"), ("llama-3.3", "Llama 3.3"),
+                       ("llama-4", "Llama 4"), ("qwen", "Qwen 3"), ("kimi", "Kimi K2")):
+        if key in name:
+            return f"Groq · {label}"
+    return f"Groq · {name[:30]}"
+
+
 def providers_from_config(cfg) -> list[Provider]:
     out = []
+    if cfg.mistral_api_key:  # en premier : limites gratuites bien plus larges que Groq
+        out.append(Provider("mistral", "Mistral", "https://api.mistral.ai/v1", cfg.mistral_model,
+                            cfg.mistral_api_key, reasoning=False))
     if cfg.groq_api_key:
-        out.append(Provider("groq", "Groq", "https://api.groq.com/openai/v1", cfg.groq_model, cfg.groq_api_key))
+        # Plusieurs modèles open source sur Groq : chacun a sa propre limite gratuite.
+        # Quand l'un est à court, Syrius passe automatiquement au suivant.
+        models = [cfg.groq_model] + [m for m in cfg.groq_backup_models if m != cfg.groq_model]
+        for i, model in enumerate(models):
+            out.append(Provider("groq" if i == 0 else f"groq{i + 1}", groq_label(model),
+                                "https://api.groq.com/openai/v1", model, cfg.groq_api_key,
+                                reasoning=model.startswith("openai/gpt-oss")))
+    if cfg.github_models_token:
+        for i, model in enumerate(cfg.github_models):
+            out.append(Provider("github" if i == 0 else f"github{i + 1}", f"GitHub · {model.split('/')[-1][:24]}",
+                                "https://models.github.ai/inference", model, cfg.github_models_token,
+                                reasoning=False))
+    if cfg.openrouter_api_key:
+        out.append(Provider("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", cfg.openrouter_model,
+                            cfg.openrouter_api_key, reasoning=False))
     if cfg.gemini_api_key:
         out.append(Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
                             cfg.gemini_model, cfg.gemini_api_key))

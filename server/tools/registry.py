@@ -10,7 +10,7 @@ from ..config import Config
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
-from . import places, web
+from . import diagram, model3d, places, web
 from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -33,6 +33,45 @@ BASE_TOOLS = [
           {"fact": {"type": "string", "description": "L'information, en une phrase courte."}}, ["fact"]),
     _tool("forget", "Supprime un souvenir par son numéro (voir la liste des souvenirs).",
           {"memory_id": {"type": "integer"}}, ["memory_id"]),
+    _tool("show_diagram",
+          "Dessine un SCHÉMA 3D holographique dans l'app : un PLAN D'ACTION CONCRET pour une idée, un projet, "
+          "un objectif, un concept ou une organisation. Utilise-le dès qu'on demande un schéma, une carte "
+          "mentale, un plan, des étapes, ou d'organiser / visualiser une idée. Contenu attendu : idée centrale "
+          "(kind objectif), puis 3 à 6 PHASES dans l'ordre chronologique (kind phase), chacune avec 2 à 4 "
+          "ÉTAPES concrètes (kind etape/action/outil/budget/delai/risque) commençant par un verbe, et pour "
+          "CHAQUE étape une note pratique : comment faire, avec quoi, combien ça coûte, combien de temps. "
+          "La numérotation (1, 1.1, 1.2…) est ajoutée automatiquement selon l'ordre des idées.",
+          {"title": {"type": "string", "description": "Titre court du schéma"},
+           "style": {"type": "string",
+                     "description": "carte (par défaut) = plan en phases autour de l'objectif ; etapes = suite "
+                                    "linéaire ; arbre = hiérarchie / organisation"},
+           "nodes": {"type": "array", "description": "Les idées (2 à 30), dans l'ordre. La première est l'objectif.",
+                     "items": {"type": "object", "properties": {
+                         "id": {"type": "string", "description": "Identifiant court unique, ex. p1, p1e2"},
+                         "label": {"type": "string", "description": "Texte court et concret (2 à 6 mots)"},
+                         "parent": {"type": "string", "description": "id de l'idée parente (vide pour l'objectif)"},
+                         "kind": {"type": "string", "description": "objectif, phase, etape, action, outil, "
+                                                                 "budget, delai, risque, idee, ressource ou personne"},
+                         "note": {"type": "string", "description": "Détail concret : comment, outil, coût, durée"}}}},
+           "links": {"type": "array", "description": "Liens supplémentaires facultatifs entre idées",
+                     "items": {"type": "object", "properties": {
+                         "from": {"type": "string"}, "to": {"type": "string"},
+                         "label": {"type": "string"}}}}},
+          ["title", "nodes"]),
+    _tool("show_model",
+          "Affiche une MAQUETTE 3D holographique d'un objet, monument, véhicule, animal, molécule, planète… "
+          "Utilise-le dès qu'on demande de montrer / voir quelque chose en 3D. Construis un objet reconnaissable "
+          "(15 à 60 lignes), proportions réelles, axe Y vers le haut, sol à y = 0.",
+          {"title": {"type": "string"},
+           "description": {"type": "string", "description": "Une phrase sur l'objet"},
+           "facts": {"type": "array", "items": {"type": "string"}, "description": "3 à 5 infos clés courtes"},
+           "parts": {"type": "array", "items": {"type": "string"},
+                     "description": "Une ligne par pièce : « forme x,y,z taille [rotX,rotY,rotZ] #couleur "
+                                    "[sym:x|z|xz] nom ». Formes et tailles : box l,h,p · cylinder rHaut,h,rBas · "
+                                    "cone r,h · sphere r · torus r,épaisseur · pyramid l,h,p · capsule r,long. "
+                                    "sym:xz copie la pièce en 4 (symétrie gauche/droite et avant/arrière). "
+                                    "Ex. « box 40,30,40 8,60,8 0,0,-20 #8d6e4f sym:xz Pilier »."}},
+          ["title", "parts"]),
 ]
 
 EMAIL_TOOLS = [
@@ -78,6 +117,8 @@ TOOL_LABELS = {
     "web_search": "Je cherche sur le web",
     "web_read": "Je lis la page",
     "show_places": "J'affiche la carte",
+    "show_diagram": "Je dessine le schéma 3D",
+    "show_model": "Je construis la maquette 3D",
     **DEVICE_LABELS,
 }
 
@@ -216,6 +257,22 @@ class ToolExecutor:
                      {"lat": found[0]["lat"], "lon": found[0]["lon"]}, "me": near, "places": found}
             summary = [{k: p[k] for k in ("name", "address", "distance_m") if k in p} for p in found]
             return web.wrap_untrusted({"lieux_affiches_sur_la_carte": summary}), False, event
+
+        if name == "show_diagram":
+            try:
+                event = diagram.validate(args)
+            except diagram.DiagramError as e:
+                raise InvalidInput(str(e)) from None
+            return (f"Schéma « {event['title']} » affiché en 3D ({len(event['nodes'])} idées). "
+                    "Résume-le en une ou deux phrases, sans le recopier."), False, event
+
+        if name == "show_model":
+            try:
+                event = model3d.validate(args)
+            except model3d.ModelError as e:
+                raise InvalidInput(str(e)) from None
+            return (f"Maquette 3D « {event['title']} » affichée ({len(event['parts'])} pièces). "
+                    "Présente-la en deux ou trois phrases, sans recopier les pièces."), False, event
 
         if name == "web_read":
             a = _check(args, {"url": str}, ["url"])

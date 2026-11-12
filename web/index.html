@@ -12,10 +12,16 @@
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="stylesheet" href="/static/leaflet.css">
+  <link rel="stylesheet" href="/static/maplibre-gl.css">
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/leaflet.js" defer></script>
+  <script src="/static/maplibre-gl.js" defer></script>
   <script src="/static/hud.js" defer></script>
+  <script src="/static/diagram.js" defer></script>
+  <script src="/static/three.min.js" defer></script>
+  <script src="/static/model3d.js" defer></script>
   <script src="/static/markdown.js" defer></script>
+  <script src="/static/local.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -102,6 +108,56 @@
     </div>
   </section>
 
+  <!-- Studio 3D : maquettes holographiques -->
+  <section id="m3d" class="hidden" aria-label="Maquette 3D">
+    <div class="hud-frame">
+      <header class="hud-head">
+        <div><span class="hud-tag">◈ SYRIUS · MAQUETTE 3D</span><div id="m3d-title" class="hud-query"></div></div>
+        <div class="holo-actions">
+          <button id="m3d-mode" class="icon-btn" aria-label="Mode hologramme">💠</button>
+          <button id="m3d-close" class="icon-btn" aria-label="Fermer la maquette">✕</button>
+        </div>
+      </header>
+      <div class="hud-map-wrap m3d-wrap">
+        <canvas id="m3d-canvas"></canvas>
+        <p id="m3d-nogl" class="m3d-nogl hidden">Ton téléphone ne permet pas l'affichage 3D (WebGL).</p>
+        <div class="hud-scan" aria-hidden="true"></div>
+        <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+        <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+      </div>
+      <p class="holo-hint m3d-hint">Glisse pour tourner · pince pour zoomer · double-tape pour recentrer</p>
+      <div class="m3d-info">
+        <p id="m3d-desc" class="m3d-desc"></p>
+        <ul id="m3d-facts" class="m3d-facts"></ul>
+        <div id="m3d-parts-head" class="hud-tag m3d-parts-head">◈ ÉLÉMENTS</div>
+        <ul id="m3d-parts" class="m3d-parts"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Hologramme : schéma d'idées en 3D -->
+  <section id="holo" class="hidden" aria-label="Schéma 3D">
+    <div class="hud-frame">
+      <header class="hud-head">
+        <div><span class="hud-tag">◈ SYRIUS · HOLOGRAMME</span><div id="holo-title" class="hud-query"></div></div>
+        <button id="holo-close" class="icon-btn" aria-label="Fermer le schéma">✕</button>
+      </header>
+      <div class="hud-map-wrap holo-wrap">
+        <canvas id="holo-canvas"></canvas>
+        <div class="hud-scan" aria-hidden="true"></div>
+        <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+        <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+      </div>
+      <div id="holo-nav" class="holo-nav">
+        <button id="holo-prev" class="holo-arrow" type="button" aria-label="Phase précédente">‹</button>
+        <div class="holo-nav-mid"><div id="holo-dots" class="holo-dots"></div><div id="holo-count" class="holo-count"></div></div>
+        <button id="holo-next" class="holo-arrow" type="button" aria-label="Phase suivante">›</button>
+      </div>
+      <div class="holo-plan-head"><span class="hud-tag">◈ PLAN D'ACTION COMPLET</span></div>
+      <ol id="holo-plan" class="holo-plan"></ol>
+    </div>
+  </section>
+
   <!-- Réglages -->
   <dialog id="settings">
     <form method="dialog" class="sheet" id="settings-form">
@@ -125,6 +181,21 @@
       <p class="muted small" id="s-web-note"></p>
       <label class="switch"><input id="s-location" type="checkbox"><span>Partager ma position approximative (cartes « près de moi »)</span></label>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
+
+      <div id="local-box" class="hidden">
+        <h4>📴 IA hors ligne (sur ce téléphone)</h4>
+        <p class="muted small">Gratuite, sans limite et sans Internet : elle tourne sur ton téléphone. Moins
+          intelligente que les IA en ligne (pas de 3D, de cartes ni d'actions sur le téléphone).</p>
+        <label>Modèle <select id="local-model"></select></label>
+        <div class="local-actions">
+          <button type="button" id="local-download" class="ghost">⬇ Télécharger</button>
+          <button type="button" id="local-delete" class="ghost hidden">🗑 Supprimer</button>
+        </div>
+        <div id="local-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+        <p id="local-status" class="small"></p>
+        <label class="switch"><input id="local-fallback" type="checkbox"><span>Prendre le relais tout seul (pas de réseau ou IA en ligne épuisées)</span></label>
+        <label class="switch"><input id="local-force" type="checkbox"><span>Toujours utiliser l'IA hors ligne</span></label>
+      </div>
 
       <h4>Emails</h4>
       <p id="s-email" class="muted small"></p>

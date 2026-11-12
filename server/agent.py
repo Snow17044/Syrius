@@ -9,7 +9,8 @@ from pathlib import Path
 
 from .config import Config
 from .db import Database
-from .llm import ChatClient, LLMError, RetryableError, providers_from_config
+from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
+from .tools import diagram, model3d
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
@@ -100,16 +101,43 @@ def display_messages(stored: list[dict]) -> list[dict]:
         texts = [b["text"] for b in m["content"] if b.get("type") == "text" and b["text"]]
         tools = [TOOL_LABELS.get(b.get("name", ""), b.get("name", ""))
                  for b in m["content"] if b.get("type") == "tool_use"]
+        diagrams = []
+        for b in m["content"]:  # les schémas 3D restent consultables dans l'historique
+            if b.get("type") == "tool_use" and b.get("name") == "show_diagram":
+                try:
+                    diagrams.append(diagram.validate(b.get("input")))
+                except diagram.DiagramError:
+                    pass
+            elif b.get("type") == "diagram":
+                try:
+                    diagrams.append(diagram.validate({k: v for k, v in (b.get("data") or {}).items()
+                                                      if k in ("title", "style", "nodes", "links")}))
+                except diagram.DiagramError:
+                    pass
+            elif (b.get("type") == "tool_use" and b.get("name") == "show_model") or b.get("type") == "model":
+                data = b.get("input") if b.get("type") == "tool_use" else b.get("data")
+                try:  # les maquettes 3D aussi
+                    diagrams.append(model3d.validate({k: v for k, v in (data or {}).items()
+                                                      if k in ("title", "description", "parts", "facts")}))
+                except model3d.ModelError:
+                    pass
         if out and out[-1]["role"] == "assistant":  # fusionne les étapes d'une même réponse
             prev = out[-1]
             prev["text"] = "\n\n".join(t for t in [prev["text"], *texts] if t)
             prev["tools"] += tools
+            prev["diagrams"] = prev.get("diagrams", []) + diagrams
         else:
-            out.append({"role": "assistant", "text": "\n\n".join(texts), "tools": tools})
+            out.append({"role": "assistant", "text": "\n\n".join(texts), "tools": tools, "diagrams": diagrams})
     return out
 
 
+# Les offres gratuites limitent les jetons PAR MINUTE (demande + réponse réservée) : on reste sobre.
+MAX_TOKENS = 3000
+SMALL_TOKENS = 1600
 _THINK_TAGS = re.compile(r"<think>.*?</think>\s*", re.S)
+# Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
+_WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme", re.I)
+_WANTS_MODEL = re.compile(r"\b3 ?d\b|maquette|mod[èe]le 3|en relief|hologramme", re.I)
 
 
 class Agent:
@@ -175,13 +203,26 @@ class Agent:
         for _step in range(MAX_STEPS):
             system = build_system(settings, self.db.list_memories())  # les souvenirs peuvent changer
             body = {"messages": to_openai(history, system), "tools": build_tools(self.cfg, settings),
-                    "max_tokens": 8000}
+                    "max_tokens": MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None
             tool_retry = False
+            shrink = False
             while providers:
                 provider = providers[0]
                 req = dict(body)
+                if _step == 0 and not tool_retry:
+                    forced = "show_diagram" if _WANTS_DIAGRAM.search(user_text) else \
+                        "show_model" if _WANTS_MODEL.search(user_text) else ""
+                    if forced:
+                        # On n'envoie que l'outil voulu (demande bien plus légère) et il doit être utilisé.
+                        req["tools"] = [t for t in req["tools"] if t["function"]["name"] == forced]
+                        req["tool_choice"] = "any" if provider.name == "mistral" else \
+                            {"type": "function", "function": {"name": forced}}
+                if shrink:
+                    req["max_tokens"] = SMALL_TOKENS
+                if "qwen3" in provider.model and "groq.com" in provider.base_url:
+                    req["reasoning_format"] = "hidden"  # pas de « réflexions » affichées dans la réponse
                 if provider.reasoning:
                     req["reasoning_effort"] = effort
                 try:
@@ -193,6 +234,10 @@ class Agent:
                     last_error = e
                     if state["streamed"] or state["calls"]:
                         break  # coupure en plein milieu : on ne mélange pas deux cerveaux
+                    if isinstance(e, TooLargeError) and not shrink:
+                        shrink = True  # même cerveau, demande plus légère
+                        continue
+                    shrink = False
                     providers = providers[1:]  # limite atteinte : on passe au cerveau suivant
                     if providers:
                         yield {"type": "tool", "name": "switch",
@@ -217,7 +262,17 @@ class Agent:
             log.info("Réponse %s : %d caractères, outils=%s", provider.name, len(state["text"]),
                      [c["name"] for c in state["calls"]] or "aucun")
             text = _THINK_TAGS.sub("", state["text"])
-            content = ([{"type": "text", "text": text}] if text else []) + state["calls"]
+            extra: list[dict] = []
+            if not any(c["name"] in ("show_diagram", "show_model") for c in state["calls"]):
+                for mod, kind in ((diagram, "diagram"), (model3d, "model")):
+                    cleaned, found = mod.extract_from_text(text)
+                    if found:  # le modèle a écrit le schéma / la maquette au lieu de le dessiner
+                        text = cleaned
+                        extra = [{"type": kind, "data": found}]
+                        yield {"type": "text_replace", "text": text}
+                        yield found
+                        break
+            content = ([{"type": "text", "text": text}] if text else []) + extra + state["calls"]
             assistant_msg = {"role": "assistant", "content": content or [{"type": "text", "text": ""}]}
             self.db.add_messages(conversation_id, to_save + [assistant_msg])
             history.append(assistant_msg)

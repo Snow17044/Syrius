@@ -15,7 +15,7 @@ from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
 from .store_redis import RedisDatabase, RedisError, UpstashREST
-from .tools import gmail
+from .tools import gmail, tiles
 from .tools.places import round_location
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
@@ -24,13 +24,15 @@ STATIC_FILES = {
     "app.js": "text/javascript", "style.css": "text/css", "sw.js": "text/javascript",
     "manifest.webmanifest": "application/manifest+json", "markdown.js": "text/javascript",
     "leaflet.js": "text/javascript", "leaflet.css": "text/css", "hud.js": "text/javascript",
+    "maplibre-gl.js": "text/javascript", "maplibre-gl-worker.js": "text/javascript",
+    "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
+    "three.min.js": "text/javascript", "model3d.js": "text/javascript",
+    "local.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
-# Seule exception aux ressources externes : les images de la carte (tuiles CARTO / OpenStreetMap).
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
-       "img-src 'self' data: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com "
-       "https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com; "
+       "img-src 'self' data:; "
        "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
        "frame-ancestors 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self'")
 
@@ -178,6 +180,35 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if name not in ICON_FILES:
             raise HTTPException(404)
         return FileResponse(WEB_DIR / "icons" / name, media_type=ICON_FILES[name])
+
+    @app.get("/tiles/{z}/{x}/{y}.png", dependencies=[Depends(require_auth)])
+    def tile(z: int, x: int, y: int):
+        """Fond de carte relayé par le serveur (voir tools/tiles.py)."""
+        try:
+            png = tiles.fetch_tile(z, x, y)
+        except tiles.TileError:
+            raise HTTPException(404) from None
+        return Response(png, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=604800"})
+
+    @app.get("/map3d/t/{z}/{x}/{y}.pbf", dependencies=[Depends(require_auth)])
+    def tile_3d(z: int, x: int, y: int):
+        """Carte 3D : données vectorielles relayées (voir tools/tiles.py)."""
+        try:
+            data = tiles.fetch_vector(z, x, y)
+        except tiles.TileError:
+            raise HTTPException(404) from None
+        return Response(data, media_type="application/x-protobuf",
+                        headers={"Cache-Control": "private, max-age=604800"})
+
+    @app.get("/map3d/fonts/{fontstack}/{rng}.pbf", dependencies=[Depends(require_auth)])
+    def glyphs_3d(fontstack: str, rng: str):
+        try:
+            data = tiles.fetch_glyphs(fontstack, rng)
+        except tiles.TileError:
+            raise HTTPException(404) from None
+        return Response(data, media_type="application/x-protobuf",
+                        headers={"Cache-Control": "private, max-age=2592000"})
 
     @app.get("/health")
     async def health():
