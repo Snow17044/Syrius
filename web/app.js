@@ -477,6 +477,9 @@ $("#open-settings").addEventListener("click", async () => {
   $("#s-voice").checked = !!s.voice_reply;
   await renderBrains(s);
   $("#outlook-box").classList.toggle("hidden", !s.outlook);
+  $("#google-box").classList.toggle("hidden", !s.google);
+  $("#google-connect").textContent = s.google_connected ? "Reconnecter Gmail" : "Connecter Gmail";
+  $("#google-msg").textContent = s.google_connected ? "✅ Gmail est connecté." : "";
   $("#outlook-msg").textContent = "";
   $("#s-email").textContent = s.email_enabled
     ? "✅ Boîte mail connectée (lecture seule ; chaque envoi demande ta confirmation)."
@@ -528,6 +531,16 @@ async function renderMemories() {
     ul.appendChild(li);
   }
 }
+
+$("#google-connect").addEventListener("click", async () => {
+  const msg = $("#google-msg");
+  try {
+    const { url } = await api("/api/email/google/start", { method: "POST" });
+    msg.textContent = "La page de Google s'ouvre : connecte-toi, accepte, puis reviens ici et rouvre les réglages.";
+    // Dans l'application Android, ce lien s'ouvre dans le navigateur du téléphone (Google l'exige).
+    if (Native) location.href = url; else window.open(url, "_blank", "noopener");
+  } catch (err) { msg.textContent = "⚠ " + err.message; }
+});
 
 $("#outlook-connect").addEventListener("click", async () => {
   const msg = $("#outlook-msg");

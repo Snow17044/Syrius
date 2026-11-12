@@ -10,6 +10,7 @@ from ..config import Config
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
+from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
 
@@ -105,7 +106,7 @@ class ToolExecutor:
     def __init__(self, cfg: Config, db: Database):
         self.cfg = cfg
         self.db = db
-        self.email = EmailClient(cfg, db)
+        self.email = GmailClient(cfg, db) if cfg.email_mode == "google" else EmailClient(cfg, db)
 
     async def run(self, name: str, args) -> tuple[str, bool, dict | None]:
         """Renvoie (résultat texte, est_erreur, événement_pour_l_interface)."""

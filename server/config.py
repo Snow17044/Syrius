@@ -68,6 +68,15 @@ class Config:
     # "password" (mot de passe d'application, ex. Gmail) ou "outlook" (OAuth2 Microsoft)
     email_auth: str = field(default_factory=lambda: _env("SYRIUS_EMAIL_AUTH", "password"))
     ms_client_id: str = field(default_factory=lambda: _env("SYRIUS_MS_CLIENT_ID"))
+    # Gmail par la connexion officielle Google (bouton « Connecter Gmail »)
+    google_client_id: str = field(default_factory=lambda: _env("GOOGLE_CLIENT_ID"))
+    google_client_secret: str = field(default_factory=lambda: _env("GOOGLE_CLIENT_SECRET"))
+
+    @property
+    def email_mode(self) -> str:
+        if self.google_client_id and self.google_client_secret:
+            return "google"
+        return self.email_auth
 
     @property
     def db_path(self) -> Path:
@@ -75,6 +84,8 @@ class Config:
 
     @property
     def email_enabled(self) -> bool:
+        if self.email_mode == "google":
+            return True
         if not (self.imap_host and self.email_user):
             return False
         if self.email_auth == "outlook":
