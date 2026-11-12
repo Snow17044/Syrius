@@ -157,3 +157,17 @@ def test_demande_trop_lourde_reessaie_en_plus_leger(make_client):
     assert "légère." in r.text
     assert [q["_provider"] for q in c.fake.requests] == ["groq", "groq"]  # même cerveau, sans changer
     assert c.fake.requests[1]["max_tokens"] < c.fake.requests[0]["max_tokens"]
+
+
+def test_ia_hors_ligne_securisee():
+    src = open("web/local.js", encoding="utf-8").read()
+    for danger in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function"):
+        assert danger not in src
+    java = open("android/app/src/main/java/fr/syrius/app/LocalAI.java", encoding="utf-8").read()
+    # seuls deux fichiers connus, vérifiés par empreinte SHA-256 avant usage
+    assert java.count('"Qwen2.5-') == 2 and "MessageDigest.getInstance(\"SHA-256\")" in java
+    assert "https://huggingface.co/litert-community/" in java and "http://" not in java
+    main = open("android/app/src/main/java/fr/syrius/app/MainActivity.java", encoding="utf-8").read()
+    for fn in ("localInfo", "localDownload", "localCancel", "localDelete", "localChat", "localStop"):
+        body = main.split("public " + ("String " if fn in ("localInfo", "localDownload", "localChat") else "void ") + fn)[1][:400]
+        assert "trusted()" in body, fn

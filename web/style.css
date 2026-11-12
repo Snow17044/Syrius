@@ -258,3 +258,10 @@ details input { margin-top: 8px; }
 .m3d-part { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .m3d-part span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m3d-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+
+/* ---------- IA hors ligne ---------- */
+.local-actions { display: flex; gap: 8px; margin: 8px 0; }
+.local-actions button { flex: 1; }
+.local-progress { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.local-progress.hidden { display: none; }
+.local-progress progress { flex: 1; height: 10px; accent-color: var(--accent); }

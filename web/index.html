@@ -21,6 +21,7 @@
   <script src="/static/three.min.js" defer></script>
   <script src="/static/model3d.js" defer></script>
   <script src="/static/markdown.js" defer></script>
+  <script src="/static/local.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -180,6 +181,21 @@
       <p class="muted small" id="s-web-note"></p>
       <label class="switch"><input id="s-location" type="checkbox"><span>Partager ma position approximative (cartes « près de moi »)</span></label>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
+
+      <div id="local-box" class="hidden">
+        <h4>📴 IA hors ligne (sur ce téléphone)</h4>
+        <p class="muted small">Gratuite, sans limite et sans Internet : elle tourne sur ton téléphone. Moins
+          intelligente que les IA en ligne (pas de 3D, de cartes ni d'actions sur le téléphone).</p>
+        <label>Modèle <select id="local-model"></select></label>
+        <div class="local-actions">
+          <button type="button" id="local-download" class="ghost">⬇ Télécharger</button>
+          <button type="button" id="local-delete" class="ghost hidden">🗑 Supprimer</button>
+        </div>
+        <div id="local-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+        <p id="local-status" class="small"></p>
+        <label class="switch"><input id="local-fallback" type="checkbox"><span>Prendre le relais tout seul (pas de réseau ou IA en ligne épuisées)</span></label>
+        <label class="switch"><input id="local-force" type="checkbox"><span>Toujours utiliser l'IA hors ligne</span></label>
+      </div>
 
       <h4>Emails</h4>
       <p id="s-email" class="muted small"></p>

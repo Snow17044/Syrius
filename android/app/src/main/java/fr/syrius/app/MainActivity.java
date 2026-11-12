@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
     private TextToSpeech tts;
     private SpeechRecognizer recognizer;
     private DeviceActions device;
+    private LocalAI local;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,6 +114,7 @@ public class MainActivity extends Activity {
             }
         });
         device = new DeviceActions(this);
+        local = new LocalAI(this);
         web.addJavascriptInterface(new Bridge(), "SyriusAndroid");
 
         tts = new TextToSpeech(this, status -> {
@@ -308,6 +310,53 @@ public class MainActivity extends Activity {
             return "ok";
         }
 
+        // ---------------------------------------------------------- IA hors ligne
+        @JavascriptInterface
+        public String localInfo() {
+            if (!trusted()) return "{}";
+            return local.info();
+        }
+
+        @JavascriptInterface
+        public String localDownload(String id) {
+            if (id == null || !trusted()) return "Refusé";
+            return local.download(id);
+        }
+
+        @JavascriptInterface
+        public void localCancel() {
+            if (trusted()) local.cancel();
+        }
+
+        @JavascriptInterface
+        public void localDelete() {
+            if (trusted()) local.delete();
+        }
+
+        /** Conversation hors ligne : la réponse arrive morceau par morceau dans window.SyriusLocal._chunk. */
+        @JavascriptInterface
+        public String localChat(String requestId, String json) {
+            if (requestId == null || json == null || json.length() > 20000 || !trusted()) return "Refusé";
+            if (!requestId.matches("[A-Za-z0-9_-]{1,40}")) return "Refusé";
+            final JSONObject req;
+            try {
+                req = new JSONObject(json);
+            } catch (Exception e) {
+                return "Demande illisible";
+            }
+            if (!local.ready()) return "IA hors ligne non installée";
+            local.chat(requestId, req, (id, text, done, error) -> sendJs(
+                    "window.SyriusLocal && window.SyriusLocal._chunk(" + JSONObject.quote(id) + ", "
+                            + JSONObject.quote(text == null ? "" : text) + ", " + done + ", "
+                            + (error == null ? "null" : JSONObject.quote(error)) + ")"));
+            return "ok";
+        }
+
+        @JavascriptInterface
+        public void localStop(String requestId) {
+            if (requestId != null && trusted()) local.stop(requestId);
+        }
+
         @JavascriptInterface
         public void stopListening() {
             runOnUiThread(() -> {
@@ -337,6 +386,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (recognizer != null) recognizer.destroy();
         if (tts != null) tts.shutdown();
+        if (local != null) local.shutdown();
         web.destroy();
         super.onDestroy();
     }
