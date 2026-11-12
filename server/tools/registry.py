@@ -42,21 +42,21 @@ BASE_TOOLS = [
           "CHAQUE étape une note pratique : comment faire, avec quoi, combien ça coûte, combien de temps. "
           "La numérotation (1, 1.1, 1.2…) est ajoutée automatiquement selon l'ordre des idées.",
           {"title": {"type": "string", "description": "Titre court du schéma"},
-           "style": {"type": "string", "enum": list(diagram.STYLES),
-                     "description": "carte = plan en phases autour de l'objectif (par défaut) ; etapes = suite "
+           "style": {"type": "string",
+                     "description": "carte (par défaut) = plan en phases autour de l'objectif ; etapes = suite "
                                     "linéaire ; arbre = hiérarchie / organisation"},
            "nodes": {"type": "array", "description": "Les idées (2 à 30), dans l'ordre. La première est l'objectif.",
                      "items": {"type": "object", "properties": {
                          "id": {"type": "string", "description": "Identifiant court unique, ex. p1, p1e2"},
                          "label": {"type": "string", "description": "Texte court et concret (2 à 6 mots)"},
                          "parent": {"type": "string", "description": "id de l'idée parente (vide pour l'objectif)"},
-                         "kind": {"type": "string", "enum": list(diagram.KINDS)},
-                         "note": {"type": "string", "description": "Détail concret : comment, outil, coût, durée"}},
-                         "required": ["id", "label"]}},
+                         "kind": {"type": "string", "description": "objectif, phase, etape, action, outil, "
+                                                                 "budget, delai, risque, idee, ressource ou personne"},
+                         "note": {"type": "string", "description": "Détail concret : comment, outil, coût, durée"}}}},
            "links": {"type": "array", "description": "Liens supplémentaires facultatifs entre idées",
                      "items": {"type": "object", "properties": {
                          "from": {"type": "string"}, "to": {"type": "string"},
-                         "label": {"type": "string"}}, "required": ["from", "to"]}}},
+                         "label": {"type": "string"}}}}},
           ["title", "nodes"]),
 ]
 

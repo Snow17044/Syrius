@@ -304,6 +304,7 @@ async function sendMessage(text) {
         let ev;
         try { ev = JSON.parse(chunk.slice(6)); } catch (_) { continue; }
         if (ev.type === "text") { view.text += ev.text; repaint(); }
+        else if (ev.type === "text_replace") { view.text = String(ev.text || ""); repaint(); }
         else if (ev.type === "tool") { tools.push(ev.label); setTools(view, [...new Set(tools)]); scrollDown(); }
         else if (ev.type === "action") { view.bubble.appendChild(actionCard(ev)); scrollDown(); }
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }

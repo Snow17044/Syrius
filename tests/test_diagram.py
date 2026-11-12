@@ -94,3 +94,44 @@ def test_types_d_idees():
     d = diagram.validate({"title": "x", "nodes": [{"id": "c", "label": "C", "kind": "objectif"},
                                                   {"id": "a", "label": "A", "parent": "c", "kind": "<script>"}]})
     assert d["nodes"][0]["kind"] == "objectif" and d["nodes"][1]["kind"] == ""
+
+
+# ---------------------------------------------------------------- schéma écrit en texte
+import json as _json
+
+PLAN = {"title": "Permis", "nodes": [{"id": "c", "label": "Avoir le permis"},
+                                      {"id": "p1", "label": "Code", "parent": "c"}]}
+
+
+@pytest.mark.parametrize("text", [
+    "Voici ton schéma :\n```json\n" + _json.dumps(PLAN) + "\n```\nBonne chance !",
+    "Voici ton schéma :\n```\n" + _json.dumps({"name": "show_diagram", "arguments": PLAN}) + "\n```\nBonne chance !",
+    "Voici ton schéma : show_diagram(" + _json.dumps(PLAN) + ")\nBonne chance !",
+    "Voici ton schéma : " + _json.dumps({"name": "show_diagram", "parameters": _json.dumps(PLAN)}) + "\nBonne chance !",
+])
+def test_schema_ecrit_en_texte_est_dessine(text):
+    cleaned, ev = diagram.extract_from_text(text)
+    assert ev and ev["type"] == "diagram" and ev["title"] == "Permis"
+    assert "nodes" not in cleaned and cleaned.startswith("Voici ton schéma") and cleaned.endswith("Bonne chance !")
+
+
+@pytest.mark.parametrize("text", ["Bonjour", "Un objet {\"a\": 1} sans schéma", "```json\n{\"nodes\": \"x\"}\n```",
+                                  "{\"nodes\": [1, 2]}", "{ pas du json nodes"])
+def test_texte_normal_inchange(text):
+    assert diagram.extract_from_text(text) == (text, None)
+
+
+@pytest.mark.anyio
+async def test_agent_dessine_le_schema_ecrit_en_texte(make_client):
+    from tests.conftest import H, login, reply
+    c = make_client([reply("Voilà :\n```json\n" + _json.dumps(PLAN) + "\n```")])
+    login(c)
+    cid = c.post("/api/conversations", headers=H).json()["id"]
+    r = c.post(f"/api/conversations/{cid}/messages", json={"text": "fais un schéma"}, headers=H)
+    events = [_json.loads(l[6:]) for l in r.text.splitlines() if l.startswith("data: ")]
+    types = [e["type"] for e in events]
+    assert "diagram" in types and "text_replace" in types
+    assert next(e for e in events if e["type"] == "text_replace")["text"] == "Voilà :"
+    conv = c.get(f"/api/conversations/{cid}").json()
+    last = conv["messages"][-1]
+    assert last["text"] == "Voilà :" and last["diagrams"][0]["title"] == "Permis"

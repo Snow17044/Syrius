@@ -108,6 +108,12 @@ def display_messages(stored: list[dict]) -> list[dict]:
                     diagrams.append(diagram.validate(b.get("input")))
                 except diagram.DiagramError:
                     pass
+            elif b.get("type") == "diagram":
+                try:
+                    diagrams.append(diagram.validate({k: v for k, v in (b.get("data") or {}).items()
+                                                      if k in ("title", "style", "nodes", "links")}))
+                except diagram.DiagramError:
+                    pass
         if out and out[-1]["role"] == "assistant":  # fusionne les étapes d'une même réponse
             prev = out[-1]
             prev["text"] = "\n\n".join(t for t in [prev["text"], *texts] if t)
@@ -226,7 +232,15 @@ class Agent:
             log.info("Réponse %s : %d caractères, outils=%s", provider.name, len(state["text"]),
                      [c["name"] for c in state["calls"]] or "aucun")
             text = _THINK_TAGS.sub("", state["text"])
-            content = ([{"type": "text", "text": text}] if text else []) + state["calls"]
+            extra: list[dict] = []
+            if not any(c["name"] == "show_diagram" for c in state["calls"]):
+                cleaned, found = diagram.extract_from_text(text)
+                if found:  # le modèle a écrit le schéma au lieu de le dessiner : on le dessine
+                    text = cleaned
+                    extra = [{"type": "diagram", "data": found}]
+                    yield {"type": "text_replace", "text": text}
+                    yield found
+            content = ([{"type": "text", "text": text}] if text else []) + extra + state["calls"]
             assistant_msg = {"role": "assistant", "content": content or [{"type": "text", "text": ""}]}
             self.db.add_messages(conversation_id, to_save + [assistant_msg])
             history.append(assistant_msg)
