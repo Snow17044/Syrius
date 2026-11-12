@@ -25,7 +25,7 @@ STATIC_FILES = {
     "manifest.webmanifest": "application/manifest+json", "markdown.js": "text/javascript",
     "leaflet.js": "text/javascript", "leaflet.css": "text/css", "hud.js": "text/javascript",
     "maplibre-gl.js": "text/javascript", "maplibre-gl-worker.js": "text/javascript",
-    "maplibre-gl.css": "text/css",
+    "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 

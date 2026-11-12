@@ -10,7 +10,7 @@ from ..config import Config
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
-from . import places, web
+from . import diagram, places, web
 from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -33,6 +33,26 @@ BASE_TOOLS = [
           {"fact": {"type": "string", "description": "L'information, en une phrase courte."}}, ["fact"]),
     _tool("forget", "Supprime un souvenir par son numéro (voir la liste des souvenirs).",
           {"memory_id": {"type": "integer"}}, ["memory_id"]),
+    _tool("show_diagram",
+          "Dessine un SCHÉMA 3D holographique dans l'app pour visualiser une idée, un projet, un plan, "
+          "un concept, des étapes ou une organisation. Utilise-le dès qu'on demande un schéma, une carte "
+          "mentale, un plan visuel, ou d'organiser / expliquer une idée visuellement.",
+          {"title": {"type": "string", "description": "Titre court du schéma"},
+           "style": {"type": "string", "enum": list(diagram.STYLES),
+                     "description": "carte = carte mentale autour d'une idée centrale ; etapes = processus "
+                                    "dans l'ordre ; arbre = hiérarchie"},
+           "nodes": {"type": "array", "description": "Les idées (2 à 30). La première est l'idée centrale.",
+                     "items": {"type": "object", "properties": {
+                         "id": {"type": "string", "description": "Identifiant court unique, ex. n1"},
+                         "label": {"type": "string", "description": "Texte court (2 à 5 mots)"},
+                         "parent": {"type": "string", "description": "id de l'idée parente (vide pour la centrale)"},
+                         "note": {"type": "string", "description": "Détail facultatif, une phrase"}},
+                         "required": ["id", "label"]}},
+           "links": {"type": "array", "description": "Liens supplémentaires facultatifs entre idées",
+                     "items": {"type": "object", "properties": {
+                         "from": {"type": "string"}, "to": {"type": "string"},
+                         "label": {"type": "string"}}, "required": ["from", "to"]}}},
+          ["title", "nodes"]),
 ]
 
 EMAIL_TOOLS = [
@@ -78,6 +98,7 @@ TOOL_LABELS = {
     "web_search": "Je cherche sur le web",
     "web_read": "Je lis la page",
     "show_places": "J'affiche la carte",
+    "show_diagram": "Je dessine le schéma 3D",
     **DEVICE_LABELS,
 }
 
@@ -216,6 +237,14 @@ class ToolExecutor:
                      {"lat": found[0]["lat"], "lon": found[0]["lon"]}, "me": near, "places": found}
             summary = [{k: p[k] for k in ("name", "address", "distance_m") if k in p} for p in found]
             return web.wrap_untrusted({"lieux_affiches_sur_la_carte": summary}), False, event
+
+        if name == "show_diagram":
+            try:
+                event = diagram.validate(args)
+            except diagram.DiagramError as e:
+                raise InvalidInput(str(e)) from None
+            return (f"Schéma « {event['title']} » affiché en 3D ({len(event['nodes'])} idées). "
+                    "Résume-le en une ou deux phrases, sans le recopier."), False, event
 
         if name == "web_read":
             a = _check(args, {"url": str}, ["url"])

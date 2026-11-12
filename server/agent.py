@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import Config
 from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, providers_from_config
+from .tools import diagram
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
@@ -100,12 +101,20 @@ def display_messages(stored: list[dict]) -> list[dict]:
         texts = [b["text"] for b in m["content"] if b.get("type") == "text" and b["text"]]
         tools = [TOOL_LABELS.get(b.get("name", ""), b.get("name", ""))
                  for b in m["content"] if b.get("type") == "tool_use"]
+        diagrams = []
+        for b in m["content"]:  # les schémas 3D restent consultables dans l'historique
+            if b.get("type") == "tool_use" and b.get("name") == "show_diagram":
+                try:
+                    diagrams.append(diagram.validate(b.get("input")))
+                except diagram.DiagramError:
+                    pass
         if out and out[-1]["role"] == "assistant":  # fusionne les étapes d'une même réponse
             prev = out[-1]
             prev["text"] = "\n\n".join(t for t in [prev["text"], *texts] if t)
             prev["tools"] += tools
+            prev["diagrams"] = prev.get("diagrams", []) + diagrams
         else:
-            out.append({"role": "assistant", "text": "\n\n".join(texts), "tools": tools})
+            out.append({"role": "assistant", "text": "\n\n".join(texts), "tools": tools, "diagrams": diagrams})
     return out
 
 

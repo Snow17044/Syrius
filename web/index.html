@@ -17,6 +17,7 @@
   <script src="/static/leaflet.js" defer></script>
   <script src="/static/maplibre-gl.js" defer></script>
   <script src="/static/hud.js" defer></script>
+  <script src="/static/diagram.js" defer></script>
   <script src="/static/markdown.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
@@ -101,6 +102,27 @@
         <span class="hud-corner bl"></span><span class="hud-corner br"></span>
       </div>
       <ol id="hud-list"></ol>
+    </div>
+  </section>
+
+  <!-- Hologramme : schéma d'idées en 3D -->
+  <section id="holo" class="hidden" aria-label="Schéma 3D">
+    <div class="hud-frame">
+      <header class="hud-head">
+        <div><span class="hud-tag">◈ SYRIUS · HOLOGRAMME</span><div id="holo-title" class="hud-query"></div></div>
+        <div class="holo-actions">
+          <button id="holo-spin" class="icon-btn" aria-label="Rotation automatique">⟳</button>
+          <button id="holo-close" class="icon-btn" aria-label="Fermer le schéma">✕</button>
+        </div>
+      </header>
+      <div class="hud-map-wrap holo-wrap">
+        <canvas id="holo-canvas"></canvas>
+        <div class="hud-scan" aria-hidden="true"></div>
+        <span class="hud-corner tl"></span><span class="hud-corner tr"></span>
+        <span class="hud-corner bl"></span><span class="hud-corner br"></span>
+      </div>
+      <p id="holo-detail" class="holo-detail hidden"></p>
+      <p class="holo-hint">Glisse pour tourner · pince pour zoomer · touche une idée pour le détail</p>
     </div>
   </section>
 
