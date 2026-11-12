@@ -22,6 +22,7 @@
   <script src="/static/model3d.js" defer></script>
   <script src="/static/markdown.js" defer></script>
   <script src="/static/local.js" defer></script>
+  <script src="/static/voice.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -83,6 +84,7 @@
       </div>
 
       <form id="composer">
+        <button type="button" id="voice-open" class="icon-btn hidden" aria-label="Mode conversation">🎧</button>
         <button type="button" id="mic" class="icon-btn hidden" aria-label="Parler">🎙</button>
         <textarea id="input" rows="1" placeholder="Parle à Syrius…" aria-label="Message" maxlength="20000"></textarea>
         <button type="submit" id="send" class="send" aria-label="Envoyer">➤</button>
@@ -106,6 +108,17 @@
       </div>
       <ol id="hud-list"></ol>
     </div>
+  </section>
+
+  <!-- Mode conversation (mains libres) -->
+  <section id="voice" class="hidden" aria-label="Mode conversation" data-phase="">
+    <button id="voice-close" class="icon-btn voice-close" aria-label="Terminer la conversation">✕</button>
+    <div class="voice-tag">◈ SYRIUS · MODE CONVERSATION</div>
+    <button id="voice-orb" class="voice-orb" aria-label="Couper la parole ou reprendre"><span></span><i></i></button>
+    <p id="voice-status" class="voice-status"></p>
+    <p id="voice-heard" class="voice-heard"></p>
+    <p id="voice-reply" class="voice-reply"></p>
+    <p class="voice-hint">Dites « stop » ou « merci Syrius » pour terminer · touchez l'orbe pour couper la parole</p>
   </section>
 
   <!-- Studio 3D : maquettes holographiques -->
@@ -182,8 +195,34 @@
       <label class="switch"><input id="s-location" type="checkbox"><span>Partager ma position approximative (cartes « près de moi »)</span></label>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
 
+      <div id="wake-box" class="hidden">
+        <h4>🎙 « Hey Syrius » (même app fermée)</h4>
+        <p class="muted small">Dis « Hey Syrius » : un bip, tu parles, il répond à voix haute, même écran éteint.
+          Le mot-clé est reconnu sur ton téléphone, rien n'est envoyé avant. Consomme un peu plus de batterie ;
+          une notification « Syrius vous écoute » reste affichée.</p>
+        <button type="button" id="wake-download" class="ghost wide">⬇ Installer la reconnaissance vocale (42 Mo)</button>
+        <div id="wake-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+        <label class="switch"><input id="wake-on" type="checkbox"><span>Écouter « Hey Syrius » en permanence</span></label>
+        <button type="button" id="wake-battery" class="ghost wide">🔋 Ne pas couper Syrius (réglage batterie)</button>
+        <p id="wake-status" class="small"></p>
+      </div>
+
+      <div id="briefing-box" class="hidden">
+        <h4>☀️ Briefing du matin</h4>
+        <p class="muted small">Chaque jour, une notification : touche-la et Syrius te lit la météo, tes rappels et les actus.</p>
+        <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le briefing</span></label>
+        <label>Heure <input id="briefing-time" type="time" value="07:30"></label>
+        <p id="briefing-msg" class="small"></p>
+      </div>
+
       <div id="local-box" class="hidden">
         <h4>📴 IA hors ligne (sur ce téléphone)</h4>
+        <div id="local-update" class="hidden">
+          <p class="small">⚠ Ton application Syrius est une <b>ancienne version</b> : l'IA hors ligne n'y est pas.
+            Désinstalle-la, supprime l'ancien fichier <b>Syrius.apk</b> de tes Téléchargements, puis installe la nouvelle.</p>
+          <a class="ghost wide btn-link" href="https://github.com/Snow17044/Syrius/releases/download/android-latest/Syrius.apk">⬇ Télécharger la nouvelle version</a>
+        </div>
+        <div id="local-ui">
         <p class="muted small">Gratuite, sans limite et sans Internet : elle tourne sur ton téléphone. Moins
           intelligente que les IA en ligne (pas de 3D, de cartes ni d'actions sur le téléphone).</p>
         <label>Modèle <select id="local-model"></select></label>
@@ -195,6 +234,7 @@
         <p id="local-status" class="small"></p>
         <label class="switch"><input id="local-fallback" type="checkbox"><span>Prendre le relais tout seul (pas de réseau ou IA en ligne épuisées)</span></label>
         <label class="switch"><input id="local-force" type="checkbox"><span>Toujours utiliser l'IA hors ligne</span></label>
+        </div>
       </div>
 
       <h4>Emails</h4>

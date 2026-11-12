@@ -13,6 +13,8 @@ import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.provider.AlarmClock;
+import android.provider.CalendarContract;
+import android.os.Build;
 import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.provider.Settings;
@@ -31,6 +33,7 @@ import java.util.Locale;
  */
 final class DeviceActions {
     static final int REQ_CONTACTS = 43;
+    static final int REQ_NOTIF = 45;
 
     private final Activity activity;
     private JSONObject pending; // action en attente de la permission « contacts »
@@ -55,6 +58,9 @@ final class DeviceActions {
                 case "phone_flashlight": flashlight(p.getBoolean("on")); break;
                 case "phone_volume": volume(p.getInt("level")); break;
                 case "phone_settings": settings(p.getString("page")); break;
+                case "phone_reminder": reminder(p); break;
+                case "phone_reminder_cancel": Reminders.remove(activity, p.getString("id")); toast("Rappel annulé"); break;
+                case "phone_calendar": calendar(p); break;
                 default: toast("Action inconnue");
             }
         } catch (Exception e) {
@@ -84,6 +90,33 @@ final class DeviceActions {
                 .putExtra(AlarmClock.EXTRA_MESSAGE, clip(p.optString("label", "Syrius"), 60))
                 .putExtra(AlarmClock.EXTRA_SKIP_UI, true);
         start(i, String.format(Locale.FRANCE, "Réveil réglé à %02dh%02d", h, m));
+    }
+
+    private void reminder(JSONObject p) throws Exception {
+        Reminders.ensureChannel(activity);
+        Reminders.add(activity, p.getString("id"), clip(p.getString("text"), 200), p.getLong("at"),
+                p.optString("repeat", "none"));
+        askNotifications(activity);
+        toast("Rappel programmé : " + clip(p.optString("label", ""), 60));
+    }
+
+    /** Android 13+ : les notifications doivent être autorisées une fois. */
+    static void askNotifications(Activity a) {
+        if (Build.VERSION.SDK_INT >= 33
+                && a.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            a.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+        }
+    }
+
+    private void calendar(JSONObject p) throws Exception {
+        long start = p.getLong("start"), end = p.getLong("end");
+        if (end <= start) throw new IllegalArgumentException();
+        Intent i = new Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+                .putExtra(CalendarContract.Events.TITLE, clip(p.getString("title"), 120))
+                .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+                .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end)
+                .putExtra(CalendarContract.Events.EVENT_LOCATION, clip(p.optString("location", ""), 160));
+        start(i, "Vérifie puis enregistre le rendez-vous");
     }
 
     private void timer(JSONObject p) throws Exception {

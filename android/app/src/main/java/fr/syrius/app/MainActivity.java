@@ -13,6 +13,8 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.view.WindowManager;
 import android.text.InputType;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
@@ -51,6 +53,7 @@ public class MainActivity extends Activity {
     private SpeechRecognizer recognizer;
     private DeviceActions device;
     private LocalAI local;
+    private boolean pendingBriefing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -107,6 +110,15 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageFinished(WebView view, String url) {
+                if (pendingBriefing) {  // ouverte depuis la notification du briefing du matin
+                    pendingBriefing = false;
+                    view.postDelayed(() -> view.evaluateJavascript(
+                            "window.syriusBriefing && window.syriusBriefing()", null), 1500);
+                }
+            }
+
+            @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
                     showOfflineDialog();
@@ -115,11 +127,33 @@ public class MainActivity extends Activity {
         });
         device = new DeviceActions(this);
         local = new LocalAI(this);
+        Reminders.ensureChannel(this);
+        Reminders.rescheduleAll(this);
+        // « Hey Syrius » : relancé à l'ouverture de l'app (Android l'interdit au démarrage du téléphone).
+        if (WakeService.enabled(this) && WakeModel.ready(this)
+                && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            try { WakeService.setEnabled(this, true); } catch (Exception ignored) { }
+        }
+        pendingBriefing = getIntent() != null && getIntent().getBooleanExtra(Reminders.EXTRA_BRIEFING, false);
         web.addJavascriptInterface(new Bridge(), "SyriusAndroid");
 
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(Locale.FRANCE);
+                // Prévient la page quand Syrius a fini de parler (mode conversation : il réécoute ensuite).
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) { }
+
+                    @Override
+                    public void onDone(String id) {
+                        sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
+                    }
+
+                    @Override
+                    public void onError(String id) {
+                        sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
+                    }
+                });
             }
         });
 
@@ -290,6 +324,16 @@ public class MainActivity extends Activity {
             tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, "syrius");
         }
 
+        /** Garde l'écran allumé pendant le mode conversation. */
+        @JavascriptInterface
+        public void keepScreenOn(boolean on) {
+            if (!trusted()) return;
+            runOnUiThread(() -> {
+                if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            });
+        }
+
         @JavascriptInterface
         public void startListening() {
             if (!trusted()) return;
@@ -308,6 +352,85 @@ public class MainActivity extends Activity {
             }
             runOnUiThread(() -> device.run(req));
             return "ok";
+        }
+
+        /** Fonctions disponibles dans cette version de l'application. */
+        @JavascriptInterface
+        public String features() {
+            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\"]";
+        }
+
+        @JavascriptInterface
+        public String getBriefing() {
+            if (!trusted()) return "{}";
+            return Reminders.briefingJson(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String setBriefing(boolean on, int hour, int minute) {
+            if (!trusted()) return "Refusé";
+            try {
+                Reminders.setBriefing(MainActivity.this, on, hour, minute);
+            } catch (Exception e) {
+                return "Heure invalide";
+            }
+            if (on) runOnUiThread(() -> DeviceActions.askNotifications(MainActivity.this));
+            return "ok";
+        }
+
+        // ---------------------------------------------------------- « Hey Syrius »
+        @JavascriptInterface
+        public String wakeInfo() {
+            if (!trusted()) return "{}";
+            String m = WakeModel.info(MainActivity.this);
+            return m.substring(0, m.length() - 1) + ",\"enabled\":" + WakeService.enabled(MainActivity.this) + "}";
+        }
+
+        @JavascriptInterface
+        public String wakeDownload() {
+            if (!trusted()) return "Refusé";
+            return WakeModel.download(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String wakeEnable(boolean on) {
+            if (!trusted()) return "Refusé";
+            if (on && !WakeModel.ready(MainActivity.this)) return "Télécharge d'abord la reconnaissance vocale.";
+            if (on && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+                return "Autorise le micro puis réessaie.";
+            }
+            try {
+                WakeService.setEnabled(MainActivity.this, on);
+            } catch (Exception e) {
+                return "Impossible de démarrer l'écoute : " + e.getClass().getSimpleName();
+            }
+            if (on) runOnUiThread(() -> DeviceActions.askNotifications(MainActivity.this));
+            return "ok";
+        }
+
+        @JavascriptInterface
+        public void wakeDelete() {
+            if (!trusted()) return;
+            WakeService.setEnabled(MainActivity.this, false);
+            WakeModel.delete(MainActivity.this);
+        }
+
+        /** Ouvre le réglage « ne pas optimiser la batterie » (sinon le téléphone peut couper l'écoute). */
+        @JavascriptInterface
+        public void batterySettings() {
+            if (!trusted()) return;
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    try {
+                        startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
         }
 
         // ---------------------------------------------------------- IA hors ligne
@@ -362,6 +485,14 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (recognizer != null) recognizer.stopListening();
             });
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (intent != null && intent.getBooleanExtra(Reminders.EXTRA_BRIEFING, false)) {
+            sendJs("window.syriusBriefing && window.syriusBriefing()");
         }
     }
 

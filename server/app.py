@@ -27,7 +27,7 @@ STATIC_FILES = {
     "maplibre-gl.js": "text/javascript", "maplibre-gl-worker.js": "text/javascript",
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript",
-    "local.js": "text/javascript",
+    "local.js": "text/javascript", "voice.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -46,6 +46,7 @@ class LoginBody(BaseModel):
 class MessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     location: dict | None = None  # position approximative envoyée par l'app (jamais enregistrée)
+    voice: bool = False  # mode conversation : la réponse sera lue à voix haute
 
 
 class ConversationPatch(BaseModel):
@@ -308,7 +309,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         async def stream():
             try:
                 loc = round_location(body.location) if db.get_settings().get("location", True) else None
-                async for event in agent.chat(cid, body.text, loc):
+                async for event in agent.chat(cid, body.text, loc, voice=body.voice):
                     yield sse(event)
                 if first and conv["title"] == "Nouvelle discussion" and db.get_messages(cid):
                     title = agent.make_title(body.text)

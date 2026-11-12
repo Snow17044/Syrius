@@ -46,6 +46,7 @@ async function showApp() {
   const last = store.get("syrius:lastConv");
   if (last && state.conversations.some((c) => c.id === last)) await openConversation(last);
   else newConversationView();
+  if (briefingWaiting) { briefingWaiting = false; window.syriusBriefing(); }
 }
 
 $("#login-form").addEventListener("submit", async (e) => {
@@ -257,8 +258,12 @@ let localTimer = null;
 function refreshLocalBox() {
   const l = L();
   const box = $("#local-box");
-  if (!l || !l.available()) { box.classList.add("hidden"); return; }
-  box.classList.remove("hidden");
+  const inApp = !!window.SyriusAndroid;
+  const old = inApp && !(l && l.available()); // application installée trop ancienne
+  box.classList.toggle("hidden", !inApp);
+  $("#local-update").classList.toggle("hidden", !old);
+  $("#local-ui").classList.toggle("hidden", old);
+  if (!inApp || old) return;
   const i = l.info() || {};
   const sel = $("#local-model");
   if (!sel.options.length) {
@@ -330,7 +335,8 @@ async function answerLocally(view, note) {
     state.localRunning = false;
     setStreaming(false);
     renderText(view, "assistant");
-    if (view.text && state.settings.voice_reply) speak(view.text);
+    state.lastReply = view.text;
+    if (view.text && state.settings.voice_reply && !window.SyriusVoice?.active) speak(view.text);
   }
 }
 
@@ -378,7 +384,8 @@ async function sendMessage(text) {
     const res = await fetch(`/api/conversations/${state.convId}/messages`, {
       method: "POST", credentials: "same-origin", signal: state.controller.signal,
       headers: { "Content-Type": "application/json", "X-Syrius": "1" },
-      body: JSON.stringify({ text, location: state.settings.location === false ? null : state.location }),
+      body: JSON.stringify({ text, location: state.settings.location === false ? null : state.location,
+        voice: !!window.SyriusVoice?.active }),
     });
     if (res.status === 401) { showLogin(); return; }
     if (!res.ok) {
@@ -407,6 +414,7 @@ async function sendMessage(text) {
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
         else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
         else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
+        else if (ev.type === "weather") { addWeatherCard(view, ev); scrollDown(); }
         else if (ev.type === "model") { addDiagramCard(view, ev); if (window.SyriusModel) window.SyriusModel.show(ev); }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
@@ -426,7 +434,8 @@ async function sendMessage(text) {
       return;
     }
     if (gotError && !view.text) $("#input").value = text; // on rend le message pour réessayer
-    if (!gotError && view.text && state.settings.voice_reply) speak(view.text);
+    state.lastReply = view.text;
+    if (!gotError && view.text && state.settings.voice_reply && !window.SyriusVoice?.active) speak(view.text);
     loadConversations();
   }
 }
@@ -459,6 +468,44 @@ function addMapCard(view, ev) {
   view.bubble.appendChild(card);
 }
 
+// Carte météo (tout le texte passe par textContent).
+function addWeatherCard(view, w) {
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  };
+  const deg = (v) => (typeof v === "number" ? `${Math.round(v)}°` : "–");
+  const n = w.now || {};
+  const card = el("div", "wx-card");
+  const head = el("div", "wx-head");
+  head.append(el("div", "wx-place", "◈ MÉTÉO · " + String(w.place || "").toUpperCase()));
+  const main = el("div", "wx-main");
+  main.append(el("div", "wx-icon", n.icon || "🌡"), el("div", "wx-temp", deg(n.temp)));
+  const info = el("div", "wx-info");
+  info.append(el("div", "wx-label", n.label || ""),
+    el("div", "wx-meta", `Ressenti ${deg(n.feels)} · Vent ${n.wind ?? "–"} km/h · Humidité ${n.humidity ?? "–"} %`));
+  main.append(info);
+  const hours = el("div", "wx-hours");
+  (w.hours || []).forEach((h) => {
+    const c = el("div", "wx-hour");
+    c.append(el("span", "", h.h), el("span", "wx-hicon", h.icon), el("b", "", deg(h.temp)),
+      el("small", "", typeof h.rain === "number" && h.rain >= 20 ? `💧${Math.round(h.rain)}%` : " "));
+    hours.append(c);
+  });
+  const days = el("div", "wx-days");
+  (w.days || []).forEach((d) => {
+    const r = el("div", "wx-day");
+    r.append(el("span", "wx-dname", d.day), el("span", "wx-dicon", d.icon),
+      el("span", "wx-drain", typeof d.rain === "number" && d.rain >= 20 ? `💧${Math.round(d.rain)}%` : ""),
+      el("span", "wx-dtemp", `${deg(d.min)} / ${deg(d.max)}`));
+    days.append(r);
+  });
+  card.append(head, main, hours, days, el("div", "wx-src", "Open-Meteo"));
+  view.bubble.appendChild(card);
+}
+
 function addDiagramCard(view, ev) {
   const card = document.createElement("button");
   card.type = "button";
@@ -484,11 +531,23 @@ const DEVICE_TEXT = {
   phone_flashlight: (p) => `🔦 Lampe ${p.on ? "allumée" : "éteinte"}`,
   phone_volume: (p) => `🔊 Volume à ${p.level} %`,
   phone_settings: (p) => `⚙ Réglages : ${p.page.replace("_", " ")}`,
+  phone_reminder: (p) => `⏰ Rappel ${p.label} : « ${p.text} »` +
+    (p.repeat === "daily" ? " (tous les jours)" : p.repeat === "weekly" ? " (chaque semaine)" : ""),
+  phone_reminder_cancel: () => "🗑 Rappel annulé",
+  phone_calendar: (p) => `📅 ${p.title} — ${p.label}${p.location ? " · " + p.location : ""}`,
 };
+
+// Actions qui demandent une version récente de l'application Android.
+const NEEDS_FEATURE = { phone_reminder: "reminders", phone_reminder_cancel: "reminders", phone_calendar: "calendar" };
+function appFeatures() {
+  try { return Native && typeof Native.features === "function" ? JSON.parse(Native.features()) : []; } catch (_) { return []; }
+}
 
 function runDevice(ev) {
   if (!Native) return "Tu es sur le site (navigateur), pas dans l'application Android Syrius : ouvre l'application téléchargée.";
-  if (typeof Native.device !== "function") return "Ton application Syrius est une ancienne version : désinstalle-la puis installe la nouvelle (voir le guide).";
+  if (typeof Native.device !== "function" || (NEEDS_FEATURE[ev.action] && !appFeatures().includes(NEEDS_FEATURE[ev.action]))) {
+    return "Ton application Syrius est une ancienne version : Réglages → IA hors ligne → « Télécharger la nouvelle version ».";
+  }
   try { return Native.device(JSON.stringify({ action: ev.action, params: ev.params })) || "ok"; }
   catch (_) { return "Action impossible sur ce téléphone."; }
 }
@@ -546,6 +605,81 @@ function actionCard(ev) {
   });
   return node;
 }
+
+// ------------------------------------------------------------------ briefing du matin
+const BRIEFING_PROMPT = "Fais-moi mon briefing du matin : la météo près de moi, mes rappels prévus aujourd'hui " +
+  "(list_reminders) et 3 actualités importantes du jour, le tout en quelques phrases claires.";
+let briefingWaiting = false;
+window.syriusBriefing = async () => {
+  if ($("#app").classList.contains("hidden")) { briefingWaiting = true; return; } // après connexion
+  newConversationView();
+  const reply = await window.SyriusChat.ask(BRIEFING_PROMPT);
+  if (reply && !state.settings.voice_reply) speak(reply);
+};
+
+// ------------------------------------------------------------------ « Hey Syrius »
+let wakeTimer = null;
+function refreshWakeBox() {
+  const ok = Native && appFeatures().includes("wake");
+  $("#wake-box").classList.toggle("hidden", !ok);
+  if (!ok) return;
+  let w = {};
+  try { w = JSON.parse(Native.wakeInfo()); } catch (_) { /* */ }
+  const busy = !!(w.downloading || w.installing);
+  $("#wake-download").classList.toggle("hidden", !!w.ready || busy);
+  $("#wake-progress").classList.toggle("hidden", !w.downloading);
+  if (w.downloading) {
+    $("#wake-progress progress").value = w.progress || 0;
+    $("#wake-progress span").textContent = `${w.progress || 0} %`;
+  }
+  $("#wake-on").disabled = !w.ready;
+  $("#wake-on").checked = !!w.enabled;
+  $("#wake-status").textContent = w.error ? "⚠ " + w.error
+    : w.installing ? "🔒 Vérification et installation…"
+    : w.downloading ? "Téléchargement…"
+    : !w.ready ? "Installe d'abord la reconnaissance vocale."
+    : w.enabled ? "✅ Syrius écoute « Hey Syrius »." : "Prêt. Active l'écoute ci-dessus.";
+  clearTimeout(wakeTimer);
+  if (busy && $("#settings").open) wakeTimer = setTimeout(refreshWakeBox, 1500);
+}
+$("#wake-download").addEventListener("click", () => {
+  const r = Native.wakeDownload();
+  if (r !== "ok") alert(r);
+  setTimeout(refreshWakeBox, 500);
+});
+$("#wake-on").addEventListener("change", (e) => {
+  const r = Native.wakeEnable(e.target.checked);
+  if (r !== "ok") { $("#wake-status").textContent = "⚠ " + r; e.target.checked = false; return; }
+  setTimeout(refreshWakeBox, 300);
+});
+$("#wake-battery").addEventListener("click", () => Native.batterySettings());
+
+function refreshBriefingBox() {
+  const ok = Native && appFeatures().includes("briefing");
+  $("#briefing-box").classList.toggle("hidden", !ok);
+  if (!ok) return;
+  let b = { on: false, hour: 7, minute: 30 };
+  try { b = JSON.parse(Native.getBriefing()); } catch (_) { /* défaut */ }
+  $("#briefing-on").checked = !!b.on;
+  $("#briefing-time").value = `${String(b.hour).padStart(2, "0")}:${String(b.minute).padStart(2, "0")}`;
+}
+function saveBriefing() {
+  const [h, m] = ($("#briefing-time").value || "07:30").split(":").map(Number);
+  const r = Native.setBriefing($("#briefing-on").checked, h || 0, m || 0);
+  $("#briefing-msg").textContent = r === "ok"
+    ? ($("#briefing-on").checked ? `✅ Chaque jour à ${$("#briefing-time").value}.` : "Briefing désactivé.") : "⚠ " + r;
+}
+$("#briefing-on").addEventListener("change", saveBriefing);
+$("#briefing-time").addEventListener("change", saveBriefing);
+
+// Pour le mode conversation : envoie une phrase et renvoie la réponse complète.
+window.SyriusChat = {
+  async ask(text) {
+    state.lastReply = "";
+    await sendMessage(text);
+    return state.lastReply || "";
+  },
+};
 
 // ------------------------------------------------------------------ voix
 // Dans l'application Android, la voix passe par le téléphone (pont "SyriusAndroid").
@@ -634,6 +768,8 @@ $("#open-settings").addEventListener("click", async () => {
   await renderMemories();
   closeDrawer();
   refreshLocalBox();
+  refreshBriefingBox();
+  refreshWakeBox();
   $("#settings").showModal();
 });
 

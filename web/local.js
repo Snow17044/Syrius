@@ -40,7 +40,9 @@
       const msgs = messages.filter((m) => m && m.text).slice(-12)
         .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", text: String(m.text).slice(0, 2000) }));
       pending.set(id, { text: "", onText, resolve, reject });
-      const r = native().localChat(id, JSON.stringify({ system: SYSTEM, messages: msgs }));
+      const sys = SYSTEM + (window.SyriusVoice && window.SyriusVoice.active
+        ? " Ta réponse sera lue à voix haute : 1 à 3 phrases simples, sans liste ni Markdown." : "");
+      const r = native().localChat(id, JSON.stringify({ system: sys, messages: msgs }));
       if (r !== "ok") { pending.delete(id); reject(new Error(r || "IA hors ligne indisponible")); }
       chat.current = id;
     });
