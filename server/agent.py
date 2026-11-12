@@ -210,7 +210,11 @@ class Agent:
                 if _step == 0 and not tool_retry:
                     forced = "show_diagram" if _WANTS_DIAGRAM.search(user_text) else \
                         "show_model" if _WANTS_MODEL.search(user_text) else ""
-                    if forced:
+                    if forced and provider.name == "mistral":
+                        # Mistral : on ne lui laisse que l'outil voulu, et il doit l'utiliser.
+                        req["tools"] = [t for t in req["tools"] if t["function"]["name"] == forced]
+                        req["tool_choice"] = "any"
+                    elif forced:
                         req["tool_choice"] = {"type": "function", "function": {"name": forced}}
                 if provider.reasoning:
                     req["reasoning_effort"] = effort

@@ -131,6 +131,9 @@ class ChatClient:
 
 def providers_from_config(cfg) -> list[Provider]:
     out = []
+    if cfg.mistral_api_key:  # en premier : limites gratuites bien plus larges que Groq
+        out.append(Provider("mistral", "Mistral", "https://api.mistral.ai/v1", cfg.mistral_model,
+                            cfg.mistral_api_key, reasoning=False))
     if cfg.groq_api_key:
         out.append(Provider("groq", "Groq", "https://api.groq.com/openai/v1", cfg.groq_model, cfg.groq_api_key))
     if cfg.gemini_api_key:

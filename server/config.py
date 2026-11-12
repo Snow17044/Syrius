@@ -43,6 +43,10 @@ class Config:
     groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY") or _env("GROQ_KEY") or _env("groq")
                               or _env("GROQ"))
     groq_model: str = field(default_factory=lambda: _env("SYRIUS_GROQ_MODEL", "openai/gpt-oss-120b"))
+    # Mistral (modèles open source, offre gratuite « Experiment ») : cerveau principal s'il est configuré.
+    mistral_api_key: str = field(default_factory=lambda: _env("MISTRAL_API_KEY") or _env("MISTRAL_KEY")
+                                 or _env("mistral") or _env("MISTRAL"))
+    mistral_model: str = field(default_factory=lambda: _env("SYRIUS_MISTRAL_MODEL", "mistral-small-latest"))
     gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY") or _env("gemini") or _env("GEMINI"))
     gemini_model: str = field(default_factory=lambda: _env("SYRIUS_GEMINI_MODEL", "gemini-flash-latest"))
     ollama_url: str = field(default_factory=lambda: _env("SYRIUS_OLLAMA_URL"))
