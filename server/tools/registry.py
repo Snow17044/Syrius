@@ -79,7 +79,7 @@ def build_tools(cfg: Config, settings: dict) -> list[dict]:
     tools = list(BASE_TOOLS) + DEVICE_TOOLS
     if cfg.email_enabled:
         tools += EMAIL_TOOLS
-    if settings.get("web_search"):
+    if settings.get("internet", True):
         tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL]
     return tools
 

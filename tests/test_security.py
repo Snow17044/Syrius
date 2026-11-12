@@ -156,7 +156,7 @@ def test_reglages_valides(make_client):
     c = make_client()
     login(c)
     assert c.put("/api/settings", json={"effort": "max"}, headers=H).status_code == 400
-    assert c.put("/api/settings", json={"web_search": "oui"}, headers=H).status_code == 400
+    assert c.put("/api/settings", json={"internet": "oui"}, headers=H).status_code == 400
     r = c.put("/api/settings", json={"effort": "high", "inconnu": 1, "user_name": "Alex"}, headers=H)
     assert r.status_code == 200
     assert r.json()["effort"] == "high" and "inconnu" not in r.json()
