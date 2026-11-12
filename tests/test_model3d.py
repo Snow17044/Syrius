@@ -165,7 +165,7 @@ def test_ia_hors_ligne_securisee():
         assert danger not in src
     java = open("android/app/src/main/java/fr/syrius/app/LocalAI.java", encoding="utf-8").read()
     # seuls deux fichiers connus, vérifiés par empreinte SHA-256 avant usage
-    assert java.count('"Qwen2.5-') == 2 and "MessageDigest.getInstance(\"SHA-256\")" in java
+    assert java.count('.task",') == 2 and "MessageDigest.getInstance(\"SHA-256\")" in java
     assert "https://huggingface.co/litert-community/" in java and "http://" not in java
     main = open("android/app/src/main/java/fr/syrius/app/MainActivity.java", encoding="utf-8").read()
     for fn in ("localInfo", "localDownload", "localCancel", "localDelete", "localChat", "localStop"):
