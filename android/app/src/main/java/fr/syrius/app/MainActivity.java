@@ -53,6 +53,7 @@ public class MainActivity extends Activity {
     private SpeechRecognizer recognizer;
     private DeviceActions device;
     private LocalAI local;
+    private boolean pendingBriefing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,6 +110,15 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageFinished(WebView view, String url) {
+                if (pendingBriefing) {  // ouverte depuis la notification du briefing du matin
+                    pendingBriefing = false;
+                    view.postDelayed(() -> view.evaluateJavascript(
+                            "window.syriusBriefing && window.syriusBriefing()", null), 1500);
+                }
+            }
+
+            @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
                     showOfflineDialog();
@@ -117,6 +127,9 @@ public class MainActivity extends Activity {
         });
         device = new DeviceActions(this);
         local = new LocalAI(this);
+        Reminders.ensureChannel(this);
+        Reminders.rescheduleAll(this);
+        pendingBriefing = getIntent() != null && getIntent().getBooleanExtra(Reminders.EXTRA_BRIEFING, false);
         web.addJavascriptInterface(new Bridge(), "SyriusAndroid");
 
         tts = new TextToSpeech(this, status -> {
@@ -336,6 +349,30 @@ public class MainActivity extends Activity {
             return "ok";
         }
 
+        /** Fonctions disponibles dans cette version de l'application. */
+        @JavascriptInterface
+        public String features() {
+            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\"]";
+        }
+
+        @JavascriptInterface
+        public String getBriefing() {
+            if (!trusted()) return "{}";
+            return Reminders.briefingJson(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String setBriefing(boolean on, int hour, int minute) {
+            if (!trusted()) return "Refusé";
+            try {
+                Reminders.setBriefing(MainActivity.this, on, hour, minute);
+            } catch (Exception e) {
+                return "Heure invalide";
+            }
+            if (on) runOnUiThread(() -> DeviceActions.askNotifications(MainActivity.this));
+            return "ok";
+        }
+
         // ---------------------------------------------------------- IA hors ligne
         @JavascriptInterface
         public String localInfo() {
@@ -388,6 +425,14 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 if (recognizer != null) recognizer.stopListening();
             });
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (intent != null && intent.getBooleanExtra(Reminders.EXTRA_BRIEFING, false)) {
+            sendJs("window.syriusBriefing && window.syriusBriefing()");
         }
     }
 

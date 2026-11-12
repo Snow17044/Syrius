@@ -10,7 +10,7 @@ from ..config import Config
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
-from . import diagram, model3d, places, weather, web
+from . import diagram, model3d, places, reminders, weather, web
 from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -33,6 +33,7 @@ BASE_TOOLS = [
           {"fact": {"type": "string", "description": "L'information, en une phrase courte."}}, ["fact"]),
     _tool("forget", "Supprime un souvenir par son numéro (voir la liste des souvenirs).",
           {"memory_id": {"type": "integer"}}, ["memory_id"]),
+    _tool("list_reminders", "Liste les rappels programmés (identifiant, date, texte).", {}, []),
     _tool("show_diagram",
           "Dessine un SCHÉMA 3D holographique dans l'app : un PLAN D'ACTION CONCRET pour une idée, un projet, "
           "un objectif, un concept ou une organisation. Utilise-le dès qu'on demande un schéma, une carte "
@@ -122,6 +123,7 @@ TOOL_LABELS = {
     "web_search": "Je cherche sur le web",
     "web_read": "Je lis la page",
     "show_places": "J'affiche la carte",
+    "list_reminders": "Je regarde tes rappels",
     "get_weather": "Je regarde la météo",
     "show_diagram": "Je dessine le schéma 3D",
     "show_model": "Je construis la maquette 3D",
@@ -236,7 +238,19 @@ class ToolExecutor:
                 event, done = build_action(name, args)
             except DeviceInputError as e:
                 raise InvalidInput(str(e)) from None
+            if name == "phone_reminder":
+                reminders.add(self.db, event["params"])
+                done += f" (identifiant {event['params']['id']})"
+            elif name == "phone_reminder_cancel" and not reminders.remove(self.db, event["params"]["id"]):
+                return "Aucun rappel avec cet identifiant (utilise list_reminders).", True, None
             return done, False, event
+
+        if name == "list_reminders":
+            items = reminders.upcoming(self.db)
+            if not items:
+                return "Aucun rappel programmé.", False, None
+            return json.dumps([{"id": r["id"], "quand": r["label"], "texte": r["text"],
+                                "repeter": r["repeat"]} for r in items], ensure_ascii=False), False, None
 
         if name == "web_search":
             a = _check(args, {"query": str}, ["query"])

@@ -6,7 +6,16 @@ une confirmation à l'utilisateur dans l'app, et l'appel/SMS s'ouvre dans l'appl
 Téléphone/Messages où il faut encore appuyer sur « Appeler » / « Envoyer ».
 """
 import re
+import uuid
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
+
+TZ = ZoneInfo("Europe/Paris")
+JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+        "novembre", "décembre"]
+REPEATS = ("none", "daily", "weekly")
 
 
 def _tool(name, description, properties, required):
@@ -41,6 +50,20 @@ DEVICE_TOOLS = [
           {"level": {"type": "integer", "description": "0 à 100"}}, ["level"]),
     _tool("phone_settings", "Ouvre une page des réglages du téléphone.",
           {"page": {"type": "string", "enum": SETTINGS_PAGES}}, ["page"]),
+    _tool("phone_reminder",
+          "Programme un RAPPEL : une notification sur le téléphone à la date et l'heure voulues (ex. « rappelle-moi "
+          "d'appeler maman demain à 18h »). Calcule toi-même la date à partir de la date du jour.",
+          {"text": {"type": "string", "description": "Ce qu'il faut rappeler, court"},
+           "when": {"type": "string", "description": "Date et heure locales au format AAAA-MM-JJTHH:MM"},
+           "repeat": {"type": "string", "description": "none (une fois), daily (chaque jour) ou weekly"}},
+          ["text", "when"]),
+    _tool("phone_reminder_cancel", "Annule un rappel (identifiant donné par list_reminders).",
+          {"id": {"type": "string"}}, ["id"]),
+    _tool("phone_calendar",
+          "Ajoute un RENDEZ-VOUS dans l'agenda du téléphone (l'utilisateur valide dans son agenda).",
+          {"title": {"type": "string"}, "start": {"type": "string", "description": "AAAA-MM-JJTHH:MM (heure locale)"},
+           "duration_min": {"type": "integer", "description": "Durée en minutes (60 par défaut)"},
+           "location": {"type": "string"}}, ["title", "start"]),
 ]
 
 DEVICE_LABELS = {
@@ -49,6 +72,8 @@ DEVICE_LABELS = {
     "phone_open_app": "J'ouvre l'application", "phone_map": "J'ouvre la carte",
     "phone_open_url": "J'ouvre le lien", "phone_flashlight": "Je m'occupe de la lampe",
     "phone_volume": "Je règle le volume", "phone_settings": "J'ouvre les réglages",
+    "phone_reminder": "Je programme le rappel", "phone_reminder_cancel": "J'annule le rappel",
+    "phone_calendar": "J'ajoute le rendez-vous",
 }
 
 # Actions qui exigent un appui de l'utilisateur dans Syrius avant de s'exécuter.
@@ -60,6 +85,27 @@ _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 
 class DeviceInputError(ValueError):
     pass
+
+
+def parse_local(value, name: str, max_days: int = 366) -> datetime:
+    """« AAAA-MM-JJTHH:MM » (heure de Paris) → date, obligatoirement dans le futur et dans l'année."""
+    if not isinstance(value, str):
+        raise DeviceInputError(f"{name} invalide")
+    try:
+        dt = datetime.fromisoformat(value.strip()[:16])
+    except ValueError:
+        raise DeviceInputError(f"{name} : format attendu AAAA-MM-JJTHH:MM") from None
+    dt = dt.replace(tzinfo=TZ) if dt.tzinfo is None else dt.astimezone(TZ)
+    now = datetime.now(TZ)
+    if dt <= now - timedelta(minutes=1):
+        raise DeviceInputError(f"{name} est déjà passé (nous sommes le {now:%Y-%m-%d %H:%M})")
+    if dt > now + timedelta(days=max_days):
+        raise DeviceInputError(f"{name} trop lointain")
+    return dt
+
+
+def human(dt: datetime) -> str:
+    return f"{JOURS[dt.weekday()]} {dt.day} {MOIS[dt.month - 1]} à {dt.hour:02d}h{dt.minute:02d}"
 
 
 def _text(value, name, max_len, required=True):
@@ -129,6 +175,29 @@ def build_action(name: str, args: dict) -> tuple[dict, str]:
             raise DeviceInputError("page inconnue")
         p = {"page": page}
         done = "Réglages ouverts."
+    elif name == "phone_reminder":
+        dt = parse_local(args.get("when"), "when")
+        repeat = args.get("repeat") or "none"
+        if repeat not in REPEATS:
+            repeat = "none"
+        p = {"id": uuid.uuid4().hex[:10], "text": _text(args.get("text"), "text", 200),
+             "at": int(dt.timestamp() * 1000), "repeat": repeat, "label": human(dt)}
+        done = (f"Rappel programmé pour {p['label']}"
+                + {"none": "", "daily": ", tous les jours", "weekly": ", toutes les semaines"}[repeat] + ".")
+    elif name == "phone_reminder_cancel":
+        rid = _text(args.get("id"), "id", 20)
+        if not re.fullmatch(r"[0-9a-f]{6,20}", rid):
+            raise DeviceInputError("identifiant de rappel invalide")
+        p = {"id": rid}
+        done = "Rappel annulé."
+    elif name == "phone_calendar":
+        dt = parse_local(args.get("start"), "start", max_days=730)
+        dur = args.get("duration_min", 60)
+        dur = _int(dur, "duration_min", 5, 1440) if dur is not None else 60
+        p = {"title": _text(args.get("title"), "title", 120), "start": int(dt.timestamp() * 1000),
+             "end": int((dt + timedelta(minutes=dur)).timestamp() * 1000),
+             "location": _text(args.get("location", ""), "location", 160, required=False), "label": human(dt)}
+        done = f"Rendez-vous proposé dans l'agenda pour {p['label']} : l'utilisateur valide dans son agenda."
     else:
         raise DeviceInputError("action inconnue")
     event = {"type": "device", "action": name, "params": p, "confirm": name in NEEDS_CONFIRMATION}

@@ -195,6 +195,14 @@
       <label class="switch"><input id="s-location" type="checkbox"><span>Partager ma position approximative (cartes « près de moi »)</span></label>
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
 
+      <div id="briefing-box" class="hidden">
+        <h4>☀️ Briefing du matin</h4>
+        <p class="muted small">Chaque jour, une notification : touche-la et Syrius te lit la météo, tes rappels et les actus.</p>
+        <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le briefing</span></label>
+        <label>Heure <input id="briefing-time" type="time" value="07:30"></label>
+        <p id="briefing-msg" class="small"></p>
+      </div>
+
       <div id="local-box" class="hidden">
         <h4>📴 IA hors ligne (sur ce téléphone)</h4>
         <div id="local-update" class="hidden">
