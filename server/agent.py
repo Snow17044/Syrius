@@ -180,7 +180,7 @@ class Agent:
             yield {"type": "tool", "name": name, "label": TOOL_LABELS.get(name, name)}
 
     async def chat(self, conversation_id: str, user_text: str,
-                   location: dict | None = None) -> AsyncIterator[dict]:
+                   location: dict | None = None, voice: bool = False) -> AsyncIterator[dict]:
         if not self.llm.providers:
             yield {"type": "error", "message": "Aucun cerveau configuré : ajoute une clé GROQ_API_KEY "
                                                "ou GEMINI_API_KEY (voir README)."}
@@ -202,6 +202,10 @@ class Agent:
 
         for _step in range(MAX_STEPS):
             system = build_system(settings, self.db.list_memories())  # les souvenirs peuvent changer
+            if voice:
+                system += ("\n\nMODE CONVERSATION VOCALE : ta réponse sera lue à voix haute. Réponds en 1 à 3 "
+                           "phrases naturelles à l'oral, sans liste, sans tableau, sans Markdown ni emoji. "
+                           "Les outils (carte, schéma, 3D, téléphone) restent utilisables : annonce-les en une phrase.")
             body = {"messages": to_openai(history, system), "tools": build_tools(self.cfg, settings),
                     "max_tokens": MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}

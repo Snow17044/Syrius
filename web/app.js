@@ -334,7 +334,8 @@ async function answerLocally(view, note) {
     state.localRunning = false;
     setStreaming(false);
     renderText(view, "assistant");
-    if (view.text && state.settings.voice_reply) speak(view.text);
+    state.lastReply = view.text;
+    if (view.text && state.settings.voice_reply && !window.SyriusVoice?.active) speak(view.text);
   }
 }
 
@@ -382,7 +383,8 @@ async function sendMessage(text) {
     const res = await fetch(`/api/conversations/${state.convId}/messages`, {
       method: "POST", credentials: "same-origin", signal: state.controller.signal,
       headers: { "Content-Type": "application/json", "X-Syrius": "1" },
-      body: JSON.stringify({ text, location: state.settings.location === false ? null : state.location }),
+      body: JSON.stringify({ text, location: state.settings.location === false ? null : state.location,
+        voice: !!window.SyriusVoice?.active }),
     });
     if (res.status === 401) { showLogin(); return; }
     if (!res.ok) {
@@ -430,7 +432,8 @@ async function sendMessage(text) {
       return;
     }
     if (gotError && !view.text) $("#input").value = text; // on rend le message pour réessayer
-    if (!gotError && view.text && state.settings.voice_reply) speak(view.text);
+    state.lastReply = view.text;
+    if (!gotError && view.text && state.settings.voice_reply && !window.SyriusVoice?.active) speak(view.text);
     loadConversations();
   }
 }
@@ -550,6 +553,15 @@ function actionCard(ev) {
   });
   return node;
 }
+
+// Pour le mode conversation : envoie une phrase et renvoie la réponse complète.
+window.SyriusChat = {
+  async ask(text) {
+    state.lastReply = "";
+    await sendMessage(text);
+    return state.lastReply || "";
+  },
+};
 
 // ------------------------------------------------------------------ voix
 // Dans l'application Android, la voix passe par le téléphone (pont "SyriusAndroid").

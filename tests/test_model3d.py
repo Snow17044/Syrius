@@ -171,3 +171,23 @@ def test_ia_hors_ligne_securisee():
     for fn in ("localInfo", "localDownload", "localCancel", "localDelete", "localChat", "localStop"):
         body = main.split("public " + ("String " if fn in ("localInfo", "localDownload", "localChat") else "void ") + fn)[1][:400]
         assert "trusted()" in body, fn
+
+
+def test_mode_vocal_reponses_courtes(make_client):
+    c = make_client([reply("Il est midi.")])
+    login(c)
+    cid = c.post("/api/conversations", headers=H).json()["id"]
+    c.post(f"/api/conversations/{cid}/messages", json={"text": "quelle heure ?", "voice": True}, headers=H)
+    system = c.fake.requests[0]["messages"][0]["content"]
+    assert "MODE CONVERSATION VOCALE" in system
+    c2 = make_client([reply("ok")])
+    login(c2)
+    cid2 = c2.post("/api/conversations", headers=H).json()["id"]
+    c2.post(f"/api/conversations/{cid2}/messages", json={"text": "salut"}, headers=H)
+    assert "MODE CONVERSATION VOCALE" not in c2.fake.requests[0]["messages"][0]["content"]
+
+
+def test_voix_sans_html():
+    src = open("web/voice.js", encoding="utf-8").read()
+    for danger in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function"):
+        assert danger not in src

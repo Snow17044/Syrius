@@ -22,6 +22,7 @@
   <script src="/static/model3d.js" defer></script>
   <script src="/static/markdown.js" defer></script>
   <script src="/static/local.js" defer></script>
+  <script src="/static/voice.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -83,6 +84,7 @@
       </div>
 
       <form id="composer">
+        <button type="button" id="voice-open" class="icon-btn hidden" aria-label="Mode conversation">🎧</button>
         <button type="button" id="mic" class="icon-btn hidden" aria-label="Parler">🎙</button>
         <textarea id="input" rows="1" placeholder="Parle à Syrius…" aria-label="Message" maxlength="20000"></textarea>
         <button type="submit" id="send" class="send" aria-label="Envoyer">➤</button>
@@ -106,6 +108,17 @@
       </div>
       <ol id="hud-list"></ol>
     </div>
+  </section>
+
+  <!-- Mode conversation (mains libres) -->
+  <section id="voice" class="hidden" aria-label="Mode conversation" data-phase="">
+    <button id="voice-close" class="icon-btn voice-close" aria-label="Terminer la conversation">✕</button>
+    <div class="voice-tag">◈ SYRIUS · MODE CONVERSATION</div>
+    <button id="voice-orb" class="voice-orb" aria-label="Couper la parole ou reprendre"><span></span><i></i></button>
+    <p id="voice-status" class="voice-status"></p>
+    <p id="voice-heard" class="voice-heard"></p>
+    <p id="voice-reply" class="voice-reply"></p>
+    <p class="voice-hint">Dites « stop » ou « merci Syrius » pour terminer · touchez l'orbe pour couper la parole</p>
   </section>
 
   <!-- Studio 3D : maquettes holographiques -->

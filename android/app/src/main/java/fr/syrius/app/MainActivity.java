@@ -13,6 +13,8 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.view.WindowManager;
 import android.text.InputType;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
@@ -120,6 +122,20 @@ public class MainActivity extends Activity {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(Locale.FRANCE);
+                // Prévient la page quand Syrius a fini de parler (mode conversation : il réécoute ensuite).
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) { }
+
+                    @Override
+                    public void onDone(String id) {
+                        sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
+                    }
+
+                    @Override
+                    public void onError(String id) {
+                        sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
+                    }
+                });
             }
         });
 
@@ -288,6 +304,16 @@ public class MainActivity extends Activity {
             if (text == null || !trusted() || tts == null) return;
             String t = text.length() > 3000 ? text.substring(0, 3000) : text;
             tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, "syrius");
+        }
+
+        /** Garde l'écran allumé pendant le mode conversation. */
+        @JavascriptInterface
+        public void keepScreenOn(boolean on) {
+            if (!trusted()) return;
+            runOnUiThread(() -> {
+                if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            });
         }
 
         @JavascriptInterface
