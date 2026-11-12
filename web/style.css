@@ -294,3 +294,27 @@ details input { margin-top: 8px; }
   display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
 .voice-hint { position: absolute; bottom: calc(env(safe-area-inset-bottom) + 14px); left: 20px; right: 20px; font-size: .75rem; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .voice-orb, .voice-orb span, .voice-orb i { animation: none !important; } }
+
+/* ---------- Carte météo ---------- */
+.wx-card { margin: 10px 0 4px; padding: 14px; border-radius: 18px; border: 1px solid rgba(56, 217, 255, .45);
+  background: linear-gradient(160deg, rgba(14, 54, 86, .9), rgba(4, 14, 28, .95));
+  box-shadow: 0 0 24px rgba(56, 217, 255, .15), inset 0 0 20px rgba(56, 217, 255, .06); }
+.wx-place { font-size: .7rem; letter-spacing: .2em; color: var(--accent); text-shadow: var(--glow); }
+.wx-main { display: flex; align-items: center; gap: 12px; margin: 8px 0 10px; }
+.wx-icon { font-size: 2.6rem; filter: drop-shadow(0 0 10px rgba(56, 217, 255, .5)); }
+.wx-temp { white-space: nowrap; flex: none; font-size: 2.8rem; font-weight: 800; color: #fff; text-shadow: 0 0 18px rgba(56, 217, 255, .6); }
+.wx-info { flex: 1; min-width: 0; }
+.wx-label { font-weight: 700; }
+.wx-meta { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+.wx-hours { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+.wx-hour { flex: none; min-width: 52px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px;
+  border-radius: 12px; background: rgba(56, 217, 255, .07); border: 1px solid rgba(56, 217, 255, .15); font-size: .78rem; }
+.wx-hicon { font-size: 1.2rem; }
+.wx-hour small { font-size: .65rem; color: #8fd3ff; }
+.wx-days { margin-top: 8px; border-top: 1px solid rgba(56, 217, 255, .15); }
+.wx-day { display: grid; grid-template-columns: 1fr 34px 54px 80px; align-items: center; padding: 6px 2px; font-size: .88rem;
+  border-bottom: 1px solid rgba(56, 217, 255, .08); }
+.wx-dicon { text-align: center; font-size: 1.1rem; }
+.wx-drain { font-size: .72rem; color: #8fd3ff; text-align: right; }
+.wx-dtemp { text-align: right; font-weight: 700; }
+.wx-src { font-size: .62rem; color: var(--muted); text-align: right; margin-top: 6px; }

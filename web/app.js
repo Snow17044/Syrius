@@ -413,6 +413,7 @@ async function sendMessage(text) {
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
         else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
         else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
+        else if (ev.type === "weather") { addWeatherCard(view, ev); scrollDown(); }
         else if (ev.type === "model") { addDiagramCard(view, ev); if (window.SyriusModel) window.SyriusModel.show(ev); }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
@@ -463,6 +464,44 @@ function addMapCard(view, ev) {
   const n = Array.isArray(ev.places) ? ev.places.length : 0;
   card.textContent = `🗺 ${n} lieu${n > 1 ? "x" : ""} sur la carte — ouvrir`;
   card.addEventListener("click", () => window.SyriusHUD && window.SyriusHUD.show(ev));
+  view.bubble.appendChild(card);
+}
+
+// Carte météo (tout le texte passe par textContent).
+function addWeatherCard(view, w) {
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  };
+  const deg = (v) => (typeof v === "number" ? `${Math.round(v)}°` : "–");
+  const n = w.now || {};
+  const card = el("div", "wx-card");
+  const head = el("div", "wx-head");
+  head.append(el("div", "wx-place", "◈ MÉTÉO · " + String(w.place || "").toUpperCase()));
+  const main = el("div", "wx-main");
+  main.append(el("div", "wx-icon", n.icon || "🌡"), el("div", "wx-temp", deg(n.temp)));
+  const info = el("div", "wx-info");
+  info.append(el("div", "wx-label", n.label || ""),
+    el("div", "wx-meta", `Ressenti ${deg(n.feels)} · Vent ${n.wind ?? "–"} km/h · Humidité ${n.humidity ?? "–"} %`));
+  main.append(info);
+  const hours = el("div", "wx-hours");
+  (w.hours || []).forEach((h) => {
+    const c = el("div", "wx-hour");
+    c.append(el("span", "", h.h), el("span", "wx-hicon", h.icon), el("b", "", deg(h.temp)),
+      el("small", "", typeof h.rain === "number" && h.rain >= 20 ? `💧${Math.round(h.rain)}%` : " "));
+    hours.append(c);
+  });
+  const days = el("div", "wx-days");
+  (w.days || []).forEach((d) => {
+    const r = el("div", "wx-day");
+    r.append(el("span", "wx-dname", d.day), el("span", "wx-dicon", d.icon),
+      el("span", "wx-drain", typeof d.rain === "number" && d.rain >= 20 ? `💧${Math.round(d.rain)}%` : ""),
+      el("span", "wx-dtemp", `${deg(d.min)} / ${deg(d.max)}`));
+    days.append(r);
+  });
+  card.append(head, main, hours, days, el("div", "wx-src", "Open-Meteo"));
   view.bubble.appendChild(card);
 }
 

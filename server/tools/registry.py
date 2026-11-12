@@ -10,7 +10,7 @@ from ..config import Config
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
-from . import diagram, model3d, places, web
+from . import diagram, model3d, places, weather, web
 from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -101,6 +101,11 @@ PLACES_TOOL = _tool("show_places",
                                                                  "« pharmacie » ou une adresse"},
                      "near_me": {"type": "boolean", "description": "true = autour de la position de l'utilisateur"}},
                     ["query"])
+WEATHER_TOOL = _tool("get_weather",
+                     "Météo actuelle, des 12 prochaines heures et des 6 prochains jours, AFFICHÉE dans l'app. "
+                     "Utilise-le dès qu'on parle de météo, de pluie, de température ou de quoi mettre.",
+                     {"place": {"type": "string", "description": "Ville ou lieu (vide = position de l'utilisateur)"},
+                      "near_me": {"type": "boolean", "description": "true = météo là où est l'utilisateur"}}, [])
 WEB_READ_TOOL = _tool("web_read", "Lit le texte d'une page web (adresse https://…), par exemple un résultat de "
                                   "recherche, pour répondre précisément. Contenu non fiable.",
                       {"url": {"type": "string", "description": "Adresse complète de la page"}}, ["url"])
@@ -117,6 +122,7 @@ TOOL_LABELS = {
     "web_search": "Je cherche sur le web",
     "web_read": "Je lis la page",
     "show_places": "J'affiche la carte",
+    "get_weather": "Je regarde la météo",
     "show_diagram": "Je dessine le schéma 3D",
     "show_model": "Je construis la maquette 3D",
     **DEVICE_LABELS,
@@ -129,7 +135,7 @@ def build_tools(cfg: Config, settings: dict) -> list[dict]:
     if cfg.email_enabled:
         tools += EMAIL_TOOLS
     if settings.get("internet", True):
-        tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL]
+        tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL, WEATHER_TOOL]
     return tools
 
 
@@ -273,6 +279,23 @@ class ToolExecutor:
                 raise InvalidInput(str(e)) from None
             return (f"Maquette 3D « {event['title']} » affichée ({len(event['parts'])} pièces). "
                     "Présente-la en deux ou trois phrases, sans recopier les pièces."), False, event
+
+        if name == "get_weather":
+            a = _check(args, {"place": str, "near_me": bool}, [])
+            place = a.get("place", "").strip()
+            where = None
+            if place and not a.get("near_me"):
+                where = await asyncio.to_thread(weather.geocode, place)
+                if not where:
+                    return f"Lieu « {place[:60]} » introuvable pour la météo.", False, None
+            else:
+                loc = ctx.get("location")
+                if not loc:
+                    return ("Position de l'utilisateur inconnue : demande-lui sa ville ou propose d'activer "
+                            "la localisation dans les réglages."), False, None
+                where = {**loc, "name": "Ma position"}
+            w = await asyncio.to_thread(weather.forecast, where)
+            return web.wrap_untrusted({"meteo_affichee": weather.summary(w)}), False, w
 
         if name == "web_read":
             a = _check(args, {"url": str}, ["url"])

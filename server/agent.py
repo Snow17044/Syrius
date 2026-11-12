@@ -15,8 +15,9 @@ from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
 
-UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read", "show_places"}
-WEB_TOOLS = {"web_search", "web_read", "show_places"}
+UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read", "show_places",
+                   "get_weather"}
+WEB_TOOLS = {"web_search", "web_read", "show_places", "get_weather"}
 MAX_WEB_CALLS = 8  # pages / recherches web maximum par réponse
 MAX_STEPS = 8          # allers-retours max avec les outils pour une seule question
 MAX_HISTORY = 40       # messages gardés en contexte (au-delà, les plus anciens sont oubliés)
