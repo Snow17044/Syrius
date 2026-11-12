@@ -216,6 +216,8 @@ class Agent:
                         req["tool_choice"] = "any"
                     elif forced:
                         req["tool_choice"] = {"type": "function", "function": {"name": forced}}
+                if "qwen3" in provider.model and "groq.com" in provider.base_url:
+                    req["reasoning_format"] = "hidden"  # pas de « réflexions » affichées dans la réponse
                 if provider.reasoning:
                     req["reasoning_effort"] = effort
                 try:
