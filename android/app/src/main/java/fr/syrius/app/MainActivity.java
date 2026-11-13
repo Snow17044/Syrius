@@ -54,6 +54,7 @@ public class MainActivity extends Activity {
     private DeviceActions device;
     private LocalAI local;
     private boolean pendingBriefing;
+    private boolean voiceMode;  // mode conversation 🎧 ouvert : le micro reste à l'app
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -218,6 +219,7 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ voix
     private void startListening() {
+        WakeService.appVisible(true);  // libère le micro pour la reconnaissance de l'app
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
             return;
@@ -239,6 +241,7 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onError(int error) {
+                    if (!voiceMode) WakeService.appVisible(false);
                     sendJs("window.syriusOnSpeechEnd && window.syriusOnSpeechEnd()");
                 }
 
@@ -249,6 +252,7 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onResults(Bundle results) {
+                    if (!voiceMode) WakeService.appVisible(false);
                     deliver(results, true);
                 }
             });
@@ -328,6 +332,8 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void keepScreenOn(boolean on) {
             if (!trusted()) return;
+            voiceMode = on;  // mode conversation : l'écoute de fond reste en pause jusqu'à la fin
+            WakeService.appVisible(on);
             runOnUiThread(() -> {
                 if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -533,6 +539,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        if (!voiceMode) WakeService.appVisible(false);
         CookieManager.getInstance().flush(); // reste connecté
         if (tts != null) tts.stop();
     }
