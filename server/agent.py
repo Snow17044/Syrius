@@ -11,6 +11,7 @@ from .config import Config
 from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
 from .tools import diagram, model3d
+from . import vision
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
@@ -181,7 +182,8 @@ class Agent:
             yield {"type": "tool", "name": name, "label": TOOL_LABELS.get(name, name)}
 
     async def chat(self, conversation_id: str, user_text: str,
-                   location: dict | None = None, voice: bool = False) -> AsyncIterator[dict]:
+                   location: dict | None = None, voice: bool = False,
+                   image: str | None = None) -> AsyncIterator[dict]:
         if not self.llm.providers:
             yield {"type": "error", "message": "Aucun cerveau configuré : ajoute une clé GROQ_API_KEY "
                                                "ou GEMINI_API_KEY (voir README)."}
@@ -193,10 +195,17 @@ class Agent:
             {"type": "tool_result", "tool_use_id": tid, "tool_name": name, "is_error": True,
              "content": "Interrompu avant la fin."}
             for tid, name in unanswered_tool_uses(stored)]
-        user_content.append({"type": "text", "text": user_text})
+        # La photo n'est pas enregistrée : seule une mention reste dans l'historique.
+        user_content.append({"type": "text", "text": (user_text + "\n\n[📷 photo jointe]").strip() if image else user_text})
         history = trim_history(stored) + [{"role": "user", "content": user_content}]
         to_save = [history[-1]]
         providers = self.llm.ordered(settings.get("brain", ""))
+        if image:  # seules les IA qui « voient » peuvent répondre
+            providers = [p for p in providers if p.vision]
+            if not providers:
+                yield {"type": "error", "message": "Aucune de tes IA ne sait regarder une photo pour l'instant "
+                                                   "(il faut Groq Llama 4, GitHub Models ou Mistral)."}
+                return
         effort = "high" if settings.get("effort") == "high" else "low"
         untrusted_seen = False
         web_calls = 0
@@ -207,7 +216,10 @@ class Agent:
                 system += ("\n\nMODE CONVERSATION VOCALE : ta réponse sera lue à voix haute. Réponds en 1 à 3 "
                            "phrases naturelles à l'oral, sans liste, sans tableau, sans Markdown ni emoji. "
                            "Les outils (carte, schéma, 3D, téléphone) restent utilisables : annonce-les en une phrase.")
-            body = {"messages": to_openai(history, system), "tools": build_tools(self.cfg, settings),
+            msgs = to_openai(history, system)
+            if image:
+                vision.attach(msgs, image)
+            body = {"messages": msgs, "tools": build_tools(self.cfg, settings),
                     "max_tokens": MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None

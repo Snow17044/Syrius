@@ -33,6 +33,7 @@ class Provider:
     model: str
     api_key: str = ""
     reasoning: bool = True  # accepte le paramètre reasoning_effort
+    vision: bool = False     # sait regarder une photo
 
     def __post_init__(self):
         p = urlparse(self.base_url)
@@ -152,7 +153,7 @@ def providers_from_config(cfg) -> list[Provider]:
     out = []
     if cfg.mistral_api_key:  # en premier : limites gratuites bien plus larges que Groq
         out.append(Provider("mistral", "Mistral", "https://api.mistral.ai/v1", cfg.mistral_model,
-                            cfg.mistral_api_key, reasoning=False))
+                            cfg.mistral_api_key, reasoning=False, vision="small" in cfg.mistral_model))
     if cfg.groq_api_key:
         # Plusieurs modèles open source sur Groq : chacun a sa propre limite gratuite.
         # Quand l'un est à court, Syrius passe automatiquement au suivant.
@@ -160,18 +161,19 @@ def providers_from_config(cfg) -> list[Provider]:
         for i, model in enumerate(models):
             out.append(Provider("groq" if i == 0 else f"groq{i + 1}", groq_label(model),
                                 "https://api.groq.com/openai/v1", model, cfg.groq_api_key,
-                                reasoning=model.startswith("openai/gpt-oss")))
+                                reasoning=model.startswith("openai/gpt-oss"),
+                                vision="llama-4" in model or "vision" in model))
     if cfg.github_models_token:
         for i, model in enumerate(cfg.github_models):
             out.append(Provider("github" if i == 0 else f"github{i + 1}", f"GitHub · {model.split('/')[-1][:24]}",
                                 "https://models.github.ai/inference", model, cfg.github_models_token,
-                                reasoning=False))
+                                reasoning=False, vision="gpt-4" in model))
     if cfg.openrouter_api_key:
         out.append(Provider("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", cfg.openrouter_model,
                             cfg.openrouter_api_key, reasoning=False))
     if cfg.gemini_api_key:
         out.append(Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
-                            cfg.gemini_model, cfg.gemini_api_key))
+                            cfg.gemini_model, cfg.gemini_api_key, vision=True))
     if cfg.ollama_url:
         out.append(Provider("local", "IA locale", cfg.ollama_url.rstrip("/") + "/v1", cfg.ollama_model,
                             reasoning=False))

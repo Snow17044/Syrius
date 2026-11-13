@@ -88,7 +88,14 @@
         </div>
       </div>
 
+      <div id="photo-preview" class="photo-preview hidden">
+        <img id="photo-thumb" alt="Photo jointe">
+        <span class="small">📷 Photo prête — pose ta question</span>
+        <button type="button" id="photo-remove" class="icon-btn" aria-label="Retirer la photo">✕</button>
+      </div>
       <form id="composer">
+        <input id="photo-input" type="file" accept="image/*" class="hidden">
+        <button type="button" id="photo-btn" class="icon-btn" aria-label="Envoyer une photo">📷</button>
         <button type="button" id="voice-open" class="icon-btn hidden" aria-label="Mode conversation">🎧</button>
         <button type="button" id="mic" class="icon-btn hidden" aria-label="Parler">🎙</button>
         <textarea id="input" rows="1" placeholder="Parle à Syrius…" aria-label="Message" maxlength="20000"></textarea>

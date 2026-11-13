@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth
+from . import vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -32,7 +33,7 @@ STATIC_FILES = {
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
-       "img-src 'self' data:; "
+       "img-src 'self' data: blob:; "
        "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; "
        "frame-ancestors 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self'")
 
@@ -47,6 +48,7 @@ class MessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     location: dict | None = None  # position approximative envoyée par l'app (jamais enregistrée)
     voice: bool = False  # mode conversation : la réponse sera lue à voix haute
+    image: str | None = Field(default=None, max_length=3_400_000)  # photo (data URL), jamais enregistrée
 
 
 class ConversationPatch(BaseModel):
@@ -303,13 +305,19 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             raise HTTPException(404, "Discussion introuvable")
         if cid in busy:
             raise HTTPException(409, "Syrius répond déjà dans cette discussion.")
+        image = None
+        if body.image:  # photo : vérifiée (format, taille, contenu réel) avant toute utilisation
+            try:
+                image = vision.check_image(body.image)
+            except vision.ImageError as e:
+                raise HTTPException(400, str(e)) from None
         first = not db.get_messages(cid)
         busy.add(cid)
 
         async def stream():
             try:
                 loc = round_location(body.location) if db.get_settings().get("location", True) else None
-                async for event in agent.chat(cid, body.text, loc, voice=body.voice):
+                async for event in agent.chat(cid, body.text, loc, voice=body.voice, image=image):
                     yield sse(event)
                 if first and conv["title"] == "Nouvelle discussion" and db.get_messages(cid):
                     title = agent.make_title(body.text)
