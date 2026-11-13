@@ -34,7 +34,7 @@ DEVICE_TOOLS = [
     _tool("phone_timer", "Lance un minuteur sur le téléphone.",
           {"seconds": {"type": "integer", "description": "Durée en secondes (1 à 86400)"}, "label": {"type": "string"}},
           ["seconds"]),
-    _tool("phone_call", "Prépare un appel téléphonique (l'utilisateur confirme puis appuie sur Appeler).",
+    _tool("phone_call", "Appelle quelqu'un : l'appel part dès que l'utilisateur confirme (bouton ou « oui » à la voix).",
           {"contact": {"type": "string", "description": "Nom du contact ou numéro de téléphone"}}, ["contact"]),
     _tool("phone_sms", "Prépare un SMS (l'utilisateur confirme puis appuie sur Envoyer dans Messages).",
           {"contact": {"type": "string", "description": "Nom du contact ou numéro"},
@@ -145,9 +145,10 @@ def build_action(name: str, args: dict) -> tuple[dict, str]:
         p = {"contact": contact, "is_number": bool(_PHONE.match(contact))}
         if name == "phone_sms":
             p["message"] = _text(args.get("message"), "message", 1000)
-        done = ("Appel préparé" if name == "phone_call" else "SMS préparé") + \
-               " : l'utilisateur doit confirmer dans l'app puis appuyer lui-même sur " + \
-               ("« Appeler »." if name == "phone_call" else "« Envoyer ». Ne dis pas qu'il est envoyé.")
+        done = ("Appel prêt : il part dès que l'utilisateur confirme (bouton « Confirmer » ou « oui » à la voix). "
+                "Ne dis pas que l'appel est en cours." if name == "phone_call" else
+                "SMS préparé : l'utilisateur doit confirmer dans l'app puis appuyer lui-même sur « Envoyer ». "
+                "Ne dis pas qu'il est envoyé.")
     elif name == "phone_open_app":
         p = {"app": _text(args.get("app"), "app", 60)}
         done = f"Ouverture de « {p['app']} » demandée."

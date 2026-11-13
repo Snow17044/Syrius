@@ -218,6 +218,9 @@ public class WakeService extends Service {
     // États : en veille (attend le mot-clé), attend la question, occupé (réflexion / parole).
     private static final int IDLE = 0, QUESTION = 1, BUSY = 2;
     private int mode = IDLE;
+    private volatile JSONObject pendingCall;  // appel préparé par Syrius, en attente du « oui »
+    private boolean confirming;
+    private static final Pattern YES = Pattern.compile("^(oui|ouais|ouai|vas y|vas-y|d accord|ok|okay|appelle|lance|confirme|bien sur|c est ca)\\b.*");
     private boolean wakeInUtterance;
     private final Runnable questionTimeout = this::backToSleep;
     private static final Pattern PREFIX = Pattern.compile("(he|hey|hei|eh|e|et|ai|ok|okay|allo)");
@@ -291,6 +294,14 @@ public class WakeService extends Service {
         main.removeCallbacks(questionTimeout);
         mode = BUSY;
         if (vosk != null) vosk.setPause(true);  // ne pas s'écouter parler
+        if (confirming) {  // réponse à « Je lance l'appel ? »
+            confirming = false;
+            JSONObject call = pendingCall;
+            pendingCall = null;
+            final boolean yes = YES.matcher(norm(q)).matches();
+            main.post(() -> placeCall(call, yes));
+            return;
+        }
         final String question = q;
         main.post(() -> {
             if (norm(question).matches("(stop|merci|merci syrius|au revoir|c est tout|rien|non merci)( .*)?")) {
@@ -312,6 +323,7 @@ public class WakeService extends Service {
 
     // ------------------------------------------------------------------ réponse de Syrius
     private void ask(String question) {
+        pendingCall = null;
         net.execute(() -> {
             String reply;
             try {
@@ -375,6 +387,9 @@ public class WakeService extends Service {
                     case "text": text.append(ev.optString("text")); break;
                     case "text_replace": text.setLength(0); text.append(ev.optString("text")); break;
                     case "error": error = true; break;
+                    case "device":
+                        if ("phone_call".equals(ev.optString("action"))) pendingCall = ev.optJSONObject("params");
+                        break;
                     default: break;
                 }
             }
@@ -427,6 +442,21 @@ public class WakeService extends Service {
             @Override
             public void onDone(String id) {
                 main.post(() -> {
+                    if (thenListen && pendingCall != null && !confirming) {  // Syrius a préparé un appel
+                        confirming = true;
+                        String who = pendingCall.optString("contact", "ce contact");
+                        say("J'appelle " + who + ". Je lance l'appel ? Dites oui ou non.", true);
+                        return;
+                    }
+                    if (confirming) {  // on attend « oui » ou « non »
+                        mode = QUESTION;
+                        wakeInUtterance = false;
+                        if (vosk != null) vosk.setPause(false);
+                        beep();
+                        main.removeCallbacks(questionTimeout);
+                        main.postDelayed(() -> { confirming = false; pendingCall = null; backToSleep(); }, 7000);
+                        return;
+                    }
                     if (thenListen && followUps < 2) {  // la conversation peut continuer
                         followUps++;
                         mode = QUESTION;
@@ -447,6 +477,23 @@ public class WakeService extends Service {
             }
         });
         tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, "wake");
+    }
+
+    /** Appel confirmé à la voix : lancé directement (TelecomManager), même application fermée. */
+    private void placeCall(JSONObject call, boolean yes) {
+        if (call == null || !yes) {
+            say("D'accord, je n'appelle pas.", false);
+            return;
+        }
+        String who = call.optString("contact", "");
+        String number = Calls.number(this, who, call.optBoolean("is_number"));
+        if (number == null) {
+            say("Je ne trouve pas le numéro de " + who + ". Ouvrez l'application pour autoriser les contacts.", false);
+            return;
+        }
+        String err = Calls.place(this, number);
+        if (err != null) say(err, false);
+        else backToSleep();  // l'appel est parti
     }
 
     private void backToSleep() {

@@ -8,6 +8,8 @@
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Retrouver le numéro d'un contact (demandé au premier appel/SMS par nom ; reste sur le téléphone) -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Appels lancés directement, toujours après ta confirmation (bouton ou « oui » à la voix) -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
     <!-- Position approximative (cartes « près de moi »), demandée au premier usage -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Rappels et briefing : notifications à l'heure voulue, reprogrammées au redémarrage -->

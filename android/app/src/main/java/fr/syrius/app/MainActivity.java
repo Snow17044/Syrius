@@ -285,6 +285,10 @@ public class MainActivity extends Activity {
             pendingGeoOrigin = null;
             return;
         }
+        if (code == DeviceActions.REQ_CALL) {
+            device.onCallPermission(results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED);
+            return;
+        }
         if (code == DeviceActions.REQ_CONTACTS) {
             device.onContactsPermission(results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED);
             return;

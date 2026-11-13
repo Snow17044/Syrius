@@ -34,6 +34,7 @@ import java.util.Locale;
 final class DeviceActions {
     static final int REQ_CONTACTS = 43;
     static final int REQ_NOTIF = 45;
+    static final int REQ_CALL = 46;
 
     private final Activity activity;
     private JSONObject pending; // action en attente de la permission « contacts »
@@ -131,26 +132,48 @@ final class DeviceActions {
 
     private void callOrSms(JSONObject req, JSONObject p, boolean sms) throws Exception {
         String contact = p.getString("contact").trim();
-        String number = p.optBoolean("is_number") ? contact.replaceAll("[^0-9+]", "") : null;
-        if (number == null) {
-            if (activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-                pending = req;
-                activity.requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
-                return;
-            }
-            number = lookup(contact);
-            if (number == null) {
-                toast("Contact « " + clip(contact, 40) + " » introuvable");
-                return;
-            }
+        boolean isNumber = p.optBoolean("is_number");
+        if (!isNumber && activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            pending = req;
+            activity.requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
+            return;
         }
-        if (number.isEmpty() || number.length() > 20) throw new IllegalArgumentException();
+        String number = Calls.number(activity, contact, isNumber);
+        if (number == null) {
+            toast("Contact « " + clip(contact, 40) + " » introuvable");
+            return;
+        }
         if (sms) {
             Intent i = new Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", number, null))
                     .putExtra("sms_body", clip(p.optString("message", ""), 1000));
             start(i, "SMS prêt : appuie sur Envoyer");
-        } else {
-            start(new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)), "Appuie sur Appeler");
+            return;
+        }
+        // Appel : tu as déjà confirmé dans Syrius, l'appel part directement.
+        if (!Calls.canCall(activity)) {
+            pending = req;
+            activity.requestPermissions(new String[]{Manifest.permission.CALL_PHONE}, REQ_CALL);
+            return;
+        }
+        String err = Calls.place(activity, number);
+        if (err == null) toast("📞 Appel de " + clip(contact, 40));
+        else start(new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)), err);
+    }
+
+    /** Réponse à la demande d'autorisation des appels. */
+    void onCallPermission(boolean granted) {
+        JSONObject req = pending;
+        pending = null;
+        if (req == null) return;
+        if (granted) {
+            run(req);
+            return;
+        }
+        try {  // refusé : on prépare simplement l'appel dans le téléphone
+            JSONObject p = req.getJSONObject("params");
+            String n = Calls.number(activity, p.getString("contact"), p.optBoolean("is_number"));
+            if (n != null) start(new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", n, null)), "Appuie sur Appeler");
+        } catch (Exception ignored) {
         }
     }
 
