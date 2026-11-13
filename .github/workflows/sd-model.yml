@@ -1,0 +1,115 @@
+# Prépare le modèle d'images hors ligne « turbo » (DreamShaper 7 + LCM-LoRA + TAESD) pour le téléphone,
+# le teste, puis le publie dans la release « models-sd-turbo-1 ». L'application vérifie l'empreinte
+# SHA-256 de chaque fichier avant de l'utiliser.
+name: Modèle d'images hors ligne
+
+# Lancement manuel uniquement : les empreintes des fichiers publiés sont inscrites dans l'application.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Outils Python (versions épinglées)
+        run: |
+          python3 -m venv /tmp/py && . /tmp/py/bin/activate
+          pip install -q torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q diffusers==0.31.0 transformers==4.46.3 peft==0.13.2 accelerate==1.1.1 onnx==1.17.0 \
+            safetensors==0.4.5 pillow
+          pip list 2>/dev/null | grep -iE "^(torch|diffusers|transformers|peft|onnx) "
+
+      - name: Révisions figées des modèles sources
+        run: |
+          for r in Lykon/dreamshaper-7 latent-consistency/lcm-lora-sdv1-5 madebyollin/taesd; do
+            rev=$(curl -sS "https://huggingface.co/api/models/$r" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["sha"], d.get("gated"), (d.get("cardData") or {}).get("license"))')
+            echo "$r $rev"; echo "$rev" | cut -d" " -f1 >> /tmp/revs
+          done
+
+      - name: Export ONNX
+        run: |
+          . /tmp/py/bin/activate
+          df -h / | tail -1
+          python scripts/export_sd_turbo.py /tmp/onnx $(cat /tmp/revs | tr '\n' ' ')
+          du -sh /tmp/onnx/*; rm -rf ~/.cache/huggingface; df -h / | tail -1
+
+      - name: Convertisseur MNN (sources épinglées)
+        run: |
+          git clone -q --depth 1 --branch 3.5.0 https://github.com/alibaba/MNN.git /tmp/MNN
+          test "$(git -C /tmp/MNN rev-parse HEAD)" = c35f14f3ab5cb65094863b9a0e888370b027a670
+          cmake -S /tmp/MNN -B /tmp/mnnconv -DCMAKE_BUILD_TYPE=Release -DMNN_BUILD_CONVERTER=ON -DMNN_BUILD_TOOLS=OFF \
+            -DMNN_BUILD_SHARED_LIBS=OFF -DMNN_LOW_MEMORY=ON -DMNN_SUPPORT_TRANSFORMER_FUSE=ON > /dev/null
+          cmake --build /tmp/mnnconv -j"$(nproc)" --target MNNConvert > /dev/null
+          ls -la /tmp/mnnconv/MNNConvert
+
+      - name: Conversion MNN (poids 8 bits)
+        run: |
+          set -o pipefail
+          mkdir -p /tmp/model /tmp/model-fuse
+          C=/tmp/mnnconv/MNNConvert
+          for m in text_encoder unet; do
+            $C -f ONNX --modelFile /tmp/onnx/$m/model.onnx --MNNModel /tmp/model/$m.mnn --saveExternalData=1 \
+              --weightQuantBits=8 2>&1 | tail -3
+          done
+          $C -f ONNX --modelFile /tmp/onnx/taesd_decoder/model.onnx --MNNModel /tmp/model/taesd_decoder.mnn \
+            --saveExternalData=1 2>&1 | tail -3
+          cp /tmp/onnx/tokenizer/vocab.json /tmp/onnx/tokenizer/merges.txt /tmp/model/
+          # Variante avec l'attention fusionnée (moins de mémoire si elle fonctionne)
+          cp /tmp/model/text_encoder.mnn* /tmp/model/taesd_decoder.mnn* /tmp/model/vocab.json /tmp/model/merges.txt /tmp/model-fuse/
+          $C -f ONNX --modelFile /tmp/onnx/unet/model.onnx --MNNModel /tmp/model-fuse/unet.mnn --saveExternalData=1 \
+            --weightQuantBits=8 --transformerFuse 2>&1 | tail -3 || echo "fusion indisponible"
+          rm -rf /tmp/onnx
+          ls -la /tmp/model /tmp/model-fuse
+
+      - name: Moteur du téléphone (version Linux pour le test)
+        run: set -o pipefail; ./android/native/build.sh linux /tmp/sd 2>&1 | tail -5
+
+      - name: Test de génération (même code que sur le téléphone)
+        run: |
+          . /tmp/py/bin/activate
+          cat > /tmp/show.py <<'PY'
+          import sys
+          from PIL import Image, ImageStat
+          im = Image.open(sys.argv[1]); st = ImageStat.Stat(im)
+          print(im.size, "moyenne", [round(x) for x in st.mean], "écart-type", [round(x) for x in st.stddev])
+          s = im.convert("L").resize((48, 24)); chars = " .:-=+*#%@"
+          for y in range(24):
+              print("".join(chars[s.getpixel((x, y)) * 9 // 255] for x in range(48)))
+          PY
+          P="a cute cat astronaut floating in space, digital art, highly detailed"
+          for v in model model-fuse; do
+            for steps in 4; do
+              echo "=========== $v, $steps étapes"
+              if [ -f /tmp/$v/unet.mnn ]; then
+                /usr/bin/time -f "%e s, %M Ko max" /tmp/sd/syrius_sd /tmp/$v $steps 42 /tmp/$v.jpg "$P" 2>&1 | grep -v "^progression" | tail -6 || true
+                [ -f /tmp/$v.jpg ] && python /tmp/show.py /tmp/$v.jpg
+              fi
+            done
+          done
+          echo "=========== description longue et accents (robustesse)"
+          /tmp/sd/syrius_sd /tmp/model 2 7 /tmp/long.jpg "Château À LA MER — $(printf 'very long prompt %.0s' {1..60})" | tail -1
+
+      - name: Publication dans Releases (models-sd-turbo-1)
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd /tmp/model
+          test -f /tmp/model.jpg  # seulement si le test a produit une image
+          sha256sum * | tee /tmp/SHA256SUMS
+          ls -l
+          gh release view models-sd-turbo-1 >/dev/null 2>&1 || \
+            gh release create models-sd-turbo-1 --target "$GITHUB_SHA" --title "Modèle d'images hors ligne (turbo)" \
+              --notes "Fichiers téléchargés automatiquement par l'application Syrius (empreintes vérifiées)."
+          gh release upload models-sd-turbo-1 * /tmp/SHA256SUMS  # jamais d'écrasement

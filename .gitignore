@@ -6,3 +6,4 @@ __pycache__/
 data/
 *.db
 *.db-journal
+android/app/src/main/jniLibs/

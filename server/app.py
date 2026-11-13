@@ -11,12 +11,12 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth
-from . import vision
+from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
 from .store_redis import RedisDatabase, RedisError, UpstashREST
-from .tools import gmail, tiles
+from .tools import gmail, imagegen, tiles
 from .tools.places import round_location
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
@@ -49,6 +49,10 @@ class MessageBody(BaseModel):
     location: dict | None = None  # position approximative envoyée par l'app (jamais enregistrée)
     voice: bool = False  # mode conversation : la réponse sera lue à voix haute
     image: str | None = Field(default=None, max_length=3_400_000)  # photo (data URL), jamais enregistrée
+
+
+class ImageBody(BaseModel):
+    prompt: str = Field(min_length=3, max_length=600)
 
 
 class ConversationPatch(BaseModel):
@@ -193,6 +197,30 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             raise HTTPException(404) from None
         return Response(png, media_type="image/png",
                         headers={"Cache-Control": "private, max-age=604800"})
+
+    @app.post("/api/transcribe", dependencies=[Depends(require_auth)])
+    async def transcribe_voice(request: Request):
+        """Voix → texte (Whisper via Groq). Le son n'est jamais enregistré."""
+        try:
+            if int(request.headers.get("content-length", "0")) > transcribe.MAX_BYTES:
+                raise HTTPException(413, "enregistrement trop long")
+        except ValueError:
+            raise HTTPException(400, "taille invalide") from None
+        data = await request.body()
+        try:
+            text = await asyncio.to_thread(transcribe.transcribe, cfg.groq_api_key, data)
+        except transcribe.TranscribeError as e:
+            raise HTTPException(502 if "service" in str(e) else 400, str(e)) from None
+        return {"text": text}
+
+    @app.post("/api/image", dependencies=[Depends(require_auth)])
+    def create_image(body: ImageBody):
+        """Image créée en ligne (gratuit, sans clé), relayée par le serveur (voir tools/imagegen.py)."""
+        try:
+            ctype, data = imagegen.generate(body.prompt)
+        except imagegen.ImageGenError as e:
+            raise HTTPException(502, str(e)) from None
+        return Response(data, media_type=ctype, headers={"Cache-Control": "no-store"})
 
     @app.get("/map3d/t/{z}/{x}/{y}.pbf", dependencies=[Depends(require_auth)])
     def tile_3d(z: int, x: int, y: int):

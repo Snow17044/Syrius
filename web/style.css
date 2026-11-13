@@ -439,3 +439,10 @@ body::after {
 .photo-preview span { flex: 1; color: #9fe8ff; }
 .msg-photo { display: block; max-width: 220px; max-height: 220px; border-radius: 14px; margin-bottom: 6px;
   border: 1px solid rgba(255, 255, 255, .3); }
+
+/* ---------- images créées sur le téléphone et modèles hors ligne ---------- */
+.image-card progress { width: 100%; height: 8px; margin: 8px 0 2px; accent-color: var(--accent, #4fd1ff); }
+.image-card .gen-image { display: block; width: 100%; max-width: 420px; aspect-ratio: 1; object-fit: cover;
+  border-radius: 14px; margin: 10px 0 4px; box-shadow: 0 0 0 1px rgba(79, 209, 255, .35), 0 8px 28px rgba(0, 0, 0, .45); }
+#packs .pack { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(127, 127, 127, .25); }
+#packs h5 { margin: 0 0 4px; font-size: 15px; }

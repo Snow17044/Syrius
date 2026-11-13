@@ -140,6 +140,9 @@ _THINK_TAGS = re.compile(r"<think>.*?</think>\s*", re.S)
 # Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
 _WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme", re.I)
 _WANTS_MODEL = re.compile(r"\b3 ?d\b|maquette|mod[èe]le 3|en relief|hologramme", re.I)
+_WANTS_IMAGE = re.compile(
+    r"\bdessine|\b(?:cr[ée]e|g[ée]n[èe]re|fais|fabrique|imagine|invente|peins)\b[^.?!]{0,30}?"
+    r"\b(?:image|dessin|illustration|logo|affiche|fond d'[ée]cran|portrait|tableau|peinture)s?\b", re.I)
 
 
 class Agent:
@@ -230,7 +233,8 @@ class Agent:
                 req = dict(body)
                 if _step == 0 and not tool_retry:
                     forced = "show_diagram" if _WANTS_DIAGRAM.search(user_text) else \
-                        "show_model" if _WANTS_MODEL.search(user_text) else ""
+                        "show_model" if _WANTS_MODEL.search(user_text) else \
+                        "phone_image" if not image and _WANTS_IMAGE.search(user_text) else ""
                     if forced:
                         # On n'envoie que l'outil voulu (demande bien plus légère) et il doit être utilisé.
                         req["tools"] = [t for t in req["tools"] if t["function"]["name"] == forced]

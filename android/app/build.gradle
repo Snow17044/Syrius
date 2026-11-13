@@ -18,6 +18,10 @@ android {
         versionName "1.0." + (System.getenv("SYRIUS_VERSION_CODE") ?: "1")
         // Adresse de ton Syrius, pré-remplie au premier lancement (variable GitHub SYRIUS_URL).
         buildConfigField "String", "DEFAULT_URL", "\"" + (System.getenv("SYRIUS_URL") ?: "") + "\""
+        // Téléphones Android 64 bits (ARM) uniquement : application plus légère.
+        ndk {
+            abiFilters "arm64-v8a"
+        }
     }
 
     buildFeatures {
@@ -51,6 +55,10 @@ android {
 dependencies {
     // IA hors ligne (Google MediaPipe, open source Apache 2.0) — version épinglée.
     implementation "com.google.mediapipe:tasks-genai:0.10.27"
+    // Vision hors ligne (Google LiteRT-LM, open source Apache 2.0) — version épinglée.
+    implementation "com.google.ai.edge.litertlm:litertlm-android:0.19.1"
+    // Génération d'images hors ligne : libMNN.so + libsyrius_sd.so compilées par la CI depuis des
+    // sources épinglées (android/native/build.sh) et placées dans src/main/jniLibs.
     // Photo pour la vision (partage sécurisé du fichier avec l'appareil photo)
     implementation "androidx.core:core:1.13.1"
     // « Hey Syrius » : reconnaissance vocale hors ligne Vosk (Apache 2.0) — versions épinglées.

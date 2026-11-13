@@ -118,3 +118,51 @@ def test_musique():
     for bad in ({"action": "rm -rf"}, {"action": "play"}, {"action": "play", "query": "x" * 500}):
         with pytest.raises(DeviceInputError):
             build_action("phone_music", bad)
+
+
+def test_image_sur_le_telephone():
+    from server.tools.device import DEVICE_LABELS, DeviceInputError, build_action
+    ev, done = build_action("phone_image", {"prompt": "  a cute   cat astronaut, digital art ",
+                                            "caption": "Chat astronaute"})
+    assert ev["params"] == {"prompt": "a cute cat astronaut, digital art", "caption": "Chat astronaute"}
+    assert not ev["confirm"] and "phone_image" in DEVICE_LABELS and "secondes" in done and "Android" not in done
+    ev, _ = build_action("phone_image", {"prompt": "red apple"})
+    assert ev["params"]["caption"] == "red apple"
+    for bad in ({}, {"prompt": "x" * 500}, {"prompt": "ab"}, {"prompt": "chat", "evil": 1}, {"prompt": 42}):
+        with pytest.raises(DeviceInputError):
+            build_action("phone_image", bad)
+    ev, _ = build_action("phone_image", {"prompt": "a\x00b\ncat"})  # caractères de contrôle neutralisés
+    assert ev["params"]["prompt"] == "a b cat"
+
+
+def test_demande_d_image_forcee():
+    from server.agent import _WANTS_DIAGRAM, _WANTS_IMAGE, _WANTS_MODEL
+    for t in ("Dessine-moi un chat astronaute", "crée une image d'un dragon", "Génère un logo pour mon club",
+              "fais moi un fond d'écran de montagne", "Imagine une illustration de Paris en 2100"):
+        assert _WANTS_IMAGE.search(t), t
+    for t in ("Que vois-tu sur cette photo ?", "quelle heure est-il", "fais un schéma de la photosynthèse",
+              "Crée une liste de courses"):
+        assert not _WANTS_IMAGE.search(t) or _WANTS_DIAGRAM.search(t) or _WANTS_MODEL.search(t), t
+
+
+def test_vision_et_images_hors_ligne_securisees():
+    # Modèles téléchargés seulement à une révision figée, avec empreinte SHA-256 vérifiée avant usage.
+    pack = open("android/app/src/main/java/fr/syrius/app/ModelPack.java", encoding="utf-8").read()
+    assert "p.sha256.equals(sha256(f))" in pack and "delete()" in pack
+    import re
+    for name in ("Vision", "ImageGen"):
+        src = open(f"android/app/src/main/java/fr/syrius/app/{name}.java", encoding="utf-8").read()
+        if name == "Vision":  # dépôt Hugging Face à une révision figée
+            rev = re.search(r'REV = "([^"]+)"', src).group(1)
+            assert re.fullmatch(r"[0-9a-f]{40}", rev), f"{name} : révision non figée"
+        else:  # modèle préparé par notre CI, publié dans nos Releases
+            assert 'BASE = "https://github.com/Snow17044/Syrius/releases/download/models-sd-turbo-1/"' in src
+        shas = re.findall(r'"([0-9a-f]{64})"', src)
+        block = src.split("PARTS = {")[1].split("};")[0]  # un fichier = une empreinte
+        assert shas and len(re.findall(r'"([0-9a-f]{64})"', block)) == block.count("Part(") + block.count('part("'), name
+    build = open("android/native/build.sh", encoding="utf-8").read()
+    assert re.search(r'MNN_COMMIT="[0-9a-f]{40}"', build) and "arrêt par sécurité" in build
+    main = open("android/app/src/main/java/fr/syrius/app/MainActivity.java", encoding="utf-8").read()
+    for m in ("packDownload", "visionAsk", "imageGenerate", "imageSave"):
+        body = main.split(f"public String {m}(")[1].split("@JavascriptInterface")[0]
+        assert "trusted()" in body, m

@@ -319,9 +319,56 @@ function refreshLocalBox() {
     : i.installed ? "✅ Installée et prête." : "Pas encore installée.";
   $("#local-fallback").checked = l.prefs.fallback;
   $("#local-force").checked = l.prefs.force;
+  const packsBusy = refreshPacks();
   clearTimeout(localTimer);
-  if (busy && $("#settings").open) localTimer = setTimeout(refreshLocalBox, 1500);
+  if ((busy || packsBusy) && $("#settings").open) localTimer = setTimeout(refreshLocalBox, 1500);
 }
+
+// Vision et images hors ligne : un bloc par modèle (téléchargement vérifié par empreinte).
+function refreshPacks() {
+  const p = L() && L().packs();
+  $("#packs").classList.toggle("hidden", !p);
+  if (!p) return false;
+  let anyBusy = false;
+  document.querySelectorAll("#packs .pack").forEach((el) => {
+    const i = p[el.dataset.pack] || {};
+    const busy = !!(i.downloading || i.verifying);
+    anyBusy = anyBusy || busy;
+    el.querySelector(".pack-dl").classList.toggle("hidden", busy || !!i.installed);
+    const del = el.querySelector(".pack-del");
+    del.classList.toggle("hidden", !i.installed && !busy);
+    del.textContent = busy ? "✕ Annuler" : "🗑 Supprimer";
+    const prog = el.querySelector(".local-progress");
+    prog.classList.toggle("hidden", !i.downloading);
+    if (i.downloading) {
+      prog.querySelector("progress").value = i.progress || 0;
+      prog.querySelector("span").textContent = `${i.progress || 0} %`;
+    }
+    const noEngine = el.dataset.pack === "sd15" && i.engine === false;
+    el.querySelector(".pack-status").textContent = i.error ? "⚠ " + i.error
+      : noEngine ? "⚠ Moteur d'images absent de cette version de l'application."
+      : i.verifying ? "🔒 Vérification des empreintes des fichiers…"
+      : i.downloading ? "Téléchargement en cours (tu peux fermer cet écran, il continue)…"
+      : i.installed ? "✅ Installée et prête." : "Pas encore installée.";
+  });
+  return anyBusy;
+}
+document.querySelectorAll("#packs .pack").forEach((el) => {
+  const id = el.dataset.pack;
+  el.querySelector(".pack-dl").addEventListener("click", () => {
+    const name = el.querySelector("h5").textContent.trim();
+    if (!confirm(`Télécharger ${name} ? Utilise de préférence le Wi-Fi.`)) return;
+    const r = window.SyriusAndroid.packDownload(id);
+    if (r !== "ok") alert(r);
+    setTimeout(refreshLocalBox, 500);
+  });
+  el.querySelector(".pack-del").addEventListener("click", () => {
+    const i = ((L() && L().packs()) || {})[id] || {};
+    if (i.downloading) window.SyriusAndroid.packCancel(id);
+    else if (confirm("Supprimer ce modèle de ce téléphone ?")) window.SyriusAndroid.packDelete(id);
+    setTimeout(refreshLocalBox, 300);
+  });
+});
 
 $("#local-download").addEventListener("click", () => {
   const l = L();
@@ -373,13 +420,167 @@ async function answerLocally(view, note) {
   }
 }
 
+// Sans réseau, la photo est analysée par la vision du téléphone (si elle est installée).
+function offlineVisionWanted() {
+  const l = L();
+  return !!(l && l.visionReady() && (l.prefs.force || state.offline || !navigator.onLine));
+}
+
 async function sendLocal(text) {
   $("#input").value = "";
   autoGrow();
   addMessage("user", text);
   const view = addMessage("assistant", "");
   scrollDown(true);
+  const l = L();
+  if (l && l.wantsImage(text) && l.imageReady()) {
+    setTools(view, ["🎨 Image créée sur ton téléphone (hors ligne)"]);
+    setStreaming(true);
+    let prompt;
+    try { prompt = await l.imagePrompt(text); } finally { setStreaming(false); }
+    view.text = "Je dessine ça sur ton téléphone, sans Internet. Patience : 1 à 3 minutes.";
+    state.lastReply = view.text;
+    renderText(view, "assistant");
+    imageCard(view, { prompt, caption: text.slice(0, 80) });
+    return;
+  }
   await answerLocally(view);
+}
+
+async function sendLocalPhoto(text, photo) {
+  $("#input").value = "";
+  autoGrow();
+  const userView = addMessage("user", text);
+  const im = document.createElement("img");
+  im.className = "msg-photo"; im.src = photo; im.alt = "Photo envoyée";
+  userView.bubble.prepend(im);
+  setPhoto(null);
+  const view = addMessage("assistant", "");
+  scrollDown(true);
+  setTools(view, ["👁 Vision hors ligne (sur ton téléphone) — 30 s à 1 min"]);
+  setStreaming(true);
+  state.localRunning = true;
+  let pending = false;
+  try {
+    await L().askPhoto(text, photo, (full) => {
+      view.text = full;
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; renderText(view, "assistant"); scrollDown(); });
+    });
+  } catch (err) {
+    showError(view, err.message || "Vision hors ligne indisponible.");
+  } finally {
+    state.localRunning = false;
+    setStreaming(false);
+    renderText(view, "assistant");
+    state.lastReply = view.text;
+    if (view.text && state.settings.voice_reply && !window.SyriusVoice?.active) speak(view.text);
+  }
+}
+
+// Image : créée en ligne (quelques secondes) ; sans réseau ou si le service est saturé, le téléphone
+// prend le relais avec son générateur hors ligne (quelques minutes).
+async function onlineImage(prompt) {
+  const res = await fetch("/api/image", {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Syrius": "1" },
+    body: JSON.stringify({ prompt: String(prompt).slice(0, 600) }),
+  });
+  if (res.status === 401) { showLogin(); throw new Error("Connexion expirée."); }
+  if (!res.ok) {
+    let msg = `Erreur ${res.status}`;
+    try { msg = (await res.json()).detail || msg; } catch (_) { /* ignore */ }
+    throw new Error(msg);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  try {  // converti en JPEG : même format que les images du téléphone (enregistrement dans la galerie)
+    const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = url; });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0);
+    return c.toDataURL("image/jpeg", 0.92);
+  } catch (_) {
+    throw new Error("Image illisible.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function imageCard(view, params) {
+  const card = document.createElement("div");
+  card.className = "action-card image-card";
+  const title = document.createElement("div");
+  title.className = "action-title";
+  title.textContent = "🎨 " + (params.caption || "Image");
+  const bar = document.createElement("progress");
+  bar.max = 100;
+  const status = document.createElement("p");
+  status.className = "small";
+  card.append(title, bar, status);
+  view.bubble.appendChild(card);
+  scrollDown();
+  const l = L();
+  const phoneOk = !!(l && typeof l.makeImage === "function" && l.imageReady());
+  const started = Date.now();
+  const online = navigator.onLine && !state.offline && !(l && l.prefs.force);
+
+  const phone = () => {
+    bar.value = 0;
+    status.textContent = "Création sur ton téléphone, sans Internet (1 à 3 min)…";
+    return l.makeImage(params.prompt, (pct) => {
+      bar.value = pct;
+      const mins = Math.round((Date.now() - started) / 60000);
+      status.textContent = `Création sur ton téléphone… ${pct} %` + (mins ? ` (${mins} min)` : "");
+    });
+  };
+  let where = "en ligne";
+  const run = async () => {
+    if (online) {
+      bar.removeAttribute("value");  // barre animée : quelques secondes
+      status.textContent = "Création de l'image en ligne (quelques secondes)…";
+      try { return await onlineImage(params.prompt); } catch (err) {
+        if (!phoneOk) throw err;
+        status.textContent = "Service en ligne indisponible → ton téléphone prend le relais…";
+      }
+    } else if (!phoneOk) {
+      throw new Error(Native
+        ? "Sans Internet, il faut « 🎨 Images hors ligne » : Réglages → IA hors ligne."
+        : "Pas de connexion Internet.");
+    }
+    where = "sur ton téléphone";
+    return phone();
+  };
+  run().then((dataUrl) => {
+    bar.remove();
+    const secs = Math.round((Date.now() - started) / 1000);
+    status.textContent = `Image créée ${where} en ${secs < 90 ? secs + " s" : Math.round(secs / 60) + " min"}.`;
+    const img = document.createElement("img");
+    img.className = "gen-image"; img.src = dataUrl; img.alt = params.caption || "Image créée par Syrius";
+    const row = document.createElement("div");
+    row.className = "action-buttons";
+    if (Native && l && typeof l.saveImage === "function" && typeof Native.imageSave === "function") {
+      const save = document.createElement("button");
+      save.className = "primary"; save.textContent = "💾 Enregistrer dans la galerie";
+      save.addEventListener("click", () => {
+        const r = l.saveImage(dataUrl);
+        save.disabled = r === "ok";
+        save.textContent = r === "ok" ? "✅ Enregistrée (Images › Syrius)" : "⚠ " + r;
+      });
+      row.append(save);
+    } else {
+      const a = document.createElement("a");
+      a.className = "primary btn-link"; a.textContent = "💾 Télécharger l'image";
+      a.href = dataUrl; a.download = "Syrius.jpg";
+      row.append(a);
+    }
+    card.insertBefore(img, status);
+    card.append(row);
+    scrollDown();
+  }).catch((err) => {
+    bar.remove();
+    status.textContent = "⚠ " + (err.message || "Création de l'image impossible.");
+  });
 }
 
 async function sendMessage(text) {
@@ -387,8 +588,14 @@ async function sendMessage(text) {
   const photo = state.photo;
   if (photo && !text) text = "Que vois-tu sur cette photo ?";
   if (!text || state.streaming) return;
-  if (localWanted()) {
-    if (photo) { alert("L'analyse de photo a besoin d'Internet (l'IA du téléphone ne voit pas les images)."); return; }
+  if (localWanted() || (photo && offlineVisionWanted())) {
+    if (photo) {
+      if (!L() || !L().visionReady()) {
+        alert("Sans Internet, la photo a besoin de la « Vision hors ligne » : Réglages → IA hors ligne → 👁 Télécharger.");
+        return;
+      }
+      return sendLocalPhoto(text, photo);
+    }
     return sendLocal(text);
   }
   if (!state.convId) {
@@ -580,12 +787,13 @@ const DEVICE_TEXT = {
   phone_reminder_cancel: () => "🗑 Rappel annulé",
   phone_music: (p) => p.action === "play" ? `🎵 ${p.query}${p.app && p.app !== "auto" ? " · " + p.app.replace("_", " ") : ""}`
     : { pause: "⏸ Pause", resume: "▶ Reprise", next: "⏭ Titre suivant", previous: "⏮ Titre précédent" }[p.action],
+  phone_image: (p) => `🎨 ${p.caption || "Image"}`,
   phone_calendar: (p) => `📅 ${p.title} — ${p.label}${p.location ? " · " + p.location : ""}`,
 };
 
 // Actions qui demandent une version récente de l'application Android.
 const NEEDS_FEATURE = { phone_reminder: "reminders", phone_reminder_cancel: "reminders", phone_calendar: "calendar",
-  phone_music: "music" };
+  phone_music: "music", phone_image: "imagegen" };
 function appFeatures() {
   try { return Native && typeof Native.features === "function" ? JSON.parse(Native.features()) : []; } catch (_) { return []; }
 }
@@ -600,6 +808,7 @@ function runDevice(ev) {
 }
 
 function handleDevice(view, ev) {
+  if (ev.action === "phone_image") { imageCard(view, ev.params || {}); return; }
   const card = document.createElement("div");
   card.className = "action-card";
   const title = document.createElement("div");
