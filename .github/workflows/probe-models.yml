@@ -8,6 +8,21 @@ permissions:
   contents: read
 
 jobs:
+  online:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Services d'images en ligne gratuits
+        run: |
+          P="a%20cute%20cat%20astronaut%20floating%20in%20space%2C%20digital%20art"
+          for u in "https://image.pollinations.ai/prompt/$P?width=768&height=768&seed=42&nologo=true" \
+                   "https://image.pollinations.ai/prompt/$P?width=768&height=768&seed=43&nologo=true&model=flux" \
+                   "https://gen.pollinations.ai/image/$P?width=768&height=768&seed=44&nologo=true"; do
+            echo "=== $u"
+            curl -sS -m 90 -o /tmp/o.bin -D /tmp/h.txt -w "http %{http_code} | %{time_total} s | %{size_download} o\n" "$u" || true
+            grep -iE "^(content-type|server|x-|retry|ratelimit)" /tmp/h.txt | head -12
+            file /tmp/o.bin; head -c 300 /tmp/o.bin | strings | head -5
+          done
   image:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
