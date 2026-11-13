@@ -12,31 +12,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Modèles de vision (fichiers + carte)
+      - name: Fichiers des modèles retenus
         run: |
-          for repo in litert-community/InternVL3-1B litert-community/InternVL3_5-1B litert-community/Qwen2-VL-2B \
-                      litert-community/LFM3-VL-2B-LiteRT litert-community/SmolVLM2-500M litert-community/LLaVA-OneVision-0.5B \
-                      litert-community/InternVL3_5-2B; do
+          cat > /tmp/f.py <<'PY'
+          import json, sys
+          d = json.load(sys.stdin)
+          print("gated:", d.get("gated"), "| licence:", (d.get("cardData") or {}).get("license"))
+          for s in d.get("siblings", []):
+              print("  %s  %s o  sha256=%s" % (s["rfilename"], s.get("size"), (s.get("lfs") or {}).get("sha256")))
+          PY
+          for repo in litert-community/InternVL3_5-1B taobao-mnn/stable-diffusion-v1-5-mnn-general taobao-mnn/stable-diffusion-v1-5-mnn-opencl; do
             echo "=================== $repo"
-            curl -sS -m 30 "https://huggingface.co/api/models/$repo?blobs=true" | python3 -c '
-          import json,sys
-          d=json.load(sys.stdin)
-          print("gated:",d.get("gated"),"| licence:",(d.get("cardData") or {}).get("license"),"| dl:",d.get("downloads"))
-          for s in d.get("siblings",[]):
-              sz=round((s.get("size") or 0)/1e6)
-              print(f"  {s[\"rfilename\"]}  {sz} Mo  sha256={(s.get(\"lfs\") or {}).get(\"sha256\")}")' || true
-            curl -sS -m 30 "https://huggingface.co/$repo/raw/main/README.md" | grep -v "^\s*$" | head -80 | cut -c1-220
+            curl -sS -m 30 "https://huggingface.co/api/models/$repo?blobs=true" | python3 /tmp/f.py || true
           done
-      - name: Stable Diffusion MNN (tous les fichiers)
-        run: |
-          for repo in taobao-mnn/stable-diffusion-v1-5-mnn-general taobao-mnn/stable-diffusion-v1-5-mnn-opencl; do
-            echo "=================== $repo"
-            curl -sS -m 30 "https://huggingface.co/api/models/$repo?blobs=true" | python3 -c '
-          import json,sys
-          d=json.load(sys.stdin)
-          for s in d.get("siblings",[]):
-              print(f"  {s[\"rfilename\"]}  {s.get(\"size\")} o  sha256={(s.get(\"lfs\") or {}).get(\"sha256\")}")'
-            curl -sS -m 30 "https://huggingface.co/$repo/raw/main/README.md" | grep -v "^\s*$" | head -40 | cut -c1-220
+          for repo in taobao-mnn/stable-diffusion-v1-5-mnn-general; do
+            curl -sS -m 30 "https://huggingface.co/$repo/raw/main/README.md" | grep -v "^\s*$" | head -60 | cut -c1-220
           done
       - name: Bibliothèques Android (contenu natif)
         run: |
