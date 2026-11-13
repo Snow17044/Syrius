@@ -46,7 +46,10 @@
         };
         window.syriusOnSpeechEnd = () => finish("");
         n.startListening();
-        listenOnce.cancel = () => { try { n.stopListening(); } catch (_) { /* */ } finish(""); };
+        listenOnce.cancel = () => {
+          try { if (typeof n.cancelListening === "function") n.cancelListening(); else n.stopListening(); } catch (_) { /* */ }
+          finish("");
+        };
         return;
       }
       const rec = new Recognition();

@@ -267,6 +267,60 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
             return;
         }
+        if (online()) {  // Whisper via ton serveur : bien plus fiable que la reconnaissance du téléphone
+            startWhisperListening();
+            return;
+        }
+        startGoogleListening();
+    }
+
+    private final java.util.concurrent.atomic.AtomicBoolean micStop = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean micCancel = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.ExecutorService micWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private volatile boolean capturing;
+
+    private boolean online() {
+        try {
+            android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+            android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null && nc.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Une phrase enregistrée (fin automatique au silence), puis transcrite par Whisper via le serveur. */
+    private void startWhisperListening() {
+        if (capturing) return;
+        capturing = true;
+        micStop.set(false);
+        micCancel.set(false);
+        micWorker.execute(() -> {
+            VoiceCapture.Result r = VoiceCapture.capture(null, 8000, micStop, micCancel);
+            String text = null;
+            if (r != null && !micCancel.get()) {
+                sendJs("window.syriusOnSpeech && window.syriusOnSpeech(\"…\", false)");
+                text = Transcriber.transcribe(this, r.wav);
+            }
+            capturing = false;
+            final boolean spoke = r != null && !micCancel.get();
+            final String t = text;
+            runOnUiThread(() -> {
+                if (t != null) {
+                    if (!voiceMode) WakeService.appVisible(false);
+                    sendJs("window.syriusOnSpeech && window.syriusOnSpeech(" + JSONObject.quote(t) + ", true)");
+                } else if (spoke) {  // serveur injoignable : reconnaissance du téléphone, il faut répéter
+                    Toast.makeText(this, "Répète, s'il te plaît", Toast.LENGTH_SHORT).show();
+                    startGoogleListening();
+                } else {
+                    if (!voiceMode) WakeService.appVisible(false);
+                    sendJs("window.syriusOnSpeechEnd && window.syriusOnSpeechEnd()");
+                }
+            });
+        });
+    }
+
+    private void startGoogleListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             Toast.makeText(this, "Reconnaissance vocale indisponible sur ce téléphone", Toast.LENGTH_LONG).show();
             sendJs("window.syriusOnSpeechEnd && window.syriusOnSpeechEnd()");
@@ -683,7 +737,16 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void cancelListening() {  // sortie du mode conversation : rien n'est envoyé
+            micCancel.set(true);
+            runOnUiThread(() -> {
+                if (recognizer != null) recognizer.cancel();
+            });
+        }
+
+        @JavascriptInterface
         public void stopListening() {
+            micStop.set(true);  // fin de phrase demandée : ce qui a été dit est gardé
             runOnUiThread(() -> {
                 if (recognizer != null) recognizer.stopListening();
             });
@@ -733,6 +796,8 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (recognizer != null) recognizer.destroy();
         if (tts != null) tts.shutdown();
+        micCancel.set(true);
+        micWorker.shutdownNow();
         if (local != null) local.shutdown();
         if (vision != null) vision.shutdown();
         if (imageGen != null) imageGen.shutdown();

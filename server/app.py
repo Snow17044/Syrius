@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth
-from . import vision
+from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -197,6 +197,21 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             raise HTTPException(404) from None
         return Response(png, media_type="image/png",
                         headers={"Cache-Control": "private, max-age=604800"})
+
+    @app.post("/api/transcribe", dependencies=[Depends(require_auth)])
+    async def transcribe_voice(request: Request):
+        """Voix → texte (Whisper via Groq). Le son n'est jamais enregistré."""
+        try:
+            if int(request.headers.get("content-length", "0")) > transcribe.MAX_BYTES:
+                raise HTTPException(413, "enregistrement trop long")
+        except ValueError:
+            raise HTTPException(400, "taille invalide") from None
+        data = await request.body()
+        try:
+            text = await asyncio.to_thread(transcribe.transcribe, cfg.groq_api_key, data)
+        except transcribe.TranscribeError as e:
+            raise HTTPException(502 if "service" in str(e) else 400, str(e)) from None
+        return {"text": text}
 
     @app.post("/api/image", dependencies=[Depends(require_auth)])
     def create_image(body: ImageBody):
