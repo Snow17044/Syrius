@@ -28,7 +28,7 @@ if [ "$MODE" = "android" ]; then
   : "${ANDROID_NDK:?ANDROID_NDK manquant}"
   TC=(-DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake"
       -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DANDROID_STL=c++_static)
-  cmake -S "$WORK/MNN" -B "$WORK/mnn-build" "${TC[@]}" "${MNN_FLAGS[@]}" -DMNN_ARM82=ON -DMNN_USE_LOGCAT=ON \
+  cmake -S "$WORK/MNN" -B "$WORK/mnn-build" "${TC[@]}" "${MNN_FLAGS[@]}" -DMNN_ARM82=ON -DMNN_USE_LOGCAT=ON -DMNN_BUILD_FOR_ANDROID_COMMAND=ON \
     -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384" > /dev/null
   cmake --build "$WORK/mnn-build" -j"$(nproc)" --target MNN > /dev/null
   cmake -S "$HERE" -B "$WORK/sd-build" "${TC[@]}" -DCMAKE_BUILD_TYPE=Release \
@@ -37,7 +37,8 @@ if [ "$MODE" = "android" ]; then
   cp "$WORK/mnn-build/libMNN.so" "$WORK/sd-build/libsyrius_sd.so" "$OUT/"
   "$ANDROID_NDK"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-unneeded "$OUT"/*.so
 else
-  cmake -S "$WORK/MNN" -B "$WORK/mnn-build" "${MNN_FLAGS[@]}" -DMNN_AVX512=OFF > /dev/null
+  EXTRA=(-DMNN_AVX512=OFF); [ "$(uname -m)" = "aarch64" ] && EXTRA=(-DMNN_ARM82=ON)
+  cmake -S "$WORK/MNN" -B "$WORK/mnn-build" "${MNN_FLAGS[@]}" "${EXTRA[@]}" > /dev/null
   cmake --build "$WORK/mnn-build" -j"$(nproc)" --target MNN > /dev/null
   cmake -S "$HERE" -B "$WORK/sd-build" -DCMAKE_BUILD_TYPE=Release \
     -DMNN_SRC="$WORK/MNN" -DMNN_LIB="$WORK/mnn-build/libMNN.so" > /dev/null

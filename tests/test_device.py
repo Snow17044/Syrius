@@ -125,7 +125,7 @@ def test_image_sur_le_telephone():
     ev, done = build_action("phone_image", {"prompt": "  a cute   cat astronaut, digital art ",
                                             "caption": "Chat astronaute"})
     assert ev["params"] == {"prompt": "a cute cat astronaut, digital art", "caption": "Chat astronaute"}
-    assert not ev["confirm"] and "phone_image" in DEVICE_LABELS and "minutes" in done
+    assert not ev["confirm"] and "phone_image" in DEVICE_LABELS and "secondes" in done and "Android" not in done
     ev, _ = build_action("phone_image", {"prompt": "red apple"})
     assert ev["params"]["caption"] == "red apple"
     for bad in ({}, {"prompt": "x" * 500}, {"prompt": "ab"}, {"prompt": "chat", "evil": 1}, {"prompt": 42}):

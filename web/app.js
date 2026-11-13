@@ -439,6 +439,7 @@ async function sendLocal(text) {
     let prompt;
     try { prompt = await l.imagePrompt(text); } finally { setStreaming(false); }
     view.text = "Je dessine ça sur ton téléphone, sans Internet. Patience : 2 à 6 minutes.";
+    state.lastReply = view.text;
     renderText(view, "assistant");
     imageCard(view, { prompt, caption: text.slice(0, 80) });
     return;
@@ -478,7 +479,34 @@ async function sendLocalPhoto(text, photo) {
   }
 }
 
-// Carte d'image créée sur le téléphone : progression, puis l'image avec « Enregistrer ».
+// Image : créée en ligne (quelques secondes) ; sans réseau ou si le service est saturé, le téléphone
+// prend le relais avec son générateur hors ligne (quelques minutes).
+async function onlineImage(prompt) {
+  const res = await fetch("/api/image", {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Syrius": "1" },
+    body: JSON.stringify({ prompt: String(prompt).slice(0, 600) }),
+  });
+  if (res.status === 401) { showLogin(); throw new Error("Connexion expirée."); }
+  if (!res.ok) {
+    let msg = `Erreur ${res.status}`;
+    try { msg = (await res.json()).detail || msg; } catch (_) { /* ignore */ }
+    throw new Error(msg);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  try {  // converti en JPEG : même format que les images du téléphone (enregistrement dans la galerie)
+    const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = url; });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0);
+    return c.toDataURL("image/jpeg", 0.92);
+  } catch (_) {
+    throw new Error("Image illisible.");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function imageCard(view, params) {
   const card = document.createElement("div");
   card.className = "action-card image-card";
@@ -486,41 +514,66 @@ function imageCard(view, params) {
   title.className = "action-title";
   title.textContent = "🎨 " + (params.caption || "Image");
   const bar = document.createElement("progress");
-  bar.max = 100; bar.value = 0;
+  bar.max = 100;
   const status = document.createElement("p");
   status.className = "small";
-  status.textContent = "Préparation du modèle d'images…";
   card.append(title, bar, status);
   view.bubble.appendChild(card);
   scrollDown();
   const l = L();
-  if (!l || typeof l.makeImage !== "function" || !l.imageReady()) {
-    bar.remove();
-    status.textContent = Native
-      ? "⚠ Installe d'abord « 🎨 Images hors ligne » : Réglages → IA hors ligne (application Android à jour)."
-      : "⚠ Les images sont créées par l'application Android Syrius (pas dans le navigateur).";
-    return;
-  }
+  const phoneOk = !!(l && typeof l.makeImage === "function" && l.imageReady());
   const started = Date.now();
-  l.makeImage(params.prompt, (pct) => {
-    bar.value = pct;
-    const mins = Math.round((Date.now() - started) / 60000);
-    status.textContent = `Création de l'image… ${pct} %` + (mins ? ` (${mins} min)` : "");
-  }).then((dataUrl) => {
+  const online = navigator.onLine && !state.offline && !(l && l.prefs.force);
+
+  const phone = () => {
+    bar.value = 0;
+    status.textContent = "Création sur ton téléphone, sans Internet (2 à 6 min)…";
+    return l.makeImage(params.prompt, (pct) => {
+      bar.value = pct;
+      const mins = Math.round((Date.now() - started) / 60000);
+      status.textContent = `Création sur ton téléphone… ${pct} %` + (mins ? ` (${mins} min)` : "");
+    });
+  };
+  let where = "en ligne";
+  const run = async () => {
+    if (online) {
+      bar.removeAttribute("value");  // barre animée : quelques secondes
+      status.textContent = "Création de l'image en ligne (quelques secondes)…";
+      try { return await onlineImage(params.prompt); } catch (err) {
+        if (!phoneOk) throw err;
+        status.textContent = "Service en ligne indisponible → ton téléphone prend le relais…";
+      }
+    } else if (!phoneOk) {
+      throw new Error(Native
+        ? "Sans Internet, il faut « 🎨 Images hors ligne » : Réglages → IA hors ligne."
+        : "Pas de connexion Internet.");
+    }
+    where = "sur ton téléphone";
+    return phone();
+  };
+  run().then((dataUrl) => {
     bar.remove();
-    status.textContent = `Image prête en ${Math.max(1, Math.round((Date.now() - started) / 60000))} min, créée sur ton téléphone.`;
+    const secs = Math.round((Date.now() - started) / 1000);
+    status.textContent = `Image créée ${where} en ${secs < 90 ? secs + " s" : Math.round(secs / 60) + " min"}.`;
     const img = document.createElement("img");
     img.className = "gen-image"; img.src = dataUrl; img.alt = params.caption || "Image créée par Syrius";
     const row = document.createElement("div");
     row.className = "action-buttons";
-    const save = document.createElement("button");
-    save.className = "primary"; save.textContent = "💾 Enregistrer dans la galerie";
-    save.addEventListener("click", () => {
-      const r = l.saveImage(dataUrl);
-      save.disabled = r === "ok";
-      save.textContent = r === "ok" ? "✅ Enregistrée (Images › Syrius)" : "⚠ " + r;
-    });
-    row.append(save);
+    if (Native && l && typeof l.saveImage === "function" && typeof Native.imageSave === "function") {
+      const save = document.createElement("button");
+      save.className = "primary"; save.textContent = "💾 Enregistrer dans la galerie";
+      save.addEventListener("click", () => {
+        const r = l.saveImage(dataUrl);
+        save.disabled = r === "ok";
+        save.textContent = r === "ok" ? "✅ Enregistrée (Images › Syrius)" : "⚠ " + r;
+      });
+      row.append(save);
+    } else {
+      const a = document.createElement("a");
+      a.className = "primary btn-link"; a.textContent = "💾 Télécharger l'image";
+      a.href = dataUrl; a.download = "Syrius.jpg";
+      row.append(a);
+    }
     card.insertBefore(img, status);
     card.append(row);
     scrollDown();
