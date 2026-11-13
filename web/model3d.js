@@ -39,6 +39,28 @@
       case "sphere": return new THREE.SphereGeometry(a, 28, 18);
       case "torus": return new THREE.TorusGeometry(a, Math.min(b, a), 14, 40);
       case "capsule": return new THREE.CapsuleGeometry(a, b, 8, 16);
+      case "lathe": { // silhouette tournée : [[rayon, hauteur], …]
+        const pts = (p.points || []).map(([r, y]) => new THREE.Vector2(Math.max(0, r), y));
+        return new THREE.LatheGeometry(pts.length >= 2 ? pts : [new THREE.Vector2(1, 0), new THREE.Vector2(1, 1)],
+          Math.max(3, Math.min(64, p.segments || 32)));
+      }
+      case "extrude": { // contour épaissi : axe y = plan au sol monté en hauteur ; axe z = profil de côté
+        const pts = p.points || [];
+        if (pts.length < 3) return new THREE.BoxGeometry(a, b, c);
+        const sideways = p.axis === "z";
+        const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, sideways ? y : -y)));
+        const depth = sideways ? c : b;
+        const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+        if (sideways) g.translate(0, 0, -depth / 2);
+        else g.rotateX(-Math.PI / 2);
+        return g;
+      }
+      case "tube": { // trajet 3D : [[x, y, z], …]
+        const pts = (p.points || []).map(([x, y, z]) => new THREE.Vector3(x, y, z));
+        if (pts.length < 2) return new THREE.SphereGeometry(a, 8, 6);
+        const curve = pts.length === 2 ? new THREE.LineCurve3(pts[0], pts[1]) : new THREE.CatmullRomCurve3(pts);
+        return new THREE.TubeGeometry(curve, Math.min(200, pts.length * 8), Math.max(0.01, a), 10, false);
+      }
       case "pyramid": {
         const g = new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1);
         g.rotateY(Math.PI / 4);
@@ -52,15 +74,20 @@
   function buildModel(ev) {
     const group = new THREE.Group();
     const parts = [];
-    ev.parts.forEach((p) => {
+    // Objet connu : maquette soignée dessinée dans l'app ; sinon les pièces construites par l'IA.
+    const tpl = ev.template && window.SyriusTemplates3D && window.SyriusTemplates3D[ev.template];
+    const list = tpl ? tpl() : (ev.parts || []);
+    list.forEach((p) => {
       const geo = geometry(p);
       const color = new THREE.Color(/^#[0-9a-f]{6}$/i.test(p.color || "") ? p.color : "#38d9ff");
       const mat = new THREE.MeshStandardMaterial({
-        color, emissive: color, emissiveIntensity: 0.16, metalness: 0.35, roughness: 0.45,
-        transparent: true, opacity: 0.9,
+        color, emissive: color, emissiveIntensity: p.wire ? 0.5 : 0.16, metalness: 0.35, roughness: 0.45,
+        transparent: true, opacity: 0.9, wireframe: !!p.wire,
+        side: p.shape === "lathe" || p.shape === "extrude" ? THREE.DoubleSide : THREE.FrontSide,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 28),
+      const smooth = p.wire || p.shape === "tube" || p.shape === "lathe";
+      const edges = new THREE.LineSegments(smooth ? new THREE.BufferGeometry() : new THREE.EdgesGeometry(geo, 28),
         new THREE.LineBasicMaterial({ color: color.clone().lerp(new THREE.Color(0xffffff), 0.45),
           transparent: true, opacity: 0.45 }));
       mesh.add(edges);
@@ -239,10 +266,12 @@
     document.getElementById("m3d-desc").textContent = String(ev.description || "");
     const facts = document.getElementById("m3d-facts");
     facts.replaceChildren(...(ev.facts || []).map((f) => el("li", "m3d-fact", String(f))));
-    const names = [...new Set(ev.parts.map((p) => p.name).filter(Boolean))].slice(0, 16);
+    const src = ev.template && window.SyriusTemplates3D && window.SyriusTemplates3D[ev.template]
+      ? window.SyriusTemplates3D[ev.template]() : (ev.parts || []);
+    const names = [...new Set(src.map((p) => p.name).filter(Boolean))].slice(0, 16);
     const legend = document.getElementById("m3d-parts");
     legend.replaceChildren(...names.map((n) => {
-      const color = (ev.parts.find((p) => p.name === n) || {}).color || "#38d9ff";
+      const color = (src.find((p) => p.name === n) || {}).color || "#38d9ff";
       const li = el("li", "m3d-part");
       const dot = el("span", "m3d-dot");
       dot.style.background = color;
@@ -253,7 +282,8 @@
   }
 
   function show(ev) {
-    if (!ev || !Array.isArray(ev.parts) || !ev.parts.length) return;
+    const hasTpl = !!(ev && ev.template && window.SyriusTemplates3D && window.SyriusTemplates3D[ev.template]);
+    if (!ev || (!hasTpl && (!Array.isArray(ev.parts) || !ev.parts.length))) return;
     const box = document.getElementById("m3d");
     box.classList.remove("hidden");
     fillInfo(ev);
