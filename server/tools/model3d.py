@@ -11,7 +11,11 @@ import re
 
 from .diagram import find_json_object
 
-SHAPES = ("box", "cylinder", "cone", "sphere", "torus", "pyramid", "capsule")
+SHAPES = ("box", "cylinder", "cone", "sphere", "torus", "pyramid", "capsule", "lathe", "extrude", "tube")
+# Maquettes soignées dessinées dans l'app (bien plus réussies qu'un assemblage improvisé).
+TEMPLATES = ("tour_eiffel", "pyramide", "fusee", "voiture", "maison", "avion", "arbre", "atome",
+             "systeme_solaire", "molecule_eau", "adn", "phare")
+MAX_POINTS = 64
 MAX_PARTS = 220
 MAX_COORD = 1000.0
 MAX_SIZE = 1000.0
@@ -106,15 +110,29 @@ def _mirror(part: dict) -> list[dict]:
     return out
 
 
+def _points(v, dims: int) -> list[list[float]]:
+    """Liste de points [[x, y], …] ou [[x, y, z], …], bornée et nettoyée."""
+    if not isinstance(v, list):
+        return []
+    out = []
+    for pt in v[:MAX_POINTS]:
+        if isinstance(pt, (list, tuple)) and len(pt) >= dims:
+            vals = [_num(x, -MAX_COORD, MAX_COORD, float("nan")) for x in pt[:dims]]
+            if all(math.isfinite(x) for x in vals):
+                out.append(vals)
+    return out
+
+
 def validate(args) -> dict:
     if not isinstance(args, dict):
         raise ModelError("entrée non valide")
     title = _text(args.get("title"), 80)
     if not title:
         raise ModelError("title manquant")
-    raw = args.get("parts")
-    if not isinstance(raw, list) or not raw:
-        raise ModelError("parts : au moins une forme")
+    template = args.get("template") if args.get("template") in TEMPLATES else ""
+    raw = args.get("parts") or []
+    if not isinstance(raw, list) or (not raw and not template):
+        raise ModelError("parts : au moins une forme (ou un template)")
     parts = []
     for p in raw[:MAX_PARTS]:
         if isinstance(p, str):
@@ -133,20 +151,41 @@ def validate(args) -> dict:
             "name": _text(p.get("name"), 40),
             "sym": p.get("sym") if p.get("sym") in ("x", "z", "xz") else "",
         }
+        if p.get("wire") is True:
+            clean["wire"] = True
+        if shape in ("lathe", "extrude"):  # profil 2D : [rayon, hauteur] (tour) ou [x, z] (contour extrudé)
+            pts = _points(p.get("points"), 2)
+            if len(pts) < 3 if shape == "extrude" else len(pts) < 2:
+                continue
+            clean["points"] = pts
+            if shape == "extrude":
+                clean["axis"] = "z" if p.get("axis") == "z" else "y"
+            if shape == "lathe":
+                clean["points"] = [[abs(x), y] for x, y in pts]
+                seg = p.get("segments", 32)
+                clean["segments"] = int(_num(seg, 3, 64, 32))
+        elif shape == "tube":  # trajet 3D [[x, y, z], …]
+            pts = _points(p.get("points"), 3)
+            if len(pts) < 2:
+                continue
+            clean["points"] = pts
         parts.extend(_mirror(clean))
         if len(parts) >= MAX_PARTS:
             break
     parts = parts[:MAX_PARTS]
-    if not parts:
-        raise ModelError("aucune forme valide (box, cylinder, cone, sphere, torus, pyramid, capsule)")
+    if not parts and not template:
+        raise ModelError("aucune forme valide (" + ", ".join(SHAPES) + ")")
     facts = [f for f in (_text(x, 80) for x in (args.get("facts") or [])[:MAX_FACTS]
                          if isinstance(args.get("facts"), list)) if f]
-    return {"type": "model", "title": title, "description": _text(args.get("description"), 300),
-            "parts": parts, "facts": facts}
+    out = {"type": "model", "title": title, "description": _text(args.get("description"), 300),
+           "parts": parts, "facts": facts}
+    if template:
+        out["template"] = template
+    return out
 
 
 def _check(found: dict) -> dict:
-    return validate({k: v for k, v in found.items() if k in ("title", "description", "parts", "facts")}
+    return validate({k: v for k, v in found.items() if k in ("title", "description", "parts", "facts", "template")}
                     | {"title": found.get("title") or "Maquette 3D"})
 
 

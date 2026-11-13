@@ -191,3 +191,30 @@ def test_voix_sans_html():
     src = open("web/voice.js", encoding="utf-8").read()
     for danger in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function"):
         assert danger not in src
+
+
+def test_template_et_nouvelles_formes():
+    m = model3d.validate({"title": "Tour Eiffel", "template": "tour_eiffel"})
+    assert m["template"] == "tour_eiffel" and m["parts"] == []
+    m = model3d.validate({"title": "x", "template": "inconnu", "parts": ["box 0,1,0 1"]})
+    assert "template" not in m
+    with pytest.raises(model3d.ModelError):
+        model3d.validate({"title": "x", "template": "inconnu"})
+    m = model3d.validate({"title": "Vase", "parts": [
+        {"shape": "lathe", "points": [[2, 0], [-3, 5], [1, "x"], [1, 9]], "segments": 999, "wire": True},
+        {"shape": "extrude", "points": [[0, 0], [4, 0], [4, 3]], "size": [1, 10, 1], "axis": "z"},
+        {"shape": "extrude", "points": [[0, 0], [1, 1]]},
+        {"shape": "tube", "points": [[0, 0, 0], [1, 2, 3], [1e9, 0, 0]], "size": [0.2]},
+        {"shape": "tube", "points": [[0, 0, 0]]}]})
+    lathe, extrude, tube = m["parts"]
+    assert lathe["points"] == [[2.0, 0.0], [3.0, 5.0], [1.0, 9.0]] and lathe["segments"] == 64 and lathe["wire"]
+    assert extrude["axis"] == "z" and len(extrude["points"]) == 3
+    assert tube["points"][-1] == [model3d.MAX_COORD, 0.0, 0.0]
+
+
+def test_templates_js_listes_identiques():
+    src = open("web/templates3d.js", encoding="utf-8").read()
+    for t in model3d.TEMPLATES:
+        assert f"    {t}() {{" in src, t
+    for danger in ("innerHTML", "eval(", "new Function"):
+        assert danger not in src

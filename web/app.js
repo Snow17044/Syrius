@@ -253,6 +253,39 @@ function setStreaming(on) {
   document.querySelectorAll(".orb.small").forEach((o) => o.classList.toggle("thinking", on));
 }
 
+// ------------------------------------------------------------------ photo (vision)
+// La photo est réduite ici (1024 px max, JPEG) avant l'envoi : rapide, légère, et jamais enregistrée.
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1024 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image illisible")); };
+    img.src = url;
+  });
+}
+function setPhoto(dataUrl) {
+  state.photo = dataUrl || null;
+  $("#photo-preview").classList.toggle("hidden", !state.photo);
+  if (state.photo) $("#photo-thumb").src = state.photo;
+}
+$("#photo-btn").addEventListener("click", () => $("#photo-input").click());
+$("#photo-input").addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { alert("Choisis une image."); return; }
+  try { setPhoto(await shrinkImage(f)); $("#input").focus(); } catch (err) { alert(err.message); }
+});
+$("#photo-remove").addEventListener("click", () => setPhoto(null));
+
 // ------------------------------------------------------------------ IA hors ligne (sur le téléphone)
 let localTimer = null;
 function refreshLocalBox() {
@@ -351,8 +384,13 @@ async function sendLocal(text) {
 
 async function sendMessage(text) {
   text = (text || "").trim();
+  const photo = state.photo;
+  if (photo && !text) text = "Que vois-tu sur cette photo ?";
   if (!text || state.streaming) return;
-  if (localWanted()) return sendLocal(text);
+  if (localWanted()) {
+    if (photo) { alert("L'analyse de photo a besoin d'Internet (l'IA du téléphone ne voit pas les images)."); return; }
+    return sendLocal(text);
+  }
   if (!state.convId) {
     const conv = await api("/api/conversations", { method: "POST" });
     state.convId = conv.id;
@@ -362,7 +400,13 @@ async function sendMessage(text) {
   }
   $("#input").value = "";
   autoGrow();
-  addMessage("user", text);
+  const userView = addMessage("user", text);
+  if (photo) { // vignette de la photo dans la bulle (affichée seulement, pas enregistrée)
+    const im = document.createElement("img");
+    im.className = "msg-photo"; im.src = photo; im.alt = "Photo envoyée";
+    userView.bubble.prepend(im);
+    setPhoto(null);
+  }
   const view = addMessage("assistant", "");
   const typing = document.createElement("div");
   typing.className = "typing";
@@ -385,7 +429,7 @@ async function sendMessage(text) {
       method: "POST", credentials: "same-origin", signal: state.controller.signal,
       headers: { "Content-Type": "application/json", "X-Syrius": "1" },
       body: JSON.stringify({ text, location: state.settings.location === false ? null : state.location,
-        voice: !!window.SyriusVoice?.active }),
+        voice: !!window.SyriusVoice?.active, image: photo || undefined }),
     });
     if (res.status === 401) { showLogin(); return; }
     if (!res.ok) {

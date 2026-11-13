@@ -95,7 +95,7 @@ def test_leaflet_intact():
 
 def test_csp_n_autorise_que_les_images_de_carte(make_client):
     csp = make_client().get("/").headers["content-security-policy"]
-    assert "script-src 'self';" in csp and "img-src 'self' data:;" in csp
+    assert "script-src 'self';" in csp and "img-src 'self' data: blob:;" in csp
     script_part = csp.split("script-src")[1].split(";")[0]
     assert "openstreetmap" not in script_part and "unsafe" not in csp
 

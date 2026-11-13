@@ -19,6 +19,7 @@ import android.text.InputType;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -54,7 +55,10 @@ public class MainActivity extends Activity {
     private DeviceActions device;
     private LocalAI local;
     private boolean pendingBriefing;
-    private boolean voiceMode;  // mode conversation 🎧 ouvert : le micro reste à l'app
+    private boolean voiceMode;
+    private static final int REQ_PHOTO = 47;
+    private ValueCallback<Uri[]> photoCallback;
+    private Uri cameraUri;  // mode conversation 🎧 ouvert : le micro reste à l'app
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,6 +82,41 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
 
         web.setWebChromeClient(new WebChromeClient() {
+            /** Bouton 📷 : prendre une photo ou en choisir une dans la galerie (page de Syrius uniquement). */
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                Uri page = Uri.parse(view.getUrl() == null ? "" : view.getUrl());
+                if (!"https".equals(page.getScheme()) || allowedHost == null || !allowedHost.equals(page.getHost())) {
+                    callback.onReceiveValue(null);
+                    return true;
+                }
+                if (photoCallback != null) photoCallback.onReceiveValue(null);
+                photoCallback = callback;
+                Intent gallery = new Intent(Intent.ACTION_GET_CONTENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);
+                Intent chooser = Intent.createChooser(gallery, "Photo pour Syrius");
+                try {
+                    java.io.File dir = new java.io.File(getCacheDir(), "photos");
+                    //noinspection ResultOfMethodCallIgnored
+                    dir.mkdirs();
+                    java.io.File img = new java.io.File(dir, "photo.jpg");
+                    cameraUri = androidx.core.content.FileProvider.getUriForFile(MainActivity.this,
+                            getPackageName() + ".files", img);
+                    Intent cam = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
+                            .putExtra(android.provider.MediaStore.EXTRA_OUTPUT, cameraUri)
+                            .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cam});
+                } catch (Exception e) {
+                    cameraUri = null;
+                }
+                try {
+                    startActivityForResult(chooser, REQ_PHOTO);
+                } catch (Exception e) {
+                    photoCallback = null;
+                    callback.onReceiveValue(null);
+                }
+                return true;
+            }
+
             @Override
             public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 Uri o = Uri.parse(origin);
@@ -538,6 +577,19 @@ public class MainActivity extends Activity {
                 if (recognizer != null) recognizer.stopListening();
             });
         }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_PHOTO || photoCallback == null) return;
+        Uri[] result = null;
+        if (resultCode == RESULT_OK) {
+            if (data != null && data.getData() != null) result = new Uri[]{data.getData()};  // galerie
+            else if (cameraUri != null) result = new Uri[]{cameraUri};                     // appareil photo
+        }
+        photoCallback.onReceiveValue(result);
+        photoCallback = null;
     }
 
     @Override
