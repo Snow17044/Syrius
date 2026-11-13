@@ -7,7 +7,7 @@ set(MNN_SRC "" CACHE PATH "Sources MNN (version épinglée)")
 set(MNN_LIB "" CACHE FILEPATH "libMNN compilée")
 set(SD ${MNN_SRC}/transformers/diffusion/engine)
 
-set(SRCS syrius_sd.cpp ${SD}/src/stable_diffusion.cpp ${SD}/src/scheduler.cpp ${SD}/src/tokenizer.cpp)
+set(SRCS syrius_sd.cpp ${SD}/src/tokenizer.cpp)
 if (ANDROID)
     add_library(syrius_sd SHARED ${SRCS})
     target_link_libraries(syrius_sd ${MNN_LIB} log)
