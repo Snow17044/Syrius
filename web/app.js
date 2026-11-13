@@ -611,6 +611,20 @@ function actionCard(ev) {
   return node;
 }
 
+// ------------------------------------------------------------------ état du réseau (en-tête)
+function updateNetStatus() {
+  const off = state.offline || !navigator.onLine;
+  const local = L() && L().prefs && L().available() && L().prefs.force;
+  const el = $("#net-status");
+  el.textContent = off ? "hors ligne" : local ? "IA du téléphone" : "en ligne";
+  el.classList.toggle("off", off);
+  const tag = document.querySelector(".hero-tag");
+  if (tag) tag.textContent = "◈ SYRIUS · " + (off ? "HORS LIGNE" : "EN LIGNE");
+}
+window.addEventListener("online", updateNetStatus);
+window.addEventListener("offline", updateNetStatus);
+setTimeout(updateNetStatus, 500);
+
 // ------------------------------------------------------------------ briefing du matin
 const BRIEFING_PROMPT = "Fais-moi mon briefing du matin : la météo près de moi, mes rappels prévus aujourd'hui " +
   "(list_reminders) et 3 actualités importantes du jour, le tout en quelques phrases claires.";

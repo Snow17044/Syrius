@@ -66,19 +66,23 @@
     <main id="main">
       <header class="topbar">
         <button id="open-drawer" class="icon-btn" aria-label="Ouvrir le menu">☰</button>
-        <h2 id="conv-title">Syrius</h2>
+        <div class="title-block">
+          <h2 id="conv-title">Syrius</h2>
+          <div id="net-status" class="net-status">en ligne</div>
+        </div>
         <button id="new-chat" class="icon-btn" aria-label="Nouvelle discussion">✎</button>
       </header>
 
       <div id="messages" aria-live="polite">
         <div id="empty" class="empty">
-          <div class="orb big" aria-hidden="true"><span></span></div>
+          <div class="hero-orb" aria-hidden="true"><div class="orb big"><span></span></div><i></i><i></i><i></i></div>
+          <div class="hero-tag">◈ SYRIUS · EN LIGNE</div>
           <p id="greeting" class="greeting">À votre service.</p>
           <div class="chips">
-            <button class="chip" data-prompt="Résume mes emails non lus">📬 Mes emails non lus</button>
-            <button class="chip" data-prompt="Quelles sont les actus importantes aujourd'hui ?">📰 Actus du jour</button>
-            <button class="chip" data-prompt="Aide-moi à organiser ma journée">🗓 Organiser ma journée</button>
-            <button class="chip" data-prompt="Qu'est-ce que tu sais de moi ?">🧠 Ce que tu sais de moi</button>
+            <button class="chip" data-prompt="Quel temps fait-il aujourd'hui près de moi ?"><b>🌦</b><span>Météo du jour</span></button>
+            <button class="chip" data-prompt="Quelles sont les actus importantes aujourd'hui ?"><b>📰</b><span>Actus du jour</span></button>
+            <button class="chip" data-prompt="Montre-moi la tour Eiffel en 3D"><b>🧊</b><span>Tour Eiffel en 3D</span></button>
+            <button class="chip" data-prompt="Fais-moi un schéma pour organiser ma semaine"><b>🧠</b><span>Organiser ma semaine</span></button>
           </div>
         </div>
       </div>
