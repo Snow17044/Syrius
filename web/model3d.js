@@ -4,7 +4,7 @@
 "use strict";
 
 (function () {
-  const HOLO = 0x38d9ff;
+  const HOLO = 0xa9b5ff;
   let st = null;
 
   function el(tag, cls, text) {
@@ -79,7 +79,7 @@
     const list = tpl ? tpl() : (ev.parts || []);
     list.forEach((p) => {
       const geo = geometry(p);
-      const color = new THREE.Color(/^#[0-9a-f]{6}$/i.test(p.color || "") ? p.color : "#38d9ff");
+      const color = new THREE.Color(/^#[0-9a-f]{6}$/i.test(p.color || "") ? p.color : "#a9b5ff");
       const mat = new THREE.MeshStandardMaterial({
         color, emissive: color, emissiveIntensity: p.wire ? 0.5 : 0.16, metalness: 0.35, roughness: 0.45,
         transparent: true, opacity: 0.9, wireframe: !!p.wire,
@@ -139,7 +139,7 @@
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    stage.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x9fe8ff, size: 0.35, transparent: true,
+    stage.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xc8c2ff, size: 0.35, transparent: true,
       opacity: 0.7, sizeAttenuation: true })));
     // anneau de balayage (scanner)
     const scan = new THREE.Mesh(new THREE.RingGeometry(0.1, 7.2, 64),
@@ -163,10 +163,10 @@
       mesh.material.emissiveIntensity = holo ? 0.7 : 0.16;
       mesh.material.opacity = holo ? 0.38 : 0.92;
       mesh.material.depthWrite = !holo;
-      edges.material.color.set(holo ? 0xbff4ff : color.clone().lerp(new THREE.Color(0xffffff), 0.45));
+      edges.material.color.set(holo ? 0xdcd6ff : color.clone().lerp(new THREE.Color(0xffffff), 0.45));
       edges.material.opacity = holo ? 0.9 : 0.4;
     });
-    document.getElementById("m3d-mode").textContent = holo ? "🎨" : "💠";
+    document.getElementById("m3d-mode").replaceChildren(window.SyriusIcons ? window.SyriusIcons.svg(holo ? "palette" : "layers") : "");
     document.getElementById("m3d-mode").setAttribute("aria-label", holo ? "Couleurs réelles" : "Mode hologramme");
   }
 
@@ -271,7 +271,7 @@
     const names = [...new Set(src.map((p) => p.name).filter(Boolean))].slice(0, 16);
     const legend = document.getElementById("m3d-parts");
     legend.replaceChildren(...names.map((n) => {
-      const color = (src.find((p) => p.name === n) || {}).color || "#38d9ff";
+      const color = (src.find((p) => p.name === n) || {}).color || "#a9b5ff";
       const li = el("li", "m3d-part");
       const dot = el("span", "m3d-dot");
       dot.style.background = color;
@@ -298,7 +298,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x000000, 0);
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x02060d, 40, 110);
+    scene.fog = new THREE.Fog(0x10131c, 40, 110);
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
     scene.add(new THREE.AmbientLight(0xffffff, 0.75));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);

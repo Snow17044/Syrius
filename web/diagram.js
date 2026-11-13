@@ -5,9 +5,13 @@
 "use strict";
 
 (function () {
-  const COLORS = ["#38d9ff", "#7cf3c8", "#ffd166", "#ff8fab", "#b69cff", "#6fb3ff", "#9ef06c", "#ffa36c"];
-  const ICONS = { objectif: "🎯", phase: "◆", etape: "▸", action: "✔", outil: "🛠", budget: "€", delai: "⏱",
-    risque: "⚠", idee: "💡", ressource: "📚", personne: "👤" };
+  // Palette douce de Syrius et icônes dessinées (aucun emoji).
+  const COLORS = ["#a9b5ff", "#8fe3c6", "#ffd08f", "#f2b8d8", "#c8b6ff", "#91d2ff", "#b9e58f", "#ffb59a"];
+  const ICONS = { objectif: "target", phase: "diamond", etape: "right", action: "check", outil: "tool", budget: "euro",
+    delai: "clock", risque: "alert", idee: "bulb", ressource: "book", personne: "user" };
+  const drawIcon = (ctx, kind, x, y, size, color) => {
+    if (window.SyriusIcons) window.SyriusIcons.draw(ctx, ICONS[kind] || "diamond", x, y, size, color, 2);
+  };
   const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
   const INTRO_MS = 1100;
   let st = null;
@@ -108,7 +112,7 @@
       ctx.font = `800 11px ${FONT}`;
       const numW = ctx.measureText(it.num).width + 14;
       ctx.font = `600 14px ${FONT}`;
-      const tl = wrap(ctx, (ICONS[it.node.kind] ? ICONS[it.node.kind] + " " : "") + it.node.label,
+      const tl = wrap(ctx, it.node.label,
         inner - indent - numW - 8, 2);
       ctx.font = `12px ${FONT}`;
       const nl = it.node.note ? wrap(ctx, it.node.note, inner - indent - numW - 8, 2) : [];
@@ -128,23 +132,18 @@
   function drawPanel(ctx, p, L, W, color, focus) {
     const H = L.H;
     const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, "rgba(14,44,72,.95)");
-    bg.addColorStop(1, "rgba(4,14,28,.95)");
-    ctx.shadowColor = color; ctx.shadowBlur = focus ? 26 : 8;
-    roundRect(ctx, 0, 0, W, H, 16);
+    bg.addColorStop(0, "rgba(33,37,56,.97)");
+    bg.addColorStop(1, "rgba(22,25,37,.97)");
+    ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = focus ? 28 : 10; ctx.shadowOffsetY = focus ? 10 : 4;
+    roundRect(ctx, 0, 0, W, H, 20);
     ctx.fillStyle = bg; ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = focus ? 1.6 : 1;
-    ctx.strokeStyle = rgba(color, focus ? 0.95 : 0.5);
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = focus ? rgba(color, 0.55) : "rgba(255,255,255,.08)";
     ctx.stroke();
     const top = ctx.createLinearGradient(0, 0, W, 0);
-    top.addColorStop(0, rgba(color, 0)); top.addColorStop(0.5, rgba(color, 1)); top.addColorStop(1, rgba(color, 0));
-    ctx.fillStyle = top; ctx.fillRect(18, 0, W - 36, 2);
-    ctx.strokeStyle = color; ctx.lineWidth = 2;
-    [[8, 22, 8, 8, 22, 8], [W - 22, 8, W - 8, 8, W - 8, 22], [8, H - 22, 8, H - 8, 22, H - 8],
-      [W - 22, H - 8, W - 8, H - 8, W - 8, H - 22]].forEach((c) => {
-      ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(c[2], c[3]); ctx.lineTo(c[4], c[5]); ctx.stroke();
-    });
+    top.addColorStop(0, rgba(color, 0)); top.addColorStop(0.5, rgba(color, focus ? 0.9 : 0.5)); top.addColorStop(1, rgba(color, 0));
+    ctx.fillStyle = top; ctx.fillRect(28, 0, W - 56, 2);
 
     const pad = 16;
     ctx.textBaseline = "top"; ctx.textAlign = "left";
@@ -154,17 +153,16 @@
         if (p.num) {
           roundRect(ctx, x, r.y + 1, r.badgeW, 21, 10.5);
           ctx.fillStyle = color; ctx.fill();
-          ctx.fillStyle = "#03101c"; ctx.font = `800 13px ${FONT}`;
+          ctx.fillStyle = "#12142b"; ctx.font = `800 13px ${FONT}`;
           ctx.fillText(p.num, x + 9, r.y + 5);
           x += r.badgeW + 8;
         }
-        ctx.fillStyle = color; ctx.font = `15px ${FONT}`;
-        ctx.fillText(ICONS[p.node.kind] || "◆", x, r.y + 3);
-        x += 22;
-        ctx.fillStyle = "#ffffff"; ctx.font = `700 17px ${FONT}`;
+        drawIcon(ctx, p.node.kind, x + 8, r.y + 11, 17, color);
+        x += 24;
+        ctx.fillStyle = "#f2f3fa"; ctx.font = `700 17px ${FONT}`;
         r.titleLines.forEach((ln, i) => ctx.fillText(ln, x, r.y + 2 + i * 21));
       } else if (r.t === "note") {
-        ctx.fillStyle = "#a9c9da"; ctx.font = `13px ${FONT}`;
+        ctx.fillStyle = "#b9bed1"; ctx.font = `13px ${FONT}`;
         r.lines.forEach((ln, i) => ctx.fillText(ln, pad, r.y + i * 17));
       } else if (r.t === "sep") {
         const g = ctx.createLinearGradient(pad, 0, W - pad, 0);
@@ -178,9 +176,9 @@
         ctx.fillStyle = color; ctx.font = `800 11px ${FONT}`;
         ctx.fillText(r.it.num, x0 + 7, r.y + 4);
         const tx = x0 + r.numW + 8;
-        ctx.fillStyle = "#e6f8ff"; ctx.font = `600 14px ${FONT}`;
+        ctx.fillStyle = "#eceef6"; ctx.font = `600 14px ${FONT}`;
         r.tl.forEach((ln, i) => ctx.fillText(ln, tx, r.y + i * 18));
-        ctx.fillStyle = "#8fb3c6"; ctx.font = `12px ${FONT}`;
+        ctx.fillStyle = "#9399ae"; ctx.font = `12px ${FONT}`;
         r.nl.forEach((ln, i) => ctx.fillText(ln, tx, r.y + r.tl.length * 18 + 1 + i * 15));
       } else if (r.t === "more") {
         ctx.fillStyle = rgba(color, 0.9); ctx.font = `600 12px ${FONT}`;
@@ -232,14 +230,14 @@
     // Étoiles (défilent avec la rotation)
     st.stars.forEach((s) => {
       const x = ((s.x - st.angle * 60) % w + w) % w;
-      ctx.fillStyle = `rgba(160,225,255,${s.a * (0.6 + 0.4 * Math.sin(t / 900 + s.ph))})`;
+      ctx.fillStyle = `rgba(200,196,255,${s.a * (0.5 + 0.3 * Math.sin(t / 900 + s.ph))})`;
       ctx.fillRect(x, s.y * h, s.r, s.r);
     });
 
     // Plateau holographique
     const floorY = h - 12;
     for (let i = 3; i >= 1; i--) {
-      ctx.strokeStyle = `rgba(56,217,255,${0.08 * i})`;
+      ctx.strokeStyle = `rgba(169,181,255,${0.07 * i})`;
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.ellipse(w / 2, floorY, Math.max(0.1, w * 0.15 * i * ease), Math.max(0.1, 6 * i * ease), 0, 0, Math.PI * 2); ctx.stroke();
     }
@@ -297,9 +295,9 @@
     // Objectif : noyau lumineux + anneaux + titre
     const pulse = (Math.sin(t / 500) + 1) / 2;
     const core = ctx.createRadialGradient(w / 2, coreY, 0, w / 2, coreY, 26);
-    core.addColorStop(0, "#ffffff"); core.addColorStop(0.3, "#9ff0ff"); core.addColorStop(1, "rgba(56,217,255,0)");
+    core.addColorStop(0, "#ffffff"); core.addColorStop(0.3, "#c9c2ff"); core.addColorStop(1, "rgba(169,181,255,0)");
     ctx.fillStyle = core; ctx.beginPath(); ctx.arc(w / 2, coreY, 26, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(120,235,255,.75)"; ctx.lineWidth = 1.3;
+    ctx.strokeStyle = "rgba(201,182,255,.6)"; ctx.lineWidth = 1.2;
     for (let i = 0; i < 2; i++) {
       ctx.beginPath();
       ctx.ellipse(w / 2, coreY, 30 + i * 9 + pulse * 2, 9 + i * 3, (t / (1600 + i * 700)) * (i ? -1 : 1), 0, Math.PI * 2);
@@ -307,13 +305,14 @@
     }
     ctx.font = `700 14px ${FONT}`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const title = wrap(ctx, ICONS.objectif + " " + plan.root.label, w - 110, 1)[0];
-    const tw = ctx.measureText(title).width + 24;
-    ctx.shadowColor = "#38d9ff"; ctx.shadowBlur = 14;
-    roundRect(ctx, w / 2 - tw / 2, coreY + 19, tw, 26, 13);
-    ctx.fillStyle = "rgba(8,34,56,.95)"; ctx.fill();
-    ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(120,235,255,.8)"; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = "#ffffff"; ctx.fillText(title, w / 2, coreY + 32.5);
+    const title = wrap(ctx, plan.root.label, w - 110, 1)[0];
+    const tw = ctx.measureText(title).width + 46;
+    ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 16;
+    roundRect(ctx, w / 2 - tw / 2, coreY + 18, tw, 28, 14);
+    ctx.fillStyle = "rgba(30,33,50,.97)"; ctx.fill();
+    ctx.shadowBlur = 0; ctx.strokeStyle = "rgba(201,182,255,.55)"; ctx.lineWidth = 1; ctx.stroke();
+    drawIcon(ctx, "objectif", w / 2 - tw / 2 + 17, coreY + 32, 15, "#c8b6ff");
+    ctx.fillStyle = "#f2f3fa"; ctx.fillText(title, w / 2 + 11, coreY + 32.5);
   }
 
   // ------------------------------------------------------------------ navigation
@@ -368,7 +367,10 @@
           const li = el("li");
           li.style.paddingLeft = `${it.depth * 14}px`;
           const b = el("div");
-          b.append(el("div", "holo-sub-title", (ICONS[it.node.kind] ? ICONS[it.node.kind] + " " : "") + it.node.label));
+          const st2 = el("div", "holo-sub-title");
+          if (window.SyriusIcons && ICONS[it.node.kind]) window.SyriusIcons.set(st2, ICONS[it.node.kind], it.node.label);
+          else st2.textContent = it.node.label;
+          b.append(st2);
           if (it.node.note) b.append(el("div", "holo-step-note", it.node.note));
           li.append(el("span", "holo-subnum", it.num), b);
           ul.append(li);

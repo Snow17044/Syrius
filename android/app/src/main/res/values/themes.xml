@@ -2,8 +2,8 @@
 <resources>
     <style name="SyriusTheme" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@android:color/black</item>
-        <item name="android:statusBarColor">#05080f</item>
-        <item name="android:navigationBarColor">#05080f</item>
+        <item name="android:statusBarColor">#0d0f16</item>
+        <item name="android:navigationBarColor">#0d0f16</item>
         <item name="android:colorAccent">#38d9ff</item>
     </style>
 </resources>
