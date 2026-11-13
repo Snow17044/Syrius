@@ -44,7 +44,7 @@ import java.util.regex.Pattern;
 /**
  * « Hey Syrius » : écoute permanente (application fermée, écran éteint).
  * Le mot-clé est reconnu SUR le téléphone par Vosk (rien n'est envoyé tant qu'il n'est pas dit).
- * Ensuite : bip → question (reconnaissance Android) → réponse de Syrius lue à voix haute → une relance.
+ * Ensuite : bip → question (reconnue aussi par Vosk, sans Google) → réponse lue à voix haute → relances.
  */
 public class WakeService extends Service {
     static final String ACTION_STOP = "fr.syrius.app.WAKE_STOP";
@@ -58,9 +58,7 @@ public class WakeService extends Service {
     private final ExecutorService net = Executors.newSingleThreadExecutor();
     private Model model;
     private SpeechService vosk;
-    private SpeechRecognizer stt;
     private TextToSpeech tts;
-    private boolean busy;
     private int followUps;
     private String conversationId;
 
@@ -107,6 +105,7 @@ public class WakeService extends Service {
         } else {
             startForeground(NOTIF, n);
         }
+        instance = this;
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) tts.setLanguage(Locale.FRANCE);
         });
@@ -123,7 +122,7 @@ public class WakeService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (vosk == null && !busy) startWakeListening();
+        if (vosk == null && mode == IDLE && !appVisible) startWakeListening();
         return START_STICKY;
     }
 
@@ -164,7 +163,7 @@ public class WakeService extends Service {
 
     private void restartLater() {
         stopWakeListening();
-        main.postDelayed(() -> { if (!busy) startWakeListening(); }, 3000);
+        main.postDelayed(() -> { if (mode == IDLE && !appVisible && vosk == null) startWakeListening(); }, 3000);
     }
 
     static String norm(String s) {
@@ -216,8 +215,48 @@ public class WakeService extends Service {
         return true;
     }
 
+    // États : en veille (attend le mot-clé), attend la question, occupé (réflexion / parole).
+    private static final int IDLE = 0, QUESTION = 1, BUSY = 2;
+    private int mode = IDLE;
+    private boolean wakeInUtterance;
+    private final Runnable questionTimeout = this::backToSleep;
+    private static final Pattern PREFIX = Pattern.compile("(he|hey|hei|eh|e|et|ai|ok|okay|allo)");
+    private static final Pattern NAME = Pattern.compile(
+            "(syrius|sirius|cyrus|syrus|sirus|siri|serius|seriu|serieu|serieux|syrie|siryus|cirius)");
+
+    /** Texte qui suit le mot-clé dans une phrase (« hey syrius quelle heure est-il » → « quelle heure est-il »).
+     *  Renvoie null si la phrase ne contient pas le mot-clé. */
+    private String afterWake(String raw) {
+        String[] tok = raw.trim().split("\\s+");
+        String[] n = new String[tok.length];
+        for (int i = 0; i < tok.length; i++) n[i] = norm(tok[i]);
+        for (int i = 0; i + 1 < tok.length; i++) {
+            if (PREFIX.matcher(n[i]).matches() && NAME.matcher(n[i + 1]).matches()) return join(tok, i + 2);
+        }
+        try {
+            org.json.JSONArray learned = new org.json.JSONArray(wakePrefs().getString("learned", "[]"));
+            for (int k = 0; k < learned.length(); k++) {
+                String[] l = learned.optString(k).split(" ");
+                if (learned.optString(k).length() < 4) continue;
+                for (int i = 0; i + l.length <= tok.length; i++) {
+                    boolean ok = true;
+                    for (int j = 0; j < l.length && ok; j++) ok = l[j].equals(n[i + j]);
+                    if (ok) return join(tok, i + l.length);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static String join(String[] tok, int from) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = from; i < tok.length; i++) sb.append(i > from ? " " : "").append(tok[i]);
+        return sb.toString().trim();
+    }
+
     private void check(String json, boolean isFinal) {
-        if (busy || json == null) return;
+        if (json == null || mode == BUSY) return;
         String text;
         try {
             JSONObject o = new JSONObject(json);
@@ -228,15 +267,37 @@ public class WakeService extends Service {
         if (!text.trim().isEmpty()) {  // diagnostic : dernière chose entendue (reste sur le téléphone)
             wakePrefs().edit().putString("heard", text.trim()).putLong("heard_at", System.currentTimeMillis()).apply();
         }
-        if (isFinal && learn(text)) return;
-        if (!matches(text)) return;
-        busy = true;
-        followUps = 0;
-        conversationId = null;
-        main.post(() -> {
-            stopWakeListening();
+        if (mode == IDLE) {
+            if (isFinal && learn(text)) return;
+            if (!matches(text)) return;
+            mode = QUESTION;  // mot-clé entendu : bip, puis on attend la question
+            wakeInUtterance = true;
+            followUps = 0;
+            conversationId = null;
             beep();
-            main.postDelayed(this::listenQuestion, 350);
+            main.removeCallbacks(questionTimeout);
+            main.postDelayed(questionTimeout, 9000);
+            if (!isFinal) return;
+        }
+        if (mode != QUESTION || !isFinal) return;
+        String q = text.trim();
+        if (wakeInUtterance) {  // « Hey Syrius, quelle heure est-il ? » dit d'une traite
+            wakeInUtterance = false;
+            String rest = afterWake(q);
+            q = rest == null ? q : rest;
+            if (rest != null && rest.split(" ").length < 2) return;  // juste « Hey Syrius » : on attend la suite
+        }
+        if (q.isEmpty()) return;
+        main.removeCallbacks(questionTimeout);
+        mode = BUSY;
+        if (vosk != null) vosk.setPause(true);  // ne pas s'écouter parler
+        final String question = q;
+        main.post(() -> {
+            if (norm(question).matches("(stop|merci|merci syrius|au revoir|c est tout|rien|non merci)( .*)?")) {
+                say("À votre service.", false);
+            } else {
+                ask(question);
+            }
         });
     }
 
@@ -247,46 +308,6 @@ public class WakeService extends Service {
             main.postDelayed(tg::release, 400);
         } catch (Exception ignored) {
         }
-    }
-
-    // ------------------------------------------------------------------ question (reconnaissance Android)
-    private void listenQuestion() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            say("La reconnaissance vocale n'est pas disponible sur ce téléphone.", false);
-            return;
-        }
-        if (stt == null) stt = SpeechRecognizer.createSpeechRecognizer(this);
-        stt.setRecognitionListener(new RecognitionListener() {
-            @Override public void onReadyForSpeech(Bundle b) { }
-            @Override public void onBeginningOfSpeech() { }
-            @Override public void onRmsChanged(float v) { }
-            @Override public void onBufferReceived(byte[] b) { }
-            @Override public void onEndOfSpeech() { }
-            @Override public void onPartialResults(Bundle b) { }
-            @Override public void onEvent(int t, Bundle b) { }
-
-            @Override
-            public void onError(int error) {
-                backToSleep();  // rien entendu : on se rendort
-            }
-
-            @Override
-            public void onResults(Bundle results) {
-                ArrayList<String> list = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                String q = (list == null || list.isEmpty()) ? "" : list.get(0).trim();
-                if (q.isEmpty()) {
-                    backToSleep();
-                } else if (norm(q).matches("(stop|merci|merci syrius|au revoir|c est tout|rien)( .*)?")) {
-                    say("À votre service.", false);
-                } else {
-                    ask(q);
-                }
-            }
-        });
-        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR");
-        stt.startListening(i);
     }
 
     // ------------------------------------------------------------------ réponse de Syrius
@@ -408,8 +429,12 @@ public class WakeService extends Service {
                 main.post(() -> {
                     if (thenListen && followUps < 2) {  // la conversation peut continuer
                         followUps++;
+                        mode = QUESTION;
+                        wakeInUtterance = false;
+                        if (vosk != null) vosk.setPause(false);
                         beep();
-                        main.postDelayed(WakeService.this::listenQuestion, 300);
+                        main.removeCallbacks(questionTimeout);
+                        main.postDelayed(questionTimeout, 7000);
                     } else {
                         backToSleep();
                     }
@@ -425,15 +450,38 @@ public class WakeService extends Service {
     }
 
     private void backToSleep() {
-        busy = false;
-        main.postDelayed(() -> { if (!busy && vosk == null) startWakeListening(); }, 500);
+        main.removeCallbacks(questionTimeout);
+        mode = IDLE;
+        wakeInUtterance = false;
+        if (appVisible) return;
+        if (vosk == null) startWakeListening();
+        else vosk.setPause(false);
+    }
+
+    // ------------------------------------------------------------------ app ouverte : micro libéré
+    static volatile WakeService instance;
+    private boolean appVisible;
+
+    /** L'application est au premier plan : l'écoute de fond s'efface pour lui laisser le micro. */
+    static void appVisible(boolean visible) {
+        WakeService s = instance;
+        if (s == null) return;
+        s.main.post(() -> {
+            s.appVisible = visible;
+            if (visible) {
+                s.stopWakeListening();
+                s.status("En pause pendant que l'application utilise le micro");
+            } else if (s.mode == IDLE && s.vosk == null) {
+                s.main.postDelayed(() -> { if (!s.appVisible && s.vosk == null) s.startWakeListening(); }, 800);
+            }
+        });
     }
 
     @Override
     public void onDestroy() {
+        instance = null;
         status("stopped");
         stopWakeListening();
-        if (stt != null) stt.destroy();
         if (tts != null) tts.shutdown();
         if (model != null) model.close();
         net.shutdownNow();
