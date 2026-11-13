@@ -8,41 +8,40 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
-      - name: Espaces Hugging Face de génération 3D
+      - name: Chaîne complète description → image → maquette 3D texturée (TRELLIS.2)
         run: |
-          cat > /tmp/space.py <<'PY'
-          import json, sys
-          d = json.load(sys.stdin)
-          r = d.get("runtime") or {}
-          print("stage:", r.get("stage"), "| hw:", (r.get("hardware") or {}).get("current"), "| sdk:", d.get("sdk"),
-                "| likes:", d.get("likes"), "| maj:", d.get("lastModified"), "|", d.get("error", ""))
-          PY
-          cat > /tmp/info.py <<'PY'
-          import json
+          python3 -m venv /tmp/v && . /tmp/v/bin/activate
+          pip install -q "gradio_client==1.13.3" 2>&1 | tail -1 || pip install -q gradio_client
+          pip show gradio_client | head -2
+          cat > /tmp/t.py <<'PY'
+          import time, os, json, urllib.parse, urllib.request
+          from gradio_client import Client, handle_file
+          t0 = time.time()
+          prompt = "a red vintage sports car, single object, centered, full view, 3D render, plain white background, studio lighting"
+          url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt) + "?width=768&height=768&seed=7&nologo=true"
+          urllib.request.urlretrieve(url, "/tmp/in.jpg")
+          print("image", os.path.getsize("/tmp/in.jpg"), "o en", round(time.time() - t0, 1), "s")
+          c = Client("microsoft/TRELLIS.2", verbose=False)
+          print(c.view_api(return_format="str", print_info=False)[:6000])
+          t1 = time.time()
           try:
-              d = json.load(open("/tmp/info.json"))
-              for k, v in list(d.get("named_endpoints", {}).items())[:12]:
-                  print("   ", k, "<-", [(p.get("parameter_name"), (p.get("python_type") or {}).get("type")) for p in v.get("parameters", [])][:8])
-          except Exception:
-              print("   (pas d'API lisible)")
+              c.predict(api_name="/start_session")
+          except Exception as e:
+              print("start_session:", e)
+          img = c.predict(handle_file("/tmp/in.jpg"), api_name="/preprocess_image")
+          print("pré-traitement", img, round(time.time() - t1, 1), "s")
+          t2 = time.time()
+          out = c.predict(image=handle_file(img if isinstance(img, str) else img.get("path")), seed=0, resolution="512", api_name="/image_to_3d")
+          print("image_to_3d", str(out)[:300], round(time.time() - t2, 1), "s")
+          t3 = time.time()
+          glb = c.predict(decimation_target=200000, texture_size=1024, api_name="/extract_glb")
+          print("extract_glb", str(glb)[:300], round(time.time() - t3, 1), "s")
+          p = glb[0] if isinstance(glb, (list, tuple)) else glb
+          p = p.get("path") if isinstance(p, dict) else p
+          if p and os.path.exists(p):
+              print("GLB", os.path.getsize(p), "octets", open(p, "rb").read(4))
+          print("total", round(time.time() - t0, 1), "s")
           PY
-          for s in microsoft/TRELLIS.2 JeffreyXiang/TRELLIS tencent/Hunyuan3D-2 tencent/Hunyuan3D-2.1 tencent/Hunyuan3D-2mini-Turbo stabilityai/stable-fast-3d stabilityai/TripoSR VAST-AI/TripoSG; do
-            echo "=== $s"
-            curl -sS -m 20 "https://huggingface.co/api/spaces/$s" | python3 /tmp/space.py || true
-            host=$(echo "$s" | tr '/._' '---' | tr 'A-Z' 'a-z')
-            curl -sS -m 20 "https://$host.hf.space/gradio_api/info" -o /tmp/info.json -w "  api http %{http_code}\n" || true
-            python3 /tmp/info.py || true
-          done
-      - name: IA en ligne gratuites
-        run: |
-          cat > /tmp/or.py <<'PY'
-          import json, sys
-          d = json.load(sys.stdin)["data"]
-          free = [m for m in d if m["id"].endswith(":free")]
-          print(len(free), "modèles gratuits OpenRouter")
-          for m in sorted(free, key=lambda m: -(m.get("context_length") or 0))[:40]:
-              print(" ", m["id"], "|", m.get("context_length"), "|", ",".join((m.get("architecture") or {}).get("input_modalities") or []))
-          PY
-          curl -sS -m 20 https://openrouter.ai/api/v1/models | python3 /tmp/or.py
+          python /tmp/t.py 2>&1 | tail -120
