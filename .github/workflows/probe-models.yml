@@ -12,47 +12,40 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Modèles candidats
+      - name: Modèles de vision (fichiers + carte)
         run: |
-          cat > /tmp/p.py <<'PY'
-          import json, sys
-          d = json.load(sys.stdin)
-          if isinstance(d, dict) and d.get("error"):
-              print("  ERREUR", d["error"]); sys.exit()
-          print("gated:", d.get("gated"), "| licence:", (d.get("cardData") or {}).get("license"), "| downloads:", d.get("downloads"))
-          for s in d.get("siblings", []):
-              n = s["rfilename"]
-              sz = round((s.get("size") or 0)/1e6)
-              if sz > 5 or n.endswith((".task", ".litertlm", ".mnn")):
-                  print(f"  {n}  {sz} Mo  sha256={(s.get('lfs') or {}).get('sha256')}")
-          PY
-          for repo in google/gemma-3n-E2B-it-litert-preview google/gemma-3n-E2B-it-litert-lm \
-                      litert-community/gemma-3n-E2B-it-litert-lm litert-community/SmolVLM-256M-Instruct \
-                      litert-community/SmolVLM2-256M-Video-Instruct litert-community/Qwen2.5-VL-3B-Instruct \
-                      litert-community/FastVLM-0.5B litert-community/InternVL3-1B \
-                      taobao-mnn/Qwen2.5-VL-3B-Instruct-MNN taobao-mnn/Qwen2-VL-2B-Instruct-MNN \
-                      taobao-mnn/SmolVLM-256M-Instruct-MNN taobao-mnn/stable-diffusion-v1-5-mnn-general \
-                      xororz/sd-mnn xororz/sd-qnn; do
+          for repo in litert-community/InternVL3-1B litert-community/InternVL3_5-1B litert-community/Qwen2-VL-2B \
+                      litert-community/LFM3-VL-2B-LiteRT litert-community/SmolVLM2-500M litert-community/LLaVA-OneVision-0.5B \
+                      litert-community/InternVL3_5-2B; do
             echo "=================== $repo"
-            curl -sS -m 30 "https://huggingface.co/api/models/$repo?blobs=true" | python3 /tmp/p.py || echo "  (indisponible)"
-          done
-      - name: Listes
-        run: |
-          for a in litert-community taobao-mnn xororz; do
-            echo "=================== auteur $a"
-            curl -sS -m 30 "https://huggingface.co/api/models?author=$a&limit=300" | python3 -c '
+            curl -sS -m 30 "https://huggingface.co/api/models/$repo?blobs=true" | python3 -c '
           import json,sys
-          for m in json.load(sys.stdin):
-              i=m["id"]; l=i.lower()
-              if any(k in l for k in ("vl","vision","smol","gemma-3n","gemma3n","paligemma","diffusion","sd","image","fastvlm","intern","moondream","qwen3")):
-                  print(" ", i, "| gated:", m.get("gated"), "| dl:", m.get("downloads"))'
+          d=json.load(sys.stdin)
+          print("gated:",d.get("gated"),"| licence:",(d.get("cardData") or {}).get("license"),"| dl:",d.get("downloads"))
+          for s in d.get("siblings",[]):
+              sz=round((s.get("size") or 0)/1e6)
+              print(f"  {s[\"rfilename\"]}  {sz} Mo  sha256={(s.get(\"lfs\") or {}).get(\"sha256\")}")' || true
+            curl -sS -m 30 "https://huggingface.co/$repo/raw/main/README.md" | grep -v "^\s*$" | head -80 | cut -c1-220
           done
-      - name: Versions des bibliothèques
+      - name: Stable Diffusion MNN (tous les fichiers)
         run: |
-          for p in com/google/mediapipe/tasks-genai com/google/mediapipe/tasks-vision-image-generator com/google/ai/edge/litertlm/litertlm-android; do
-            echo "== $p"; curl -sS -m 30 https://dl.google.com/dl/android/maven2/$p/maven-metadata.xml | tr '<' '\n' | grep -E "^(version|latest|release)>" | tail -6
-          done
-          echo "== MNN releases"; curl -sS -m 30 https://api.github.com/repos/alibaba/MNN/releases?per_page=3 | python3 -c '
+          for repo in taobao-mnn/stable-diffusion-v1-5-mnn-general taobao-mnn/stable-diffusion-v1-5-mnn-opencl; do
+            echo "=================== $repo"
+            curl -sS -m 30 "https://huggingface.co/api/models/$repo?blobs=true" | python3 -c '
           import json,sys
-          for r in json.load(sys.stdin):
-              print(r["tag_name"], [a["name"] for a in r["assets"]][:20])'
+          d=json.load(sys.stdin)
+          for s in d.get("siblings",[]):
+              print(f"  {s[\"rfilename\"]}  {s.get(\"size\")} o  sha256={(s.get(\"lfs\") or {}).get(\"sha256\")}")'
+            curl -sS -m 30 "https://huggingface.co/$repo/raw/main/README.md" | grep -v "^\s*$" | head -40 | cut -c1-220
+          done
+      - name: Bibliothèques Android (contenu natif)
+        run: |
+          mkdir -p /tmp/a && cd /tmp/a
+          curl -sSfL -o lm.aar https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/0.19.1/litertlm-android-0.19.1.aar
+          curl -sSfL -o lm.pom https://dl.google.com/dl/android/maven2/com/google/ai/edge/litertlm/litertlm-android/0.19.1/litertlm-android-0.19.1.pom
+          curl -sSfL -o mp.aar https://dl.google.com/dl/android/maven2/com/google/mediapipe/tasks-genai/0.10.27/tasks-genai-0.10.27.aar
+          ls -la; sha256sum *.aar
+          echo "--- litertlm .so"; unzip -l lm.aar | grep -E "\.so$|classes.jar"
+          echo "--- mediapipe .so"; unzip -l mp.aar | grep -E "\.so$"
+          echo "--- manifest litertlm"; unzip -p lm.aar AndroidManifest.xml
+          echo "--- pom"; grep -E "artifactId|version|scope" lm.pom
