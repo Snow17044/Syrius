@@ -575,10 +575,15 @@ function handleDevice(view, ev) {
     ok.className = "primary"; ok.textContent = "Confirmer";
     const no = document.createElement("button");
     no.className = "ghost"; no.textContent = "Annuler";
-    ok.addEventListener("click", () => { row.remove(); finish(runDevice(ev)); });
-    no.addEventListener("click", () => { row.remove(); status.textContent = "Annulé."; });
+    let decided = false;
+    const accept = () => { if (decided) return; decided = true; row.remove(); finish(runDevice(ev)); };
+    const refuse = () => { if (decided) return; decided = true; row.remove(); status.textContent = "Annulé."; };
+    ok.addEventListener("click", accept);
+    no.addEventListener("click", refuse);
     row.append(ok, no);
     card.append(row);
+    // Mode conversation : la confirmation se fait aussi à la voix (« oui » / « non »).
+    if (window.SyriusVoice?.active) window.SyriusVoice.confirm(title.textContent, accept, refuse);
   } else {
     finish(runDevice(ev));
   }

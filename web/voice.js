@@ -7,6 +7,8 @@
   let on = false;
   let phase = "";
   let silences = 0;
+  let pendingConfirm = null; // action à confirmer à la voix (appel, SMS, lien)
+  const YES = /^(oui|ouais|vas[- ]y|d'accord|ok|okay|appelle|lance|confirme|bien s[uû]r|c'est [çc]a)\b/i;
 
   const $ = (s) => document.querySelector(s);
   const Native = () => window.SyriusAndroid || null;
@@ -24,7 +26,8 @@
   }
 
   function clean(text) {
-    return String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/[`*#>_\[\]()|]/g, "")
+    return String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/\p{Extended_Pictographic}|\uFE0F/gu, "")
+      .replace(/[`*#>_\[\]()|]/g, "")
       .replace(/https?:\/\/\S+/g, "lien").replace(/\s+/g, " ").trim().slice(0, 1500);
   }
 
@@ -128,6 +131,16 @@
       $("#voice-reply").textContent = clean(reply).slice(0, 400);
       setPhase("speak", "Je réponds…");
       await speakAndWait(reply || "Désolé, je n'ai pas de réponse.");
+      if (on && pendingConfirm) { // ex. « Appeler Maman » : on demande un « oui » explicite
+        const c = pendingConfirm;
+        pendingConfirm = null;
+        setPhase("speak", "Je vérifie…");
+        await speakAndWait(`${clean(c.label)}. Je confirme ? Dites oui ou non.`);
+        setPhase("listen", "Oui ou non ?");
+        const answer = (await listenOnce()).trim();
+        if (YES.test(answer)) { c.accept(); await speakAndWait("C'est parti."); }
+        else { c.refuse(); await speakAndWait("D'accord, j'annule."); }
+      }
     }
   }
 
@@ -162,5 +175,7 @@
     });
   });
 
-  window.SyriusVoice = { open, close, get active() { return on; } };
+  function confirm(label, accept, refuse) { pendingConfirm = { label, accept, refuse }; }
+
+  window.SyriusVoice = { open, close, confirm, get active() { return on; } };
 })();

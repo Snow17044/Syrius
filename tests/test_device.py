@@ -91,8 +91,19 @@ def test_pont_android_verifie_l_origine():
     i = java.index("public String device(String json)")
     assert "trusted()" in java[i:i + 400]
     actions = open("android/app/src/main/java/fr/syrius/app/DeviceActions.java", encoding="utf-8").read()
-    assert "ACTION_DIAL" in actions and "ACTION_CALL" not in actions  # jamais d'appel direct
     assert "SEND_SMS" not in actions  # jamais d'envoi direct de SMS
     manifest = open("android/app/src/main/AndroidManifest.xml", encoding="utf-8").read()
-    for forbidden in ("CALL_PHONE", "SEND_SMS", "BIND_ACCESSIBILITY_SERVICE", "WRITE_SETTINGS"):
+    for forbidden in ("SEND_SMS", "BIND_ACCESSIBILITY_SERVICE", "WRITE_SETTINGS"):
         assert forbidden not in manifest
+
+
+def test_appel_direct_seulement_apres_confirmation():
+    # Choix de l'utilisateur : l'appel part directement, mais TOUJOURS après une confirmation explicite.
+    from server.tools.device import NEEDS_CONFIRMATION
+    assert "phone_call" in NEEDS_CONFIRMATION  # bouton « Confirmer » dans l'app
+    calls = open("android/app/src/main/java/fr/syrius/app/Calls.java", encoding="utf-8").read()
+    assert "placeCall" in calls and "ACTION_CALL" not in calls
+    wake = open("android/app/src/main/java/fr/syrius/app/WakeService.java", encoding="utf-8").read()
+    # à la voix : seulement si la réponse est un « oui » explicite
+    assert "final boolean yes = YES.matcher(norm(q)).matches();" in wake
+    assert "if (call == null || !yes)" in wake
