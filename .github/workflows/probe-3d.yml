@@ -1,0 +1,48 @@
+name: Vérification ponctuelle (3D et IA)
+on:
+  push:
+    branches: ["claude/**"]
+    paths: [".github/workflows/probe-3d.yml"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Espaces Hugging Face de génération 3D
+        run: |
+          cat > /tmp/space.py <<'PY'
+          import json, sys
+          d = json.load(sys.stdin)
+          r = d.get("runtime") or {}
+          print("stage:", r.get("stage"), "| hw:", (r.get("hardware") or {}).get("current"), "| sdk:", d.get("sdk"),
+                "| likes:", d.get("likes"), "| maj:", d.get("lastModified"), "|", d.get("error", ""))
+          PY
+          cat > /tmp/info.py <<'PY'
+          import json
+          try:
+              d = json.load(open("/tmp/info.json"))
+              for k, v in list(d.get("named_endpoints", {}).items())[:12]:
+                  print("   ", k, "<-", [(p.get("parameter_name"), (p.get("python_type") or {}).get("type")) for p in v.get("parameters", [])][:8])
+          except Exception:
+              print("   (pas d'API lisible)")
+          PY
+          for s in microsoft/TRELLIS.2 JeffreyXiang/TRELLIS tencent/Hunyuan3D-2 tencent/Hunyuan3D-2.1 tencent/Hunyuan3D-2mini-Turbo stabilityai/stable-fast-3d stabilityai/TripoSR VAST-AI/TripoSG; do
+            echo "=== $s"
+            curl -sS -m 20 "https://huggingface.co/api/spaces/$s" | python3 /tmp/space.py || true
+            host=$(echo "$s" | tr '/._' '---' | tr 'A-Z' 'a-z')
+            curl -sS -m 20 "https://$host.hf.space/gradio_api/info" -o /tmp/info.json -w "  api http %{http_code}\n" || true
+            python3 /tmp/info.py || true
+          done
+      - name: IA en ligne gratuites
+        run: |
+          cat > /tmp/or.py <<'PY'
+          import json, sys
+          d = json.load(sys.stdin)["data"]
+          free = [m for m in d if m["id"].endswith(":free")]
+          print(len(free), "modèles gratuits OpenRouter")
+          for m in sorted(free, key=lambda m: -(m.get("context_length") or 0))[:40]:
+              print(" ", m["id"], "|", m.get("context_length"), "|", ",".join((m.get("architecture") or {}).get("input_modalities") or []))
+          PY
+          curl -sS -m 20 https://openrouter.ai/api/v1/models | python3 /tmp/or.py
