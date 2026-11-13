@@ -59,6 +59,13 @@ DEVICE_TOOLS = [
           ["text", "when"]),
     _tool("phone_reminder_cancel", "Annule un rappel (identifiant donné par list_reminders).",
           {"id": {"type": "string"}}, ["id"]),
+    _tool("phone_music",
+          "Musique sur le téléphone : lancer un titre, un artiste, un album ou une playlist (action play + query), "
+          "ou contrôler la lecture en cours (pause, resume, next, previous).",
+          {"action": {"type": "string", "description": "play, pause, resume, next ou previous"},
+           "query": {"type": "string", "description": "Ce qu'il faut jouer (pour play), ex. « Daft Punk Get Lucky »"},
+           "app": {"type": "string", "description": "auto (par défaut), spotify, youtube_music, youtube ou deezer"}},
+          ["action"]),
     _tool("phone_calendar",
           "Ajoute un RENDEZ-VOUS dans l'agenda du téléphone (l'utilisateur valide dans son agenda).",
           {"title": {"type": "string"}, "start": {"type": "string", "description": "AAAA-MM-JJTHH:MM (heure locale)"},
@@ -73,7 +80,7 @@ DEVICE_LABELS = {
     "phone_open_url": "J'ouvre le lien", "phone_flashlight": "Je m'occupe de la lampe",
     "phone_volume": "Je règle le volume", "phone_settings": "J'ouvre les réglages",
     "phone_reminder": "Je programme le rappel", "phone_reminder_cancel": "J'annule le rappel",
-    "phone_calendar": "J'ajoute le rendez-vous",
+    "phone_calendar": "J'ajoute le rendez-vous", "phone_music": "Je m'occupe de la musique",
 }
 
 # Actions qui exigent un appui de l'utilisateur dans Syrius avant de s'exécuter.
@@ -191,6 +198,20 @@ def build_action(name: str, args: dict) -> tuple[dict, str]:
             raise DeviceInputError("identifiant de rappel invalide")
         p = {"id": rid}
         done = "Rappel annulé."
+    elif name == "phone_music":
+        action = args.get("action")
+        if action not in ("play", "pause", "resume", "next", "previous"):
+            raise DeviceInputError("action inconnue (play, pause, resume, next, previous)")
+        app = args.get("app") or "auto"
+        if app not in ("auto", "spotify", "youtube_music", "youtube", "deezer"):
+            app = "auto"
+        p = {"action": action, "app": app}
+        if action == "play":
+            p["query"] = _text(args.get("query"), "query", 120)
+            done = f"Lecture de « {p['query']} » demandée" + ("" if app == "auto" else f" sur {app}") + "."
+        else:
+            done = {"pause": "Musique mise en pause.", "resume": "Lecture reprise.", "next": "Titre suivant.",
+                    "previous": "Titre précédent."}[action]
     elif name == "phone_calendar":
         dt = parse_local(args.get("start"), "start", max_days=730)
         dur = args.get("duration_min", 60)

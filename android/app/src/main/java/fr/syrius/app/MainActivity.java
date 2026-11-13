@@ -367,7 +367,7 @@ public class MainActivity extends Activity {
         /** Fonctions disponibles dans cette version de l'application. */
         @JavascriptInterface
         public String features() {
-            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\"]";
+            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\",\"music\"]";
         }
 
         @JavascriptInterface
@@ -448,6 +448,24 @@ public class MainActivity extends Activity {
             if (!trusted()) return;
             WakeService.setEnabled(MainActivity.this, false);
             WakeModel.delete(MainActivity.this);
+        }
+
+        /** « Afficher par-dessus les autres applis » : permet à « Hey Syrius » d'ouvrir la musique app fermée. */
+        @JavascriptInterface
+        public boolean canOpenApps() {
+            return trusted() && android.provider.Settings.canDrawOverlays(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void overlaySettings() {
+            if (!trusted()) return;
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Exception ignored) {
+                }
+            });
         }
 
         /** Ouvre le réglage « ne pas optimiser la batterie » (sinon le téléphone peut couper l'écoute). */

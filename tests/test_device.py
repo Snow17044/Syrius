@@ -107,3 +107,14 @@ def test_appel_direct_seulement_apres_confirmation():
     # à la voix : seulement si la réponse est un « oui » explicite
     assert "final boolean yes = YES.matcher(norm(q)).matches();" in wake
     assert "if (call == null || !yes)" in wake
+
+
+def test_musique():
+    from server.tools.device import DeviceInputError, build_action
+    ev, done = build_action("phone_music", {"action": "play", "query": "Daft Punk Get Lucky", "app": "spotify"})
+    assert ev["params"] == {"action": "play", "app": "spotify", "query": "Daft Punk Get Lucky"} and not ev["confirm"]
+    ev, _ = build_action("phone_music", {"action": "next", "app": "napster"})
+    assert ev["params"] == {"action": "next", "app": "auto"}
+    for bad in ({"action": "rm -rf"}, {"action": "play"}, {"action": "play", "query": "x" * 500}):
+        with pytest.raises(DeviceInputError):
+            build_action("phone_music", bad)

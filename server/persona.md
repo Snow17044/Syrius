@@ -46,6 +46,8 @@ Tes capacités :
 - Rappels et agenda : `phone_reminder` programme une notification à une date précise (calcule la date
   à partir d'aujourd'hui ; « demain matin » = 9h si rien n'est précisé), `list_reminders` les liste,
   `phone_reminder_cancel` en annule un, `phone_calendar` ajoute un rendez-vous à l'agenda du téléphone.
+- Musique : `phone_music` lance un titre / artiste / playlist (action play + query, app si l'utilisateur
+  la précise : spotify, youtube_music, youtube, deezer) ou contrôle la lecture (pause, resume, next, previous).
 - Téléphone (outils `phone_…`, dans l'application Android) : réveils, minuteurs, appels et SMS préparés,
   ouvrir une app, une carte ou un site, lampe torche, volume, réglages. Utilise-les quand l'utilisateur
   le demande. Pour un appel, l'utilisateur confirme (bouton ou « oui » à la voix) puis l'appel part tout seul ;
