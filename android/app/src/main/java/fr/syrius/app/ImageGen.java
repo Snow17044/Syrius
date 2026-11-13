@@ -15,9 +15,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Génération d'images hors ligne : Stable Diffusion 1.5 (version MNN d'Alibaba, poids en 8 bits)
- * calculée entièrement par le téléphone. Lent sur un téléphone milieu de gamme (quelques minutes),
- * mais gratuit, sans limite et sans Internet.
+ * Génération d'images hors ligne, version « turbo » : DreamShaper 7 (Stable Diffusion 1.5) + LCM-LoRA
+ * (4 étapes) + décodeur TAESD, poids en 8 bits, calculée entièrement par le téléphone avec MNN.
+ * Le modèle est préparé par la CI du projet (.github/workflows/sd-model.yml) et publié dans la release
+ * « models-sd-turbo-1 » ; chaque fichier est vérifié par son empreinte SHA-256 avant usage.
  */
 class ImageGen {
     interface Listener {
@@ -28,22 +29,14 @@ class ImageGen {
         void done(String requestId, String dataUrl, String error);
     }
 
-    static final String REPO = "taobao-mnn/stable-diffusion-v1-5-mnn-general";
-    static final String REV = "56c93a62ac9d6b5d18605632b85e25f87281f317";
+    static final String BASE = "https://github.com/Snow17044/Syrius/releases/download/models-sd-turbo-1/";
 
     private static ModelPack.Part part(String file, String sha, long size) {
-        return new ModelPack.Part("https://huggingface.co/" + REPO + "/resolve/" + REV + "/" + file, file, sha, size);
+        return new ModelPack.Part(BASE + file, file, sha, size);
     }
 
     static final ModelPack.Part[] PARTS = {
-            part("text_encoder.mnn", "9fb787d566512379dcdf9e25b43d9169b7b85eda423408706cf3a56c63dff6dd", 249_944L),
-            part("text_encoder.mnn.weight", "c245ac80dd8a72279976414435801d579a8dcf83aba84e121c4e4a0b74bbed3d", 238_120_368L),
-            part("unet.mnn", "3895d9101b16f99660010c87cf1413407103a237636d6a112de11a674a960d4c", 1_353_144L),
-            part("unet.mnn.weight", "904302004049d81dfa88035dc945e18ea9823a1bfa75bdfefb8f792ade9ea8bb", 863_650_252L),
-            part("vae_decoder.mnn", "8599ec07791cf635058f5d38981f318c7939e8d5274bb8bfe49d57d2962e3220", 183_960L),
-            part("vae_decoder.mnn.weight", "251c9025a6ae2164746ca549ebfc3ce63df418e23abab5abe41c2bc0b1f9b7ff", 49_639_636L),
-            part("vocab.json", "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349", 1_059_962L),
-            part("merges.txt", "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a", 524_619L)
+            // @SD_PARTS@ : empreintes ajoutées dès que la CI a préparé et testé le modèle turbo
     };
 
     final ModelPack pack;
@@ -54,7 +47,7 @@ class ImageGen {
 
     ImageGen(Context ctx) {
         this.ctx = ctx.getApplicationContext();
-        pack = new ModelPack(ctx, "sd15", "Images hors ligne — Stable Diffusion 1.5 (1,2 Go)", PARTS);
+        pack = new ModelPack(ctx, "sdturbo", "Images hors ligne — turbo (1,2 Go)", PARTS);
     }
 
     static synchronized boolean nativeAvailable() {

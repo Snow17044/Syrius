@@ -110,7 +110,7 @@
     return new Promise((resolve, reject) => {
       const id = "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       images.set(id, { onProgress, resolve, reject });
-      const r = native().imageGenerate(id, String(prompt).slice(0, 400), 12);
+      const r = native().imageGenerate(id, String(prompt).slice(0, 400), 4);
       if (r !== "ok") { images.delete(id); reject(new Error(r || "Création d'image impossible")); }
     });
   }

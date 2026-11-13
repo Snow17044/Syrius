@@ -657,7 +657,7 @@ public class MainActivity extends Activity {
             if (!requestId.matches("[A-Za-z0-9_-]{1,40}")) return "Refusé";
             prompt = prompt.replaceAll("[\\x00-\\x1f\\x7f]", " ").trim();
             if (prompt.isEmpty() || prompt.length() > 400) return "Description d'image invalide";
-            int n = Math.max(4, Math.min(25, steps));
+            int n = Math.max(2, Math.min(8, steps));
             local.release();  // libère la mémoire des autres IA du téléphone
             vision.releaseAsync();
             final String rid = requestId;

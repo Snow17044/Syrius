@@ -152,8 +152,11 @@ def test_vision_et_images_hors_ligne_securisees():
     import re
     for name in ("Vision", "ImageGen"):
         src = open(f"android/app/src/main/java/fr/syrius/app/{name}.java", encoding="utf-8").read()
-        rev = re.search(r'REV = "([^"]+)"', src).group(1)
-        assert re.fullmatch(r"[0-9a-f]{40}", rev), f"{name} : révision non figée"
+        if name == "Vision":  # dépôt Hugging Face à une révision figée
+            rev = re.search(r'REV = "([^"]+)"', src).group(1)
+            assert re.fullmatch(r"[0-9a-f]{40}", rev), f"{name} : révision non figée"
+        else:  # modèle préparé par notre CI, publié dans nos Releases
+            assert 'BASE = "https://github.com/Snow17044/Syrius/releases/download/models-sd-turbo-1/"' in src
         shas = re.findall(r'"([0-9a-f]{64})"', src)
         block = src.split("PARTS = {")[1].split("};")[0]  # un fichier = une empreinte
         assert shas and len(re.findall(r'"([0-9a-f]{64})"', block)) == block.count("Part(") + block.count('part("'), name
