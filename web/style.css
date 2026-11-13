@@ -318,3 +318,6 @@ details input { margin-top: 8px; }
 .wx-drain { font-size: .72rem; color: #8fd3ff; text-align: right; }
 .wx-dtemp { text-align: right; font-weight: 700; }
 .wx-src { font-size: .62rem; color: var(--muted); text-align: right; margin-top: 6px; }
+
+.wake-live { margin: 8px 0; padding: 10px; border-radius: 12px; border: 1px dashed rgba(56, 217, 255, .4); background: rgba(56, 217, 255, .05); }
+.wake-heard { font-weight: 700; color: var(--accent); margin: 4px 0 8px; min-height: 1.3em; }

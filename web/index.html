@@ -205,6 +205,12 @@
         <label class="switch"><input id="wake-on" type="checkbox"><span>Écouter « Hey Syrius » en permanence</span></label>
         <button type="button" id="wake-battery" class="ghost wide">🔋 Ne pas couper Syrius (réglage batterie)</button>
         <p id="wake-status" class="small"></p>
+        <div id="wake-live" class="wake-live hidden">
+          <div class="small muted">👂 Dernière chose entendue :</div>
+          <div id="wake-heard" class="wake-heard">—</div>
+          <button type="button" id="wake-learn" class="ghost wide">🎓 Apprendre ma façon de dire « Hey Syrius »</button>
+          <p id="wake-learn-msg" class="small"></p>
+        </div>
       </div>
 
       <div id="briefing-box" class="hidden">

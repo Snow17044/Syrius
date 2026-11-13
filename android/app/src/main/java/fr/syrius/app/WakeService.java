@@ -133,16 +133,22 @@ public class WakeService extends Service {
             if (model == null) model = new Model(WakeModel.dir(this).getAbsolutePath());
             Recognizer rec = new Recognizer(model, 16000.0f);
             vosk = new SpeechService(rec, 16000.0f);
+            status("listening");
             vosk.startListening(new org.vosk.android.RecognitionListener() {
-                @Override public void onPartialResult(String hyp) { check(hyp); }
-                @Override public void onResult(String hyp) { check(hyp); }
+                @Override public void onPartialResult(String hyp) { check(hyp, false); }
+                @Override public void onResult(String hyp) { check(hyp, true); }
                 @Override public void onFinalResult(String hyp) { }
-                @Override public void onError(Exception e) { restartLater(); }
+                @Override public void onError(Exception e) { status("Erreur micro : " + e.getClass().getSimpleName()); restartLater(); }
                 @Override public void onTimeout() { restartLater(); }
             });
         } catch (Exception e) {
+            status("Erreur de démarrage : " + e.getClass().getSimpleName());
             restartLater();
         }
+    }
+
+    private void status(String s) {
+        wakePrefs().edit().putString("status", s).putLong("status_at", System.currentTimeMillis()).apply();
     }
 
     private void stopWakeListening() {
@@ -170,7 +176,47 @@ public class WakeService extends Service {
         return WAKE.matcher(norm(text)).find();
     }
 
-    private void check(String json) {
+    private SharedPreferences wakePrefs() {
+        return getSharedPreferences("syrius_wake", MODE_PRIVATE);
+    }
+
+    /** Mot-clé reconnu : forme connue OU l'une des façons apprises de le dire (bouton « Apprendre »). */
+    private boolean matches(String text) {
+        String n = norm(text);
+        if (n.isEmpty()) return false;
+        if (WAKE.matcher(n).find()) return true;
+        try {
+            org.json.JSONArray learned = new org.json.JSONArray(wakePrefs().getString("learned", "[]"));
+            for (int i = 0; i < learned.length(); i++) {
+                String l = learned.optString(i);
+                if (l.length() >= 4 && (" " + n + " ").contains(" " + l + " ")) return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Mode apprentissage : on retient ce que le modèle entend quand l'utilisateur dit « Hey Syrius ». */
+    private boolean learn(String finalText) {
+        SharedPreferences p = wakePrefs();
+        if (!p.getBoolean("learning", false)) return false;
+        String n = norm(finalText);
+        if (n.length() < 4 || n.length() > 40) return true;
+        try {
+            org.json.JSONArray learned = new org.json.JSONArray(p.getString("learned", "[]"));
+            org.json.JSONArray out = new org.json.JSONArray();
+            for (int i = Math.max(0, learned.length() - 5); i < learned.length(); i++) out.put(learned.optString(i));
+            out.put(n);
+            int count = p.getInt("learn_count", 0) + 1;
+            p.edit().putString("learned", out.toString()).putInt("learn_count", count)
+                    .putBoolean("learning", count < 3).apply();
+            if (count >= 3) main.post(this::beep);  // appris
+        } catch (Exception ignored) {
+        }
+        return true;
+    }
+
+    private void check(String json, boolean isFinal) {
         if (busy || json == null) return;
         String text;
         try {
@@ -179,7 +225,11 @@ public class WakeService extends Service {
         } catch (Exception e) {
             return;
         }
-        if (!isWake(text)) return;
+        if (!text.trim().isEmpty()) {  // diagnostic : dernière chose entendue (reste sur le téléphone)
+            wakePrefs().edit().putString("heard", text.trim()).putLong("heard_at", System.currentTimeMillis()).apply();
+        }
+        if (isFinal && learn(text)) return;
+        if (!matches(text)) return;
         busy = true;
         followUps = 0;
         conversationId = null;
@@ -381,6 +431,7 @@ public class WakeService extends Service {
 
     @Override
     public void onDestroy() {
+        status("stopped");
         stopWakeListening();
         if (stt != null) stt.destroy();
         if (tts != null) tts.shutdown();

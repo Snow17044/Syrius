@@ -639,9 +639,28 @@ function refreshWakeBox() {
     : w.downloading ? "Téléchargement…"
     : !w.ready ? "Installe d'abord la reconnaissance vocale."
     : w.enabled ? "✅ Syrius écoute « Hey Syrius »." : "Prêt. Active l'écoute ci-dessus.";
+  // Diagnostic en direct : ce que l'écoute entend (rien n'est envoyé, tout reste sur le téléphone).
+  const live = !!(w.ready && w.enabled);
+  $("#wake-live").classList.toggle("hidden", !live);
+  if (live) {
+    const ago = typeof w.heardAgo === "number" && w.heardAgo >= 0 ? ` (il y a ${w.heardAgo} s)` : "";
+    $("#wake-heard").textContent = w.heard ? `« ${w.heard} »${ago}` : "rien pour l'instant — parle près du téléphone";
+    if (w.status && w.status !== "listening") $("#wake-status").textContent = "⚠ " + (w.status === "stopped" ? "L'écoute est arrêtée (le téléphone l'a peut-être coupée : touche 🔋)." : w.status);
+    const learned = (w.learned || []).join(" · ");
+    $("#wake-learn-msg").textContent = w.learning
+      ? `🎙 Dis « Hey Syrius » … (${w.learnCount || 0}/3), une phrase à la fois, puis attends 2 secondes.`
+      : learned ? `✅ Appris : ${learned}` : "";
+    $("#wake-learn").textContent = w.learning ? "✕ Arrêter l'apprentissage" : "🎓 Apprendre ma façon de dire « Hey Syrius »";
+  }
   clearTimeout(wakeTimer);
-  if (busy && $("#settings").open) wakeTimer = setTimeout(refreshWakeBox, 1500);
+  if ((busy || live) && $("#settings").open) wakeTimer = setTimeout(refreshWakeBox, busy ? 1500 : 1000);
 }
+$("#wake-learn").addEventListener("click", () => {
+  let w = {};
+  try { w = JSON.parse(Native.wakeInfo()); } catch (_) { /* */ }
+  Native.wakeLearn(!w.learning);
+  setTimeout(refreshWakeBox, 200);
+});
 $("#wake-download").addEventListener("click", () => {
   const r = Native.wakeDownload();
   if (r !== "ok") alert(r);

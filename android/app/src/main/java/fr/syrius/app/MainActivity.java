@@ -383,7 +383,21 @@ public class MainActivity extends Activity {
         public String wakeInfo() {
             if (!trusted()) return "{}";
             String m = WakeModel.info(MainActivity.this);
-            return m.substring(0, m.length() - 1) + ",\"enabled\":" + WakeService.enabled(MainActivity.this) + "}";
+            android.content.SharedPreferences w = getSharedPreferences("syrius_wake", MODE_PRIVATE);
+            try {
+                JSONObject o = new JSONObject(m);
+                o.put("enabled", WakeService.enabled(MainActivity.this))
+                        .put("heard", w.getString("heard", ""))
+                        .put("heardAgo", w.getLong("heard_at", 0) == 0 ? -1
+                                : (System.currentTimeMillis() - w.getLong("heard_at", 0)) / 1000)
+                        .put("status", w.getString("status", ""))
+                        .put("learning", w.getBoolean("learning", false))
+                        .put("learnCount", w.getInt("learn_count", 0))
+                        .put("learned", new org.json.JSONArray(w.getString("learned", "[]")));
+                return o.toString();
+            } catch (Exception e) {
+                return m;
+            }
         }
 
         @JavascriptInterface
@@ -407,6 +421,16 @@ public class MainActivity extends Activity {
             }
             if (on) runOnUiThread(() -> DeviceActions.askNotifications(MainActivity.this));
             return "ok";
+        }
+
+        /** Apprentissage : l'utilisateur dit « Hey Syrius » 3 fois, on retient ce que le modèle entend. */
+        @JavascriptInterface
+        public void wakeLearn(boolean start) {
+            if (!trusted()) return;
+            android.content.SharedPreferences.Editor e = getSharedPreferences("syrius_wake", MODE_PRIVATE).edit();
+            if (start) e.putBoolean("learning", true).putInt("learn_count", 0).putString("learned", "[]");
+            else e.putBoolean("learning", false);
+            e.apply();
         }
 
         @JavascriptInterface
