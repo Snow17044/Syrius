@@ -2,6 +2,70 @@
 
 const $ = (s) => document.querySelector(s);
 const emptyNode = document.getElementById("empty");
+const Icons = window.SyriusIcons;
+
+// Messages d'état : « ✅ … », « ⚠ … », « 🔒 … » deviennent une icône dessinée + le texte (jamais d'emoji affiché).
+const MARKS = { "✅": ["ok", "ok"], "⚠": ["warn", "alert"], "🔒": ["info", "lock"], "🎙": ["info", "mic"] };
+function setMsg(el, text) {
+  if (!el) return;
+  const t = String(text == null ? "" : text);
+  const m = /^(✅|⚠|🔒|🎙)\uFE0F?\s*/u.exec(t);
+  el.classList.remove("stat", "ok", "warn", "info");
+  if (!m) { el.textContent = t; return; }
+  const [kind, icon] = MARKS[m[1]];
+  el.classList.add("stat", kind);
+  Icons.set(el, icon, t.slice(m[0].length));
+}
+// Les zones d'état des réglages se mettent à jour toutes seules quand leur texte change.
+function watchMsg(el) {
+  if (!el) return;
+  new MutationObserver(() => {
+    const f = el.firstChild;
+    if (!f || f.nodeType !== 3) return; // déjà décoré (icône + texte)
+    if (/^(✅|⚠|🔒|🎙)/u.test(f.data)) setMsg(el, el.textContent);
+    else el.classList.remove("stat", "ok", "warn", "info");
+  }).observe(el, { childList: true, characterData: true, subtree: true });
+}
+document.addEventListener("DOMContentLoaded", () => {
+  ["#local-status", "#wake-status", "#wake-learn-msg", "#briefing-msg", "#google-msg", "#outlook-msg",
+    "#settings-msg", "#pw-msg"].forEach((q) => watchMsg($(q)));
+  document.querySelectorAll(".pack-status").forEach(watchMsg);
+});
+
+// Icône d'une étape affichée pendant la réponse (« Je cherche sur le web », etc.).
+const TOOL_ICONS = [[/web|cherch|recherch|page|article|actu/i, "search"], [/carte|lieu|itin|adresse/i, "map"],
+  [/météo|temps qu/i, "partly"], [/mail/i, "mail"], [/souvenir|mémoire|retenu/i, "bulb"], [/schéma/i, "nodes"],
+  [/maquette|3d/i, "cube"], [/image|dessin/i, "sparkle"], [/rappel/i, "bell"], [/agenda|rendez/i, "calendar"],
+  [/musique/i, "music"], [/appel/i, "phone"], [/sms/i, "message"], [/réveil/i, "alarm"], [/minuteur/i, "timer"],
+  [/vision|photo/i, "eye"], [/hors ligne|téléphone/i, "chip"], [/lampe/i, "flashlight"], [/volume/i, "volume"]];
+function toolIcon(label) {
+  for (const [re, name] of TOOL_ICONS) if (re.test(label)) return name;
+  return "sparkle";
+}
+function stripMark(t) { return String(t || "").replace(/^[^\p{L}\p{N}«"(]+/u, ""); }
+function node(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+// En-tête de carte : pastille d'icône + titre + sous-titre.
+function cardHead(icon, title, sub) {
+  const head = node("div", "card-head");
+  const ic = node("div", "card-icon");
+  ic.append(Icons.svg(icon));
+  const txt = node("div", "card-text");
+  txt.append(node("div", "card-title", title));
+  if (sub) txt.append(node("div", "card-sub", sub));
+  head.append(ic, txt);
+  return head;
+}
+// Ajoute une carte sous la réponse ; pendant la conversation vocale, elle s'affiche aussi en direct à côté.
+function placeCard(view, card) {
+  view.bubble.appendChild(card);
+  if (window.SyriusVoice && window.SyriusVoice.active && window.SyriusVoice.stage) window.SyriusVoice.stage(card);
+  return card;
+}
 const state = {
   convId: null,
   conversations: [],
@@ -106,12 +170,12 @@ function renderConversations() {
     if (c.id === state.convId) li.classList.add("active");
     const open = document.createElement("button");
     open.className = "conv-open";
-    open.textContent = (c.pinned ? "📌 " : "") + c.title;
+    Icons.set(open, c.pinned ? "pin" : "message", c.title);
     open.addEventListener("click", () => { openConversation(c.id); closeDrawer(); });
     const more = document.createElement("button");
     more.className = "conv-more";
     more.setAttribute("aria-label", "Options");
-    more.textContent = "⋯";
+    more.append(Icons.svg("more"));
     more.addEventListener("click", () => openConvMenu(c));
     li.append(open, more);
     ul.appendChild(li);
@@ -121,7 +185,7 @@ function renderConversations() {
 function openConvMenu(c) {
   state.menuConv = c;
   $("#conv-menu-title").textContent = c.title;
-  $("#cm-pin").textContent = c.pinned ? "📌 Désépingler" : "📌 Épingler";
+  Icons.set($("#cm-pin"), "pin", c.pinned ? "Désépingler" : "Épingler");
   $("#conv-menu").showModal();
 }
 $("#cm-close").addEventListener("click", () => $("#conv-menu").close());
@@ -222,7 +286,7 @@ function setTools(view, labels) {
   for (const l of labels) {
     const d = document.createElement("div");
     d.className = "tool-line";
-    d.textContent = l;
+    Icons.set(d, toolIcon(l), stripMark(l));
     view.tools.appendChild(d);
   }
 }
@@ -305,9 +369,9 @@ function refreshLocalBox() {
   if (i.installed) sel.value = i.installed;
   const busy = !!(i.downloading || i.verifying);
   $("#local-download").classList.toggle("hidden", busy);
-  $("#local-download").textContent = i.installed ? "🔁 Changer de modèle" : "⬇ Télécharger";
+  Icons.set($("#local-download"), i.installed ? "refresh" : "download", i.installed ? "Changer de modèle" : "Télécharger");
   $("#local-delete").classList.toggle("hidden", !i.installed && !busy);
-  $("#local-delete").textContent = busy ? "✕ Annuler" : "🗑 Supprimer";
+  Icons.set($("#local-delete"), busy ? "close" : "trash", busy ? "Annuler" : "Supprimer");
   $("#local-progress").classList.toggle("hidden", !i.downloading);
   if (i.downloading) {
     $("#local-progress progress").value = i.progress || 0;
@@ -337,7 +401,7 @@ function refreshPacks() {
     el.querySelector(".pack-dl").classList.toggle("hidden", busy || !!i.installed);
     const del = el.querySelector(".pack-del");
     del.classList.toggle("hidden", !i.installed && !busy);
-    del.textContent = busy ? "✕ Annuler" : "🗑 Supprimer";
+    Icons.set(del, busy ? "close" : "trash", busy ? "Annuler" : "Supprimer");
     const prog = el.querySelector(".local-progress");
     prog.classList.toggle("hidden", !i.downloading);
     if (i.downloading) {
@@ -398,7 +462,7 @@ async function answerLocally(view, note) {
   const l = L();
   const history = (state.views || []).filter((v) => v.wrap.isConnected && v !== view)
     .map((v) => ({ role: v.role, text: v.text }));
-  setTools(view, [note || "📴 IA hors ligne (sur ton téléphone)"]);
+  setTools(view, [note || "IA hors ligne (sur ton téléphone)"]);
   setStreaming(true);
   state.localRunning = true;
   let pending = false;
@@ -434,7 +498,7 @@ async function sendLocal(text) {
   scrollDown(true);
   const l = L();
   if (l && l.wantsImage(text) && l.imageReady()) {
-    setTools(view, ["🎨 Image créée sur ton téléphone (hors ligne)"]);
+    setTools(view, ["Image créée sur ton téléphone (hors ligne)"]);
     setStreaming(true);
     let prompt;
     try { prompt = await l.imagePrompt(text); } finally { setStreaming(false); }
@@ -457,7 +521,7 @@ async function sendLocalPhoto(text, photo) {
   setPhoto(null);
   const view = addMessage("assistant", "");
   scrollDown(true);
-  setTools(view, ["👁 Vision hors ligne (sur ton téléphone) — 30 s à 1 min"]);
+  setTools(view, ["Vision hors ligne (sur ton téléphone) — 30 s à 1 min"]);
   setStreaming(true);
   state.localRunning = true;
   let pending = false;
@@ -508,17 +572,13 @@ async function onlineImage(prompt) {
 }
 
 function imageCard(view, params) {
-  const card = document.createElement("div");
-  card.className = "action-card image-card";
-  const title = document.createElement("div");
-  title.className = "action-title";
-  title.textContent = "🎨 " + (params.caption || "Image");
+  const card = node("div", "action-card image-card tone-rose");
+  card.append(cardHead("sparkle", params.caption || "Image", "Création d'image"));
   const bar = document.createElement("progress");
   bar.max = 100;
-  const status = document.createElement("p");
-  status.className = "small";
-  card.append(title, bar, status);
-  view.bubble.appendChild(card);
+  const status = node("p", "small");
+  card.append(bar, status);
+  placeCard(view, card);
   scrollDown();
   const l = L();
   const phoneOk = !!(l && typeof l.makeImage === "function" && l.imageReady());
@@ -545,7 +605,7 @@ function imageCard(view, params) {
       }
     } else if (!phoneOk) {
       throw new Error(Native
-        ? "Sans Internet, il faut « 🎨 Images hors ligne » : Réglages → IA hors ligne."
+        ? "Sans Internet, il faut « Images hors ligne » : Réglages → IA hors ligne."
         : "Pas de connexion Internet.");
     }
     where = "sur ton téléphone";
@@ -554,23 +614,24 @@ function imageCard(view, params) {
   run().then((dataUrl) => {
     bar.remove();
     const secs = Math.round((Date.now() - started) / 1000);
-    status.textContent = `Image créée ${where} en ${secs < 90 ? secs + " s" : Math.round(secs / 60) + " min"}.`;
+    status.textContent = `Image créée ${where} en ${secs < 90 ? Math.max(1, secs) + " s" : Math.round(secs / 60) + " min"}.`;
     const img = document.createElement("img");
     img.className = "gen-image"; img.src = dataUrl; img.alt = params.caption || "Image créée par Syrius";
     const row = document.createElement("div");
     row.className = "action-buttons";
     if (Native && l && typeof l.saveImage === "function" && typeof Native.imageSave === "function") {
       const save = document.createElement("button");
-      save.className = "primary"; save.textContent = "💾 Enregistrer dans la galerie";
+      save.className = "primary"; Icons.set(save, "save", "Enregistrer dans la galerie");
       save.addEventListener("click", () => {
         const r = l.saveImage(dataUrl);
         save.disabled = r === "ok";
-        save.textContent = r === "ok" ? "✅ Enregistrée (Images › Syrius)" : "⚠ " + r;
+        if (r === "ok") Icons.set(save, "check", "Enregistrée (Images › Syrius)");
+        else Icons.set(save, "alert", r);
       });
       row.append(save);
     } else {
       const a = document.createElement("a");
-      a.className = "primary btn-link"; a.textContent = "💾 Télécharger l'image";
+      a.className = "primary btn-link"; Icons.set(a, "download", "Télécharger l'image");
       a.href = dataUrl; a.download = "Syrius.jpg";
       row.append(a);
     }
@@ -579,7 +640,7 @@ function imageCard(view, params) {
     scrollDown();
   }).catch((err) => {
     bar.remove();
-    status.textContent = "⚠ " + (err.message || "Création de l'image impossible.");
+    setMsg(status, "⚠ " + (err.message || "Création de l'image impossible."));
   });
 }
 
@@ -591,7 +652,7 @@ async function sendMessage(text) {
   if (localWanted() || (photo && offlineVisionWanted())) {
     if (photo) {
       if (!L() || !L().visionReady()) {
-        alert("Sans Internet, la photo a besoin de la « Vision hors ligne » : Réglages → IA hors ligne → 👁 Télécharger.");
+        alert("Sans Internet, la photo a besoin de la « Vision hors ligne » : Réglages → IA hors ligne → Télécharger.");
         return;
       }
       return sendLocalPhoto(text, photo);
@@ -661,7 +722,7 @@ async function sendMessage(text) {
         if (ev.type === "text") { view.text += ev.text; repaint(); }
         else if (ev.type === "text_replace") { view.text = String(ev.text || ""); repaint(); }
         else if (ev.type === "tool") { tools.push(ev.label); setTools(view, [...new Set(tools)]); scrollDown(); }
-        else if (ev.type === "action") { view.bubble.appendChild(actionCard(ev)); scrollDown(); }
+        else if (ev.type === "action") { placeCard(view, actionCard(ev)); scrollDown(); }
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
         else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
         else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
@@ -681,7 +742,7 @@ async function sendMessage(text) {
     if (gotError && !view.text && l && l.ready() && l.prefs.fallback) {
       // Toutes les IA en ligne sont épuisées ou injoignables : le téléphone prend le relais.
       view.bubble.querySelectorAll(".msg-error").forEach((e) => e.remove());
-      await answerLocally(view, "📴 IA en ligne indisponible → réponse hors ligne (sur ton téléphone)");
+      await answerLocally(view, "IA en ligne indisponible → réponse hors ligne (sur ton téléphone)");
       return;
     }
     if (gotError && !view.text) $("#input").value = text; // on rend le message pour réessayer
@@ -692,9 +753,8 @@ async function sendMessage(text) {
 }
 
 function showError(view, msg) {
-  const p = document.createElement("p");
-  p.className = "msg-error";
-  p.textContent = "⚠ " + msg;
+  const p = node("p", "msg-error");
+  Icons.set(p, "alert", msg);
   view.bubble.appendChild(p);
 }
 
@@ -710,13 +770,13 @@ function refreshLocation() {
 }
 
 function addMapCard(view, ev) {
-  const card = document.createElement("button");
+  const card = node("button", "action-card open-card tone-sky");
   card.type = "button";
-  card.className = "action-card map-card";
   const n = Array.isArray(ev.places) ? ev.places.length : 0;
-  card.textContent = `🗺 ${n} lieu${n > 1 ? "x" : ""} sur la carte — ouvrir`;
+  card.append(cardHead("map", `${n} lieu${n > 1 ? "x" : ""} sur la carte`, String(ev.query || "Toucher pour ouvrir").slice(0, 80)));
+  card.firstChild.append(Icons.svg("right", "go"));
   card.addEventListener("click", () => window.SyriusHUD && window.SyriusHUD.show(ev));
-  view.bubble.appendChild(card);
+  placeCard(view, card);
 }
 
 // Carte météo (tout le texte passe par textContent).
@@ -731,9 +791,11 @@ function addWeatherCard(view, w) {
   const n = w.now || {};
   const card = el("div", "wx-card");
   const head = el("div", "wx-head");
-  head.append(el("div", "wx-place", "◈ MÉTÉO · " + String(w.place || "").toUpperCase()));
+  head.append(Icons.set(el("div", "wx-place"), "place", String(w.place || "Météo")));
   const main = el("div", "wx-main");
-  main.append(el("div", "wx-icon", n.icon || "🌡"), el("div", "wx-temp", deg(n.temp)));
+  const big = el("div", "wx-icon");
+  big.append(Icons.svg(wxIcon(n.icon)));
+  main.append(big, el("div", "wx-temp", deg(n.temp)));
   const info = el("div", "wx-info");
   info.append(el("div", "wx-label", n.label || ""),
     el("div", "wx-meta", `Ressenti ${deg(n.feels)} · Vent ${n.wind ?? "–"} km/h · Humidité ${n.humidity ?? "–"} %`));
@@ -741,55 +803,79 @@ function addWeatherCard(view, w) {
   const hours = el("div", "wx-hours");
   (w.hours || []).forEach((h) => {
     const c = el("div", "wx-hour");
-    c.append(el("span", "", h.h), el("span", "wx-hicon", h.icon), el("b", "", deg(h.temp)),
-      el("small", "", typeof h.rain === "number" && h.rain >= 20 ? `💧${Math.round(h.rain)}%` : " "));
+    const hi = el("span", "wx-hicon");
+    hi.append(Icons.svg(wxIcon(h.icon)));
+    const rain = el("small", "", " ");
+    if (typeof h.rain === "number" && h.rain >= 20) Icons.set(rain, "drop", `${Math.round(h.rain)}%`);
+    c.append(el("span", "", h.h), hi, el("b", "", deg(h.temp)), rain);
     hours.append(c);
   });
   const days = el("div", "wx-days");
   (w.days || []).forEach((d) => {
     const r = el("div", "wx-day");
-    r.append(el("span", "wx-dname", d.day), el("span", "wx-dicon", d.icon),
-      el("span", "wx-drain", typeof d.rain === "number" && d.rain >= 20 ? `💧${Math.round(d.rain)}%` : ""),
+    const di = el("span", "wx-dicon");
+    di.append(Icons.svg(wxIcon(d.icon)));
+    r.append(el("span", "wx-dname", d.day), di,
+      el("span", "wx-drain", typeof d.rain === "number" && d.rain >= 20 ? `${Math.round(d.rain)} %` : ""),
       el("span", "wx-dtemp", `${deg(d.min)} / ${deg(d.max)}`));
     days.append(r);
   });
   card.append(head, main, hours, days, el("div", "wx-src", "Open-Meteo"));
-  view.bubble.appendChild(card);
+  placeCard(view, card);
+}
+
+// Symboles météo du serveur → icônes dessinées.
+const WX = [["⛈", "storm"], ["🌩", "storm"], ["🌨", "snow"], ["❄", "snow"], ["🌧", "rain"], ["🌦", "rain"],
+  ["🌫", "fog"], ["🌤", "partly"], ["⛅", "partly"], ["🌥", "cloud"], ["☁", "cloud"], ["🌙", "moon"], ["☀", "sun"]];
+function wxIcon(sym) {
+  const s = String(sym || "");
+  for (const [k, name] of WX) if (s.includes(k)) return name;
+  return "thermo";
 }
 
 function addDiagramCard(view, ev) {
-  const card = document.createElement("button");
-  card.type = "button";
-  card.className = "action-card map-card";
   const isModel = ev.type === "model";
-  card.textContent = `${isModel ? "🧊 Maquette 3D" : "🧠 Schéma 3D"} : ${String(ev.title || "").slice(0, 60)} — ouvrir`;
+  const card = node("button", "action-card open-card " + (isModel ? "tone-sky" : "tone-mint"));
+  card.type = "button";
+  card.append(cardHead(isModel ? "cube" : "nodes", String(ev.title || (isModel ? "Maquette 3D" : "Schéma")).slice(0, 70),
+    isModel ? "Maquette 3D · toucher pour ouvrir" : "Schéma · toucher pour ouvrir"));
+  card.firstChild.append(Icons.svg("right", "go"));
   card.addEventListener("click", () => {
     if (isModel) { if (window.SyriusModel) window.SyriusModel.show(ev); }
     else if (window.SyriusHolo) window.SyriusHolo.show(ev);
   });
-  view.bubble.appendChild(card);
+  placeCard(view, card);
 }
 
 // ------------------------------------------------------------------ actions sur le téléphone
-const DEVICE_TEXT = {
-  phone_alarm: (p) => `⏰ Réveil à ${String(p.hour).padStart(2, "0")}h${String(p.minute).padStart(2, "0")}`,
-  phone_timer: (p) => `⏱ Minuteur de ${Math.round(p.seconds / 60) || 1} min`,
-  phone_call: (p) => `📞 Appeler ${p.contact}`,
-  phone_sms: (p) => `💬 SMS à ${p.contact} : « ${p.message} »`,
-  phone_open_app: (p) => `📱 Ouvrir ${p.app}`,
-  phone_map: (p) => `🗺 ${p.navigate ? "Itinéraire vers" : "Carte :"} ${p.query}`,
-  phone_open_url: (p) => `🔗 Ouvrir ${p.url}`,
-  phone_flashlight: (p) => `🔦 Lampe ${p.on ? "allumée" : "éteinte"}`,
-  phone_volume: (p) => `🔊 Volume à ${p.level} %`,
-  phone_settings: (p) => `⚙ Réglages : ${p.page.replace("_", " ")}`,
-  phone_reminder: (p) => `⏰ Rappel ${p.label} : « ${p.text} »` +
-    (p.repeat === "daily" ? " (tous les jours)" : p.repeat === "weekly" ? " (chaque semaine)" : ""),
-  phone_reminder_cancel: () => "🗑 Rappel annulé",
-  phone_music: (p) => p.action === "play" ? `🎵 ${p.query}${p.app && p.app !== "auto" ? " · " + p.app.replace("_", " ") : ""}`
-    : { pause: "⏸ Pause", resume: "▶ Reprise", next: "⏭ Titre suivant", previous: "⏮ Titre précédent" }[p.action],
-  phone_image: (p) => `🎨 ${p.caption || "Image"}`,
-  phone_calendar: (p) => `📅 ${p.title} — ${p.label}${p.location ? " · " + p.location : ""}`,
+// Chaque action : [icône, titre, détail, teinte]. Le texte passe toujours par textContent.
+const pad2 = (n) => String(n).padStart(2, "0");
+const MUSIC = { pause: ["pause", "Pause"], resume: ["play", "Reprise"], next: ["next", "Titre suivant"], previous: ["prev", "Titre précédent"] };
+const DEVICE = {
+  phone_alarm: (p) => ["alarm", `Réveil à ${pad2(p.hour)}h${pad2(p.minute)}`, p.label && p.label !== "Syrius" ? p.label : "Réveil du téléphone", "amber"],
+  phone_timer: (p) => ["timer", `Minuteur de ${Math.round(p.seconds / 60) || 1} min`, p.label || "Minuteur", "amber"],
+  phone_call: (p) => ["phone", `Appeler ${p.contact}`, "Appel", "mint"],
+  phone_sms: (p) => ["message", `SMS à ${p.contact}`, `« ${p.message} »`, "sky"],
+  phone_open_app: (p) => ["apps", `Ouvrir ${p.app}`, "Application", ""],
+  phone_map: (p) => ["place", p.navigate ? "Itinéraire" : "Carte", p.query, "sky"],
+  phone_open_url: (p) => ["link", "Ouvrir le lien", p.url, ""],
+  phone_flashlight: (p) => ["flashlight", `Lampe ${p.on ? "allumée" : "éteinte"}`, "Lampe torche", "amber"],
+  phone_volume: (p) => ["volume", `Volume à ${p.level} %`, "Son des médias", ""],
+  phone_settings: (p) => ["settings", "Réglages du téléphone", String(p.page || "").replace("_", " "), ""],
+  phone_reminder: (p) => ["bell", p.text, `Rappel ${p.label}` +
+    (p.repeat === "daily" ? " · tous les jours" : p.repeat === "weekly" ? " · chaque semaine" : ""), "rose"],
+  phone_reminder_cancel: () => ["trash", "Rappel annulé", "", ""],
+  phone_music: (p) => p.action === "play"
+    ? ["music", p.query, p.app && p.app !== "auto" ? p.app.replace("_", " ") : "Musique", "rose"]
+    : [...(MUSIC[p.action] || ["music", "Musique"]), "Musique", "rose"],
+  phone_image: (p) => ["sparkle", p.caption || "Image", "Image", "rose"],
+  phone_calendar: (p) => ["calendar", p.title, `${p.label}${p.location ? " · " + p.location : ""}`, "sky"],
 };
+function deviceInfo(ev) {
+  const f = DEVICE[ev.action];
+  return f ? f(ev.params || {}) : ["bolt", ev.action, "", ""];
+}
+const DEVICE_TEXT = new Proxy({}, { get: (_, k) => (DEVICE[k] ? (p) => DEVICE[k](p)[1] : undefined) });
 
 // Actions qui demandent une version récente de l'application Android.
 const NEEDS_FEATURE = { phone_reminder: "reminders", phone_reminder_cancel: "reminders", phone_calendar: "calendar",
@@ -809,15 +895,13 @@ function runDevice(ev) {
 
 function handleDevice(view, ev) {
   if (ev.action === "phone_image") { imageCard(view, ev.params || {}); return; }
-  const card = document.createElement("div");
-  card.className = "action-card";
-  const title = document.createElement("div");
-  title.className = "action-title";
-  title.textContent = (DEVICE_TEXT[ev.action] || (() => ev.action))(ev.params || {});
-  const status = document.createElement("p");
-  status.className = "small";
-  card.append(title);
-  const finish = (res) => { status.textContent = res === "ok" ? "✅ Envoyé au téléphone." : "⚠ " + res; };
+  if (ev.action === "phone_call") { callCard(view, ev); return; }
+  const [icon, titleText, sub, tone] = deviceInfo(ev);
+  const card = node("div", "action-card" + (tone ? " tone-" + tone : ""));
+  card.append(cardHead(icon, titleText, sub));
+  const title = { textContent: titleText };
+  const status = node("p", "small");
+  const finish = (res) => setMsg(status, res === "ok" ? "✅ Envoyé au téléphone." : "⚠ " + res);
   if (ev.confirm) {
     if (ev.after_untrusted) {
       const warn = document.createElement("p");
@@ -825,12 +909,10 @@ function handleDevice(view, ev) {
       warn.textContent = "Syrius vient de lire un email ou une page web : vérifie bien que c'est toi qui as demandé cette action.";
       card.append(warn);
     }
-    const row = document.createElement("div");
-    row.className = "action-buttons";
-    const ok = document.createElement("button");
-    ok.className = "primary"; ok.textContent = "Confirmer";
-    const no = document.createElement("button");
-    no.className = "ghost"; no.textContent = "Annuler";
+    const row = node("div", "action-buttons");
+    const ok = node("button", "primary");
+    Icons.set(ok, "check", "Confirmer");
+    const no = node("button", "ghost", "Annuler");
     let decided = false;
     const accept = () => { if (decided) return; decided = true; row.remove(); finish(runDevice(ev)); };
     const refuse = () => { if (decided) return; decided = true; row.remove(); status.textContent = "Annulé."; };
@@ -844,7 +926,48 @@ function handleDevice(view, ev) {
     finish(runDevice(ev));
   }
   card.append(status);
-  view.bubble.appendChild(card);
+  placeCard(view, card);
+}
+
+// Appel : carte dédiée (avatar, nom, boutons ronds). L'appel ne part qu'après « Appeler » ou un « oui » à la voix.
+function callCard(view, ev) {
+  const p = ev.params || {};
+  const who = String(p.contact || "Contact");
+  const card = node("div", "action-card call-card");
+  const avatar = node("div", "call-avatar");
+  const initials = who.replace(/[^\p{L}\s]/gu, " ").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+  if (initials) avatar.textContent = initials; else avatar.append(Icons.svg("phone"));
+  const sub = node("div", "call-sub");
+  Icons.set(sub, "lock", "Appel vocal · confirmation requise");
+  const status = node("div", "call-status");
+  const actions = node("div", "call-actions");
+  const btn = (cls, icon, label) => {
+    const b = node("button", "call-btn " + cls);
+    b.type = "button";
+    const r = node("span", "round");
+    r.append(Icons.svg(icon));
+    b.append(r, node("span", "", label));
+    return b;
+  };
+  const decline = btn("decline", "hangup", "Annuler");
+  const accept = btn("accept", "phone", "Appeler");
+  actions.append(decline, accept);
+  card.append(avatar, node("div", "call-name", who), sub, actions, status);
+  let decided = false;
+  const go = () => {
+    if (decided) return; decided = true; actions.remove();
+    const res = runDevice(ev);
+    if (res === "ok") {
+      card.classList.add("ringing");
+      Icons.set(sub, "phone", "Appel en cours…");
+      setTimeout(() => card.classList.remove("ringing"), 8000);
+    } else setMsg(status, "⚠ " + res);
+  };
+  const stop = () => { if (decided) return; decided = true; actions.remove(); setMsg(status, "Appel annulé."); };
+  accept.addEventListener("click", go);
+  decline.addEventListener("click", stop);
+  if (window.SyriusVoice?.active) window.SyriusVoice.confirm(`Appeler ${who}`, go, stop);
+  placeCard(view, card);
 }
 
 function actionCard(ev) {
@@ -854,11 +977,11 @@ function actionCard(ev) {
   node.querySelector(".a-body").textContent = ev.body;
   const status = node.querySelector(".a-status");
   const buttons = node.querySelectorAll(".action-buttons button");
-  const finish = (msg) => { buttons.forEach((b) => b.remove()); status.textContent = msg; };
+  const finish = (msg) => { buttons.forEach((b) => b.remove()); setMsg(status, msg); };
   node.querySelector(".a-send").addEventListener("click", async () => {
     buttons.forEach((b) => { b.disabled = true; });
     try { await api(`/api/actions/${ev.id}/confirm`, { method: "POST" }); finish("✅ Email envoyé."); }
-    catch (err) { status.textContent = "⚠ " + err.message; buttons.forEach((b) => { b.disabled = false; }); }
+    catch (err) { setMsg(status, "⚠ " + err.message); buttons.forEach((b) => { b.disabled = false; }); }
   });
   node.querySelector(".a-cancel").addEventListener("click", async () => {
     try { await api(`/api/actions/${ev.id}/cancel`, { method: "POST" }); } catch (_) { /* ignore */ }
@@ -874,8 +997,9 @@ function updateNetStatus() {
   const el = $("#net-status");
   el.textContent = off ? "hors ligne" : local ? "IA du téléphone" : "en ligne";
   el.classList.toggle("off", off);
-  const tag = document.querySelector(".hero-tag");
-  if (tag) tag.textContent = "◈ SYRIUS · " + (off ? "HORS LIGNE" : "EN LIGNE");
+  const tag = document.querySelector(".hero-tag span:last-child");
+  if (tag) tag.textContent = "Syrius · " + (off ? "hors ligne" : "en ligne");
+  document.querySelector(".hero-tag .live-dot")?.classList.toggle("off", off);
 }
 window.addEventListener("online", updateNetStatus);
 window.addEventListener("offline", updateNetStatus);
@@ -909,7 +1033,7 @@ function refreshWakeBox() {
   }
   $("#wake-on").disabled = !w.ready;
   const canOpen = typeof Native.canOpenApps === "function" && Native.canOpenApps();
-  $("#wake-overlay").textContent = canOpen ? "✅ Musique app fermée autorisée" : "🎵 Lancer la musique app fermée (autoriser)";
+  Icons.set($("#wake-overlay"), canOpen ? "ok" : "music", canOpen ? "Musique app fermée autorisée" : "Lancer la musique app fermée (autoriser)");
   $("#wake-on").checked = !!w.enabled;
   $("#wake-status").textContent = w.error ? "⚠ " + w.error
     : w.installing ? "🔒 Vérification et installation…"
@@ -922,12 +1046,12 @@ function refreshWakeBox() {
   if (live) {
     const ago = typeof w.heardAgo === "number" && w.heardAgo >= 0 ? ` (il y a ${w.heardAgo} s)` : "";
     $("#wake-heard").textContent = w.heard ? `« ${w.heard} »${ago}` : "rien pour l'instant — parle près du téléphone";
-    if (w.status && w.status !== "listening") $("#wake-status").textContent = "⚠ " + (w.status === "stopped" ? "L'écoute est arrêtée (le téléphone l'a peut-être coupée : touche 🔋)." : w.status);
+    if (w.status && w.status !== "listening") $("#wake-status").textContent = "⚠ " + (w.status === "stopped" ? "L'écoute est arrêtée (le téléphone l'a peut-être coupée : touche « Ne pas couper Syrius »)." : w.status);
     const learned = (w.learned || []).join(" · ");
     $("#wake-learn-msg").textContent = w.learning
       ? `🎙 Dis « Hey Syrius » … (${w.learnCount || 0}/3), une phrase à la fois, puis attends 2 secondes.`
       : learned ? `✅ Appris : ${learned}` : "";
-    $("#wake-learn").textContent = w.learning ? "✕ Arrêter l'apprentissage" : "🎓 Apprendre ma façon de dire « Hey Syrius »";
+    Icons.set($("#wake-learn"), w.learning ? "close" : "learn", w.learning ? "Arrêter l'apprentissage" : "Apprendre ma façon de dire « Hey Syrius »");
   }
   clearTimeout(wakeTimer);
   if ((busy || live) && $("#settings").open) wakeTimer = setTimeout(refreshWakeBox, busy ? 1500 : 1000);
@@ -1104,7 +1228,7 @@ async function renderMemories() {
     span.textContent = m.content;
     const del = document.createElement("button");
     del.type = "button";
-    del.textContent = "🗑";
+    del.append(Icons.svg("trash"));
     del.setAttribute("aria-label", "Supprimer ce souvenir");
     del.addEventListener("click", async () => { await api(`/api/memories/${m.id}`, { method: "DELETE" }); renderMemories(); });
     li.append(span, del);
@@ -1200,7 +1324,7 @@ if ("serviceWorker" in navigator) {
       $("#login").classList.add("hidden");
       $("#app").classList.remove("hidden");
       newConversationView();
-      $("#conv-title").textContent = "📴 Syrius hors ligne";
+      $("#conv-title").textContent = "Syrius hors ligne";
       return;
     }
     showLogin();

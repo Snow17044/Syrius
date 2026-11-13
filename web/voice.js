@@ -147,11 +147,44 @@
     }
   }
 
+  // ---------------------------------------------------------------- en direct, à côté de la voix
+  // Les cartes produites par l'IA (appel, action, image, météo…) sont déplacées ici pendant la conversation,
+  // puis remises à leur place dans la discussion à la fin (leurs boutons restent actifs).
+  const staged = [];
+  function stage(node) {
+    if (!on || !node) return;
+    staged.push({ node, parent: node.parentNode, next: node.nextSibling });
+    const box = $("#voice-stage");
+    box.appendChild(node);
+    $("#voice").classList.add("has-stage");
+    requestAnimationFrame(() => node.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }));
+  }
+  function unstage() {
+    while (staged.length) {
+      const { node, parent, next } = staged.shift();
+      if (parent && parent.isConnected) parent.insertBefore(node, next && next.parentNode === parent ? next : null);
+      else node.remove();
+    }
+    $("#voice").classList.remove("has-stage");
+  }
+  // Schéma, maquette 3D ou carte ouverts pendant la conversation : affichés en haut, la voix continue en bas.
+  const PANELS = ["#hud", "#holo", "#m3d"];
+  function updateSplit() {
+    const any = PANELS.some((q) => { const el = $(q); return el && !el.classList.contains("hidden"); });
+    document.body.classList.toggle("voice-split", on && any);
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    const mo = new MutationObserver(updateSplit);
+    PANELS.forEach((q) => { const el = $(q); if (el) mo.observe(el, { attributes: true, attributeFilter: ["class"] }); });
+  });
+
   function open() {
     if (!supported()) { alert("La reconnaissance vocale n'est pas disponible sur cet appareil."); return; }
     on = true;
     silences = 0;
+    unstage();
     $("#voice").classList.remove("hidden");
+    updateSplit();
     $("#voice-reply").textContent = "";
     keepAwake(true);
     loop();
@@ -162,7 +195,9 @@
     if (listenOnce.cancel) listenOnce.cancel();
     if (speakAndWait.cancel) speakAndWait.cancel();
     keepAwake(false);
+    unstage();
     $("#voice").classList.add("hidden");
+    updateSplit();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -180,5 +215,5 @@
 
   function confirm(label, accept, refuse) { pendingConfirm = { label, accept, refuse }; }
 
-  window.SyriusVoice = { open, close, confirm, get active() { return on; } };
+  window.SyriusVoice = { open, close, confirm, stage, get active() { return on; } };
 })();

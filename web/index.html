@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#05080f">
+  <meta name="theme-color" content="#0d0f16">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Syrius">
@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="/static/leaflet.css">
   <link rel="stylesheet" href="/static/maplibre-gl.css">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/icons.js" defer></script>
   <script src="/static/leaflet.js" defer></script>
   <script src="/static/maplibre-gl.js" defer></script>
   <script src="/static/hud.js" defer></script>
@@ -31,10 +32,10 @@
   <section id="login" class="screen hidden" aria-label="Connexion">
     <div class="login-box">
       <div class="orb big" aria-hidden="true"><span></span></div>
-      <h1>SYRIUS</h1>
-      <p class="muted">Identification requise.</p>
+      <h1 class="wordmark">Syrius</h1>
+      <p class="muted">Ton assistant personnel. Identifie-toi pour continuer.</p>
       <form id="login-form" autocomplete="on">
-        <input id="login-password" type="password" autocomplete="current-password" placeholder="Mot de passe" required>
+        <label class="field" data-icon="lock"><input id="login-password" type="password" autocomplete="current-password" placeholder="Mot de passe" required></label>
         <button type="submit" class="primary">Se connecter</button>
       </form>
       <form id="setup-form" class="hidden" autocomplete="off">
@@ -51,66 +52,70 @@
   <section id="app" class="screen hidden">
     <aside id="drawer" aria-label="Discussions">
       <div class="drawer-head">
-        <div class="brand"><div class="orb small" aria-hidden="true"><span></span></div>SYRIUS</div>
-        <button id="close-drawer" class="icon-btn" aria-label="Fermer le menu">✕</button>
+        <div class="brand"><span class="brand-mark" data-icon="orbit"></span><span>Syrius</span></div>
+        <button id="close-drawer" class="icon-btn" aria-label="Fermer le menu" data-icon="close"></button>
       </div>
-      <button id="new-chat-drawer" class="primary wide">＋ Nouvelle discussion</button>
-      <input id="search" type="search" placeholder="Rechercher une discussion…" aria-label="Rechercher">
+      <button id="new-chat-drawer" class="primary wide" data-icon="compose"><span>Nouvelle discussion</span></button>
+      <label class="search" data-icon="search"><input id="search" type="search" placeholder="Rechercher" aria-label="Rechercher"></label>
+      <div class="list-label">Discussions</div>
       <ul id="conv-list"></ul>
       <div class="drawer-foot">
-        <button id="open-settings" class="ghost wide">⚙ Réglages</button>
-        <button id="logout" class="ghost wide">⎋ Déconnexion</button>
+        <button id="open-settings" class="ghost wide" data-icon="settings"><span>Réglages</span></button>
+        <button id="logout" class="ghost wide subtle" data-icon="logout"><span>Déconnexion</span></button>
       </div>
     </aside>
     <div id="backdrop" class="hidden"></div>
 
     <main id="main">
       <header class="topbar">
-        <button id="open-drawer" class="icon-btn" aria-label="Ouvrir le menu">☰</button>
+        <button id="open-drawer" class="icon-btn" aria-label="Ouvrir le menu" data-icon="menu"></button>
         <div class="title-block">
           <h2 id="conv-title">Syrius</h2>
           <div id="net-status" class="net-status">en ligne</div>
         </div>
-        <button id="new-chat" class="icon-btn" aria-label="Nouvelle discussion">✎</button>
+        <button id="new-chat" class="icon-btn" aria-label="Nouvelle discussion" data-icon="compose"></button>
       </header>
 
       <div id="messages" aria-live="polite">
         <div id="empty" class="empty">
-          <div class="hero-orb" aria-hidden="true"><div class="orb big"><span></span></div><i></i><i></i><i></i></div>
-          <div class="hero-tag">◈ SYRIUS · EN LIGNE</div>
+          <div class="hero-orb" aria-hidden="true"><div class="orb big"><span></span></div></div>
+          <div class="hero-tag"><span class="live-dot"></span><span>Syrius · en ligne</span></div>
           <p id="greeting" class="greeting">À votre service.</p>
+          <p class="hero-sub">Pose une question, demande une image, un schéma, un rappel ou un appel.</p>
           <div class="chips">
-            <button class="chip" data-prompt="Quel temps fait-il aujourd'hui près de moi ?"><b>🌦</b><span>Météo du jour</span></button>
-            <button class="chip" data-prompt="Quelles sont les actus importantes aujourd'hui ?"><b>📰</b><span>Actus du jour</span></button>
-            <button class="chip" data-prompt="Montre-moi la tour Eiffel en 3D"><b>🧊</b><span>Tour Eiffel en 3D</span></button>
-            <button class="chip" data-prompt="Fais-moi un schéma pour organiser ma semaine"><b>🧠</b><span>Organiser ma semaine</span></button>
+            <button class="chip" data-prompt="Quel temps fait-il aujourd'hui près de moi ?"><b data-icon="partly"></b><span>Météo du jour</span></button>
+            <button class="chip" data-prompt="Quelles sont les actus importantes aujourd'hui ?"><b data-icon="news"></b><span>Actus du jour</span></button>
+            <button class="chip" data-prompt="Dessine-moi un paysage de montagne au coucher du soleil"><b data-icon="sparkle"></b><span>Créer une image</span></button>
+            <button class="chip" data-prompt="Fais-moi un schéma pour organiser ma semaine"><b data-icon="nodes"></b><span>Organiser ma semaine</span></button>
           </div>
         </div>
       </div>
 
       <div id="photo-preview" class="photo-preview hidden">
         <img id="photo-thumb" alt="Photo jointe">
-        <span class="small">📷 Photo prête — pose ta question</span>
-        <button type="button" id="photo-remove" class="icon-btn" aria-label="Retirer la photo">✕</button>
+        <span class="small">Photo prête — pose ta question</span>
+        <button type="button" id="photo-remove" class="icon-btn" aria-label="Retirer la photo" data-icon="close"></button>
       </div>
       <form id="composer">
         <input id="photo-input" type="file" accept="image/*" class="hidden">
-        <button type="button" id="photo-btn" class="icon-btn" aria-label="Envoyer une photo">📷</button>
-        <button type="button" id="voice-open" class="icon-btn hidden" aria-label="Mode conversation">🎧</button>
-        <button type="button" id="mic" class="icon-btn hidden" aria-label="Parler">🎙</button>
-        <textarea id="input" rows="1" placeholder="Parle à Syrius…" aria-label="Message" maxlength="20000"></textarea>
-        <button type="submit" id="send" class="send" aria-label="Envoyer">➤</button>
-        <button type="button" id="stop" class="send hidden" aria-label="Arrêter">■</button>
+        <div class="composer-box">
+          <button type="button" id="photo-btn" class="icon-btn" aria-label="Envoyer une photo" data-icon="camera"></button>
+          <textarea id="input" rows="1" placeholder="Écris à Syrius…" aria-label="Message" maxlength="20000"></textarea>
+          <button type="button" id="mic" class="icon-btn hidden" aria-label="Dicter" data-icon="mic"></button>
+          <button type="submit" id="send" class="send" aria-label="Envoyer" data-icon="send"></button>
+          <button type="button" id="stop" class="send hidden" aria-label="Arrêter" data-icon="stop"></button>
+        </div>
+        <button type="button" id="voice-open" class="voice-fab hidden" aria-label="Conversation vocale" data-icon="wave"></button>
       </form>
     </main>
   </section>
 
-  <!-- Panneau holographique (carte) -->
-  <section id="hud" class="hidden" aria-label="Carte">
+  <!-- Carte -->
+  <section id="hud" class="panel-overlay hidden" aria-label="Carte">
     <div class="hud-frame">
       <header class="hud-head">
-        <div><span class="hud-tag">◈ SYRIUS · CARTOGRAPHIE</span><div id="hud-query" class="hud-query"></div></div>
-        <button id="hud-close" class="icon-btn" aria-label="Fermer la carte">✕</button>
+        <div><span class="hud-tag" data-icon="map"><span>Carte</span></span><div id="hud-query" class="hud-query"></div></div>
+        <button id="hud-close" class="icon-btn" aria-label="Fermer la carte" data-icon="close"></button>
       </header>
       <div class="hud-map-wrap">
         <div id="hud-map"></div>
@@ -122,25 +127,32 @@
     </div>
   </section>
 
-  <!-- Mode conversation (mains libres) -->
-  <section id="voice" class="hidden" aria-label="Mode conversation" data-phase="">
-    <button id="voice-close" class="icon-btn voice-close" aria-label="Terminer la conversation">✕</button>
-    <div class="voice-tag">◈ SYRIUS · MODE CONVERSATION</div>
-    <button id="voice-orb" class="voice-orb" aria-label="Couper la parole ou reprendre"><span></span><i></i></button>
-    <p id="voice-status" class="voice-status"></p>
-    <p id="voice-heard" class="voice-heard"></p>
-    <p id="voice-reply" class="voice-reply"></p>
+  <!-- Mode conversation (mains libres) : les schémas et actions s'affichent à côté, en direct -->
+  <section id="voice" class="hidden" aria-label="Conversation vocale" data-phase="">
+    <header class="voice-head">
+      <div class="voice-tag"><span class="live-dot"></span><span>Conversation en direct</span></div>
+      <button id="voice-close" class="icon-btn voice-close" aria-label="Terminer la conversation" data-icon="close"></button>
+    </header>
+    <div class="voice-body">
+      <div class="voice-core">
+        <button id="voice-orb" class="voice-orb" aria-label="Couper la parole ou reprendre"><span></span><i></i><i></i></button>
+        <p id="voice-status" class="voice-status"></p>
+        <p id="voice-heard" class="voice-heard"></p>
+        <p id="voice-reply" class="voice-reply"></p>
+      </div>
+      <div id="voice-stage" class="voice-stage" aria-live="polite"></div>
+    </div>
     <p class="voice-hint">Dites « stop » ou « merci Syrius » pour terminer · touchez l'orbe pour couper la parole</p>
   </section>
 
-  <!-- Studio 3D : maquettes holographiques -->
-  <section id="m3d" class="hidden" aria-label="Maquette 3D">
+  <!-- Studio 3D -->
+  <section id="m3d" class="panel-overlay hidden" aria-label="Maquette 3D">
     <div class="hud-frame">
       <header class="hud-head">
-        <div><span class="hud-tag">◈ SYRIUS · MAQUETTE 3D</span><div id="m3d-title" class="hud-query"></div></div>
+        <div><span class="hud-tag" data-icon="cube"><span>Maquette 3D</span></span><div id="m3d-title" class="hud-query"></div></div>
         <div class="holo-actions">
-          <button id="m3d-mode" class="icon-btn" aria-label="Mode hologramme">💠</button>
-          <button id="m3d-close" class="icon-btn" aria-label="Fermer la maquette">✕</button>
+          <button id="m3d-mode" class="icon-btn" aria-label="Changer de rendu" data-icon="layers"></button>
+          <button id="m3d-close" class="icon-btn" aria-label="Fermer la maquette" data-icon="close"></button>
         </div>
       </header>
       <div class="hud-map-wrap m3d-wrap">
@@ -154,18 +166,18 @@
       <div class="m3d-info">
         <p id="m3d-desc" class="m3d-desc"></p>
         <ul id="m3d-facts" class="m3d-facts"></ul>
-        <div id="m3d-parts-head" class="hud-tag m3d-parts-head">◈ ÉLÉMENTS</div>
+        <div id="m3d-parts-head" class="hud-tag m3d-parts-head">Éléments</div>
         <ul id="m3d-parts" class="m3d-parts"></ul>
       </div>
     </div>
   </section>
 
-  <!-- Hologramme : schéma d'idées en 3D -->
-  <section id="holo" class="hidden" aria-label="Schéma 3D">
+  <!-- Schéma d'idées en 3D -->
+  <section id="holo" class="panel-overlay hidden" aria-label="Schéma">
     <div class="hud-frame">
       <header class="hud-head">
-        <div><span class="hud-tag">◈ SYRIUS · HOLOGRAMME</span><div id="holo-title" class="hud-query"></div></div>
-        <button id="holo-close" class="icon-btn" aria-label="Fermer le schéma">✕</button>
+        <div><span class="hud-tag" data-icon="nodes"><span>Schéma</span></span><div id="holo-title" class="hud-query"></div></div>
+        <button id="holo-close" class="icon-btn" aria-label="Fermer le schéma" data-icon="close"></button>
       </header>
       <div class="hud-map-wrap holo-wrap">
         <canvas id="holo-canvas"></canvas>
@@ -174,30 +186,29 @@
         <span class="hud-corner bl"></span><span class="hud-corner br"></span>
       </div>
       <div id="holo-nav" class="holo-nav">
-        <button id="holo-prev" class="holo-arrow" type="button" aria-label="Phase précédente">‹</button>
+        <button id="holo-prev" class="holo-arrow" type="button" aria-label="Phase précédente" data-icon="left"></button>
         <div class="holo-nav-mid"><div id="holo-dots" class="holo-dots"></div><div id="holo-count" class="holo-count"></div></div>
-        <button id="holo-next" class="holo-arrow" type="button" aria-label="Phase suivante">›</button>
+        <button id="holo-next" class="holo-arrow" type="button" aria-label="Phase suivante" data-icon="right"></button>
       </div>
-      <div class="holo-plan-head"><span class="hud-tag">◈ PLAN D'ACTION COMPLET</span></div>
+      <div class="holo-plan-head"><span class="hud-tag">Plan d'action complet</span></div>
       <ol id="holo-plan" class="holo-plan"></ol>
     </div>
   </section>
-
   <!-- Réglages -->
   <dialog id="settings">
     <form method="dialog" class="sheet" id="settings-form">
-      <header class="sheet-head"><h3>Réglages</h3><button class="icon-btn" value="close" aria-label="Fermer">✕</button></header>
+      <header class="sheet-head"><h3>Réglages</h3><button class="icon-btn" value="close" aria-label="Fermer" data-icon="close"></button></header>
 
-      <h4>Profil</h4>
+      <h4 data-icon="user"><span>Profil</span></h4>
       <label>Ton prénom<input id="s-name" type="text" maxlength="60" autocomplete="given-name"></label>
       <label>Ce que Syrius doit savoir / comment il doit répondre
         <textarea id="s-custom" rows="3" maxlength="2000" placeholder="Ex. : Je suis étudiant(e), réponds-moi en bref, vouvoie-moi…"></textarea></label>
 
-      <h4>Cerveau</h4>
+      <h4 data-icon="sparkle"><span>Intelligence</span></h4>
       <label>Style de réponse
         <select id="s-effort">
-          <option value="low">⚡ Rapide (répond directement)</option>
-          <option value="high">🧠 Réfléchi (réfléchit avant, plus lent)</option>
+          <option value="low">Rapide — répond directement</option>
+          <option value="high">Réfléchi — réfléchit avant, plus lent</option>
         </select></label>
       <label>Cerveau préféré
         <select id="s-brain"></select></label>
@@ -208,26 +219,26 @@
       <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
 
       <div id="wake-box" class="hidden">
-        <h4>🎙 « Hey Syrius » (même app fermée)</h4>
+        <h4 data-icon="mic"><span>« Hey Syrius » (même app fermée)</span></h4>
         <p class="muted small">Dis « Hey Syrius » : un bip, tu parles, il répond à voix haute, même écran éteint.
           Le mot-clé est reconnu sur ton téléphone, rien n'est envoyé avant. Consomme un peu plus de batterie ;
           une notification « Syrius vous écoute » reste affichée.</p>
-        <button type="button" id="wake-download" class="ghost wide">⬇ Installer la reconnaissance vocale (42 Mo)</button>
+        <button type="button" id="wake-download" class="ghost wide" data-icon="download"><span>Installer la reconnaissance vocale (42 Mo)</span></button>
         <div id="wake-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
         <label class="switch"><input id="wake-on" type="checkbox"><span>Écouter « Hey Syrius » en permanence</span></label>
-        <button type="button" id="wake-battery" class="ghost wide">🔋 Ne pas couper Syrius (réglage batterie)</button>
-        <button type="button" id="wake-overlay" class="ghost wide">🎵 Lancer la musique app fermée (autoriser)</button>
+        <button type="button" id="wake-battery" class="ghost wide" data-icon="battery"><span>Ne pas couper Syrius (réglage batterie)</span></button>
+        <button type="button" id="wake-overlay" class="ghost wide" data-icon="music"><span>Lancer la musique app fermée (autoriser)</span></button>
         <p id="wake-status" class="small"></p>
         <div id="wake-live" class="wake-live hidden">
-          <div class="small muted">👂 Dernière chose entendue :</div>
+          <div class="small muted" data-icon="ear"><span>Dernière chose entendue</span></div>
           <div id="wake-heard" class="wake-heard">—</div>
-          <button type="button" id="wake-learn" class="ghost wide">🎓 Apprendre ma façon de dire « Hey Syrius »</button>
+          <button type="button" id="wake-learn" class="ghost wide" data-icon="learn"><span>Apprendre ma façon de dire « Hey Syrius »</span></button>
           <p id="wake-learn-msg" class="small"></p>
         </div>
       </div>
 
       <div id="briefing-box" class="hidden">
-        <h4>☀️ Briefing du matin</h4>
+        <h4 data-icon="sun"><span>Briefing du matin</span></h4>
         <p class="muted small">Chaque jour, une notification : touche-la et Syrius te lit la météo, tes rappels et les actus.</p>
         <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le briefing</span></label>
         <label>Heure <input id="briefing-time" type="time" value="07:30"></label>
@@ -235,19 +246,19 @@
       </div>
 
       <div id="local-box" class="hidden">
-        <h4>📴 IA hors ligne (sur ce téléphone)</h4>
+        <h4 data-icon="chip"><span>IA hors ligne (sur ce téléphone)</span></h4>
         <div id="local-update" class="hidden">
-          <p class="small">⚠ Ton application Syrius est une <b>ancienne version</b> : l'IA hors ligne n'y est pas.
+          <p class="small">Ton application Syrius est une <b>ancienne version</b> : l'IA hors ligne n'y est pas.
             Désinstalle-la, supprime l'ancien fichier <b>Syrius.apk</b> de tes Téléchargements, puis installe la nouvelle.</p>
-          <a class="ghost wide btn-link" href="https://github.com/Snow17044/Syrius/releases/download/android-latest/Syrius.apk">⬇ Télécharger la nouvelle version</a>
+          <a class="ghost wide btn-link" data-icon="download" href="https://github.com/Snow17044/Syrius/releases/download/android-latest/Syrius.apk"><span>Télécharger la nouvelle version</span></a>
         </div>
         <div id="local-ui">
         <p class="muted small">Gratuite, sans limite et sans Internet : elle tourne sur ton téléphone. Moins
           intelligente que les IA en ligne (pas de 3D, de cartes ni d'actions sur le téléphone).</p>
         <label>Modèle <select id="local-model"></select></label>
         <div class="local-actions">
-          <button type="button" id="local-download" class="ghost">⬇ Télécharger</button>
-          <button type="button" id="local-delete" class="ghost hidden">🗑 Supprimer</button>
+          <button type="button" id="local-download" class="ghost"></button>
+          <button type="button" id="local-delete" class="ghost hidden"></button>
         </div>
         <div id="local-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
         <p id="local-status" class="small"></p>
@@ -255,21 +266,21 @@
         <label class="switch"><input id="local-force" type="checkbox"><span>Toujours utiliser l'IA hors ligne</span></label>
         <div id="packs" class="hidden">
           <div class="pack" data-pack="vision">
-            <h5>👁 Vision hors ligne <span class="muted small">— 820 Mo</span></h5>
-            <p class="muted small">Comprend tes photos sans Internet (InternVL 3.5, open source). Utilisée avec 📷
+            <h5 data-icon="eye"><span>Vision hors ligne</span><span class="muted small">820 Mo</span></h5>
+            <p class="muted small">Comprend tes photos sans Internet (InternVL 3.5, open source). Utilisée avec l'appareil photo
               quand l'IA hors ligne répond. Environ 30 s à 1 min par photo.</p>
-            <div class="local-actions"><button type="button" class="ghost pack-dl">⬇ Télécharger</button>
-              <button type="button" class="ghost pack-del hidden">🗑 Supprimer</button></div>
+            <div class="local-actions"><button type="button" class="ghost pack-dl" data-icon="download"><span>Télécharger</span></button>
+              <button type="button" class="ghost pack-del hidden"></button></div>
             <div class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
             <p class="small pack-status"></p>
           </div>
           <div class="pack" data-pack="sd15">
-            <h5>🎨 Images hors ligne <span class="muted small">— 1,1 Go</span></h5>
+            <h5 data-icon="sparkle"><span>Images hors ligne</span><span class="muted small">1,1 Go</span></h5>
             <p class="muted small">Crée des images sur ton téléphone sans Internet, gratuitement et sans limite
               (DreamShaper + LCM, version turbo). Environ 1 à 3 minutes par image. Avec Internet, les images
               sont créées en ligne en quelques secondes.</p>
-            <div class="local-actions"><button type="button" class="ghost pack-dl">⬇ Télécharger</button>
-              <button type="button" class="ghost pack-del hidden">🗑 Supprimer</button></div>
+            <div class="local-actions"><button type="button" class="ghost pack-dl" data-icon="download"><span>Télécharger</span></button>
+              <button type="button" class="ghost pack-del hidden"></button></div>
             <div class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
             <p class="small pack-status"></p>
           </div>
@@ -277,7 +288,7 @@
         </div>
       </div>
 
-      <h4>Emails</h4>
+      <h4 data-icon="mail"><span>Emails</span></h4>
       <p id="s-email" class="muted small"></p>
       <div id="google-box" class="hidden">
         <button type="button" id="google-connect" class="ghost wide">Connecter Gmail</button>
@@ -288,11 +299,11 @@
         <p id="outlook-msg" class="small"></p>
       </div>
 
-      <h4>Mémoire</h4>
+      <h4 data-icon="bulb"><span>Mémoire</span></h4>
       <p class="muted small">Ce que Syrius a retenu sur toi. Supprime ce que tu veux.</p>
       <ul id="memory-list"></ul>
 
-      <h4>Sécurité</h4>
+      <h4 data-icon="shield"><span>Sécurité</span></h4>
       <details>
         <summary>Changer le mot de passe</summary>
         <input id="pw-current" type="password" autocomplete="current-password" placeholder="Mot de passe actuel">
@@ -310,16 +321,16 @@
   <dialog id="conv-menu">
     <div class="sheet">
       <header class="sheet-head"><h3 id="conv-menu-title">Discussion</h3></header>
-      <button id="cm-rename" class="ghost wide">✎ Renommer</button>
-      <button id="cm-pin" class="ghost wide">📌 Épingler</button>
-      <button id="cm-delete" class="danger wide">🗑 Supprimer</button>
+      <button id="cm-rename" class="ghost wide" data-icon="compose"><span>Renommer</span></button>
+      <button id="cm-pin" class="ghost wide"></button>
+      <button id="cm-delete" class="danger wide" data-icon="trash"><span>Supprimer</span></button>
       <button id="cm-close" class="ghost wide">Annuler</button>
     </div>
   </dialog>
 
   <template id="tpl-action">
     <div class="action-card">
-      <div class="action-title">✉ Brouillon d'email — en attente de ta confirmation</div>
+      <div class="action-title" data-icon="mail"><span>Brouillon d'email — en attente de ta confirmation</span></div>
       <div class="action-field"><b>À :</b> <span class="a-to"></span></div>
       <div class="action-field"><b>Sujet :</b> <span class="a-subject"></span></div>
       <pre class="a-body"></pre>

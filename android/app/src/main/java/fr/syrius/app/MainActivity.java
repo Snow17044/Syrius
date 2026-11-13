@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         web = new WebView(this);
-        web.setBackgroundColor(Color.parseColor("#05080f"));
+        web.setBackgroundColor(Color.parseColor("#0d0f16"));
         setContentView(web);
 
         WebSettings s = web.getSettings();
