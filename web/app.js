@@ -438,7 +438,7 @@ async function sendLocal(text) {
     setStreaming(true);
     let prompt;
     try { prompt = await l.imagePrompt(text); } finally { setStreaming(false); }
-    view.text = "Je dessine ça sur ton téléphone, sans Internet. Patience : 2 à 6 minutes.";
+    view.text = "Je dessine ça sur ton téléphone, sans Internet. Patience : 1 à 3 minutes.";
     state.lastReply = view.text;
     renderText(view, "assistant");
     imageCard(view, { prompt, caption: text.slice(0, 80) });
@@ -527,7 +527,7 @@ function imageCard(view, params) {
 
   const phone = () => {
     bar.value = 0;
-    status.textContent = "Création sur ton téléphone, sans Internet (2 à 6 min)…";
+    status.textContent = "Création sur ton téléphone, sans Internet (1 à 3 min)…";
     return l.makeImage(params.prompt, (pct) => {
       bar.value = pct;
       const mins = Math.round((Date.now() - started) / 60000);

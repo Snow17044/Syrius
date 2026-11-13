@@ -3,10 +3,8 @@
 # SHA-256 de chaque fichier avant de l'utiliser.
 name: Modèle d'images hors ligne
 
+# Lancement manuel uniquement : les empreintes des fichiers publiés sont inscrites dans l'application.
 on:
-  push:
-    branches: ["claude/**"]
-    paths: [".github/workflows/sd-model.yml", "scripts/export_sd_turbo.py"]
   workflow_dispatch:
 
 permissions:
@@ -114,4 +112,4 @@ jobs:
           gh release view models-sd-turbo-1 >/dev/null 2>&1 || \
             gh release create models-sd-turbo-1 --target "$GITHUB_SHA" --title "Modèle d'images hors ligne (turbo)" \
               --notes "Fichiers téléchargés automatiquement par l'application Syrius (empreintes vérifiées)."
-          gh release upload models-sd-turbo-1 * /tmp/SHA256SUMS --clobber
+          gh release upload models-sd-turbo-1 * /tmp/SHA256SUMS  # jamais d'écrasement

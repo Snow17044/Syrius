@@ -36,7 +36,14 @@ class ImageGen {
     }
 
     static final ModelPack.Part[] PARTS = {
-            // @SD_PARTS@ : empreintes ajoutées dès que la CI a préparé et testé le modèle turbo
+            part("text_encoder.mnn", "07581a78b75e856da93820394b28093cfcc29b7c3d8e40826714d32d833962af", 161_776L),
+            part("text_encoder.mnn.weight", "213421f67b58c65fb4faf71205c593fbf5c9e8e53023134170e52f25025252f0", 238_144_084L),
+            part("unet.mnn", "820ebf97fde9592cd100d5e5262121d5b3a847a26bee822dc3ebd595039df908", 796_384L),
+            part("unet.mnn.weight", "96d53109360d21a2c5c08e8f00b3e8ad0cb2b33ec3f6fc3c0f96c984bd0d9d70", 863_650_252L),
+            part("taesd_decoder.mnn", "6b4886cbc0df478b2a637005fce259ecf8ce327b9c4579ede47febaa1331dbbd", 14_112L),
+            part("taesd_decoder.mnn.weight", "321767311b47dd47a4e23c3540389a93a7f6ab88d15eb6cca47b952ea948d354", 4_890_892L),
+            part("vocab.json", "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349", 1_059_962L),
+            part("merges.txt", "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a", 524_619L)
     };
 
     final ModelPack pack;
@@ -47,7 +54,7 @@ class ImageGen {
 
     ImageGen(Context ctx) {
         this.ctx = ctx.getApplicationContext();
-        pack = new ModelPack(ctx, "sdturbo", "Images hors ligne — turbo (1,2 Go)", PARTS);
+        pack = new ModelPack(ctx, "sdturbo", "Images hors ligne — turbo (1,1 Go)", PARTS);
     }
 
     static synchronized boolean nativeAvailable() {
