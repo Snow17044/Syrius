@@ -62,6 +62,7 @@ final class DeviceActions {
                 case "phone_reminder": reminder(p); break;
                 case "phone_reminder_cancel": Reminders.remove(activity, p.getString("id")); toast("Rappel annulé"); break;
                 case "phone_calendar": calendar(p); break;
+                case "phone_music": music(p); break;
                 default: toast("Action inconnue");
             }
         } catch (Exception e) {
@@ -106,6 +107,17 @@ final class DeviceActions {
         if (Build.VERSION.SDK_INT >= 33
                 && a.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             a.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+        }
+    }
+
+    private void music(JSONObject p) throws Exception {
+        String action = p.getString("action");
+        if ("play".equals(action)) {
+            start(Music.playIntent(activity, p.getString("query"), p.optString("app", "auto")),
+                    "🎵 " + clip(p.getString("query"), 60));
+        } else if (Music.control(activity, action)) {
+            toast(action.equals("pause") ? "⏸ Pause" : action.equals("resume") ? "▶ Lecture"
+                    : action.equals("next") ? "⏭ Suivant" : "⏮ Précédent");
         }
     }
 

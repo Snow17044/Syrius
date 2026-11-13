@@ -219,6 +219,7 @@ public class WakeService extends Service {
     private static final int IDLE = 0, QUESTION = 1, BUSY = 2;
     private int mode = IDLE;
     private volatile JSONObject pendingCall;  // appel préparé par Syrius, en attente du « oui »
+    private final java.util.List<JSONObject> pendingMusic = new java.util.concurrent.CopyOnWriteArrayList<>();
     private boolean confirming;
     private static final Pattern YES = Pattern.compile("^(oui|ouais|ouai|vas y|vas-y|d accord|ok|okay|appelle|lance|confirme|bien sur|c est ca)\\b.*");
     private boolean wakeInUtterance;
@@ -324,6 +325,7 @@ public class WakeService extends Service {
     // ------------------------------------------------------------------ réponse de Syrius
     private void ask(String question) {
         pendingCall = null;
+        pendingMusic.clear();
         net.execute(() -> {
             String reply;
             try {
@@ -389,6 +391,8 @@ public class WakeService extends Service {
                     case "error": error = true; break;
                     case "device":
                         if ("phone_call".equals(ev.optString("action"))) pendingCall = ev.optJSONObject("params");
+                        else if ("phone_music".equals(ev.optString("action")) && ev.optJSONObject("params") != null)
+                            pendingMusic.add(ev.optJSONObject("params"));
                         break;
                     default: break;
                 }
@@ -442,6 +446,12 @@ public class WakeService extends Service {
             @Override
             public void onDone(String id) {
                 main.post(() -> {
+                    if (!pendingMusic.isEmpty()) {  // musique demandée : on la lance et on se rendort
+                        for (JSONObject m : pendingMusic) runMusic(m);
+                        pendingMusic.clear();
+                        backToSleep();
+                        return;
+                    }
                     if (thenListen && pendingCall != null && !confirming) {  // Syrius a préparé un appel
                         confirming = true;
                         String who = pendingCall.optString("contact", "ce contact");
@@ -477,6 +487,39 @@ public class WakeService extends Service {
             }
         });
         tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, "wake");
+    }
+
+    /** Musique depuis « Hey Syrius » : contrôles directs ; lancement d'un titre via l'app de musique. */
+    private void runMusic(JSONObject m) {
+        String action = m.optString("action");
+        if (!"play".equals(action)) {
+            Music.control(this, action);
+            return;
+        }
+        Intent i = Music.playIntent(this, m.optString("query"), m.optString("app", "auto"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // Android n'autorise une app en arrière-plan à en ouvrir une autre qu'avec « afficher par-dessus ».
+        if (android.provider.Settings.canDrawOverlays(this)) {
+            try {
+                startActivity(i);
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+        PendingIntent pi = PendingIntent.getActivity(this, 7, i,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        Reminders.ensureChannel(this);
+        Notification n = new Notification.Builder(this, Reminders.CHANNEL)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("🎵 " + m.optString("query"))
+                .setContentText("Touchez pour lancer la musique")
+                .setAutoCancel(true)
+                .setContentIntent(pi)
+                .build();
+        try {
+            getSystemService(NotificationManager.class).notify(7, n);
+        } catch (SecurityException ignored) {
+        }
     }
 
     /** Appel confirmé à la voix : lancé directement (TelecomManager), même application fermée. */

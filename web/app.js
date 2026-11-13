@@ -534,11 +534,14 @@ const DEVICE_TEXT = {
   phone_reminder: (p) => `⏰ Rappel ${p.label} : « ${p.text} »` +
     (p.repeat === "daily" ? " (tous les jours)" : p.repeat === "weekly" ? " (chaque semaine)" : ""),
   phone_reminder_cancel: () => "🗑 Rappel annulé",
+  phone_music: (p) => p.action === "play" ? `🎵 ${p.query}${p.app && p.app !== "auto" ? " · " + p.app.replace("_", " ") : ""}`
+    : { pause: "⏸ Pause", resume: "▶ Reprise", next: "⏭ Titre suivant", previous: "⏮ Titre précédent" }[p.action],
   phone_calendar: (p) => `📅 ${p.title} — ${p.label}${p.location ? " · " + p.location : ""}`,
 };
 
 // Actions qui demandent une version récente de l'application Android.
-const NEEDS_FEATURE = { phone_reminder: "reminders", phone_reminder_cancel: "reminders", phone_calendar: "calendar" };
+const NEEDS_FEATURE = { phone_reminder: "reminders", phone_reminder_cancel: "reminders", phone_calendar: "calendar",
+  phone_music: "music" };
 function appFeatures() {
   try { return Native && typeof Native.features === "function" ? JSON.parse(Native.features()) : []; } catch (_) { return []; }
 }
@@ -652,6 +655,8 @@ function refreshWakeBox() {
     $("#wake-progress span").textContent = `${w.progress || 0} %`;
   }
   $("#wake-on").disabled = !w.ready;
+  const canOpen = typeof Native.canOpenApps === "function" && Native.canOpenApps();
+  $("#wake-overlay").textContent = canOpen ? "✅ Musique app fermée autorisée" : "🎵 Lancer la musique app fermée (autoriser)";
   $("#wake-on").checked = !!w.enabled;
   $("#wake-status").textContent = w.error ? "⚠ " + w.error
     : w.installing ? "🔒 Vérification et installation…"
@@ -691,6 +696,7 @@ $("#wake-on").addEventListener("change", (e) => {
   setTimeout(refreshWakeBox, 300);
 });
 $("#wake-battery").addEventListener("click", () => Native.batterySettings());
+$("#wake-overlay").addEventListener("click", () => Native.overlaySettings());
 
 function refreshBriefingBox() {
   const ok = Native && appFeatures().includes("briefing");
