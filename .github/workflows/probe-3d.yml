@@ -8,40 +8,20 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
-      - name: Chaîne complète description → image → maquette 3D texturée (TRELLIS.2)
+      - name: Bibliothèque Poly Pizza (documentation de l'API)
         run: |
-          python3 -m venv /tmp/v && . /tmp/v/bin/activate
-          pip install -q "gradio_client==1.13.3" 2>&1 | tail -1 || pip install -q gradio_client
-          pip show gradio_client | head -2
-          cat > /tmp/t.py <<'PY'
-          import time, os, json, urllib.parse, urllib.request
-          from gradio_client import Client, handle_file
-          t0 = time.time()
-          prompt = "a red vintage sports car, single object, centered, full view, 3D render, plain white background, studio lighting"
-          url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt) + "?width=768&height=768&seed=7&nologo=true"
-          urllib.request.urlretrieve(url, "/tmp/in.jpg")
-          print("image", os.path.getsize("/tmp/in.jpg"), "o en", round(time.time() - t0, 1), "s")
-          c = Client("microsoft/TRELLIS.2", verbose=False)
-          print(c.view_api(return_format="str", print_info=False)[:6000])
-          t1 = time.time()
-          try:
-              c.predict(api_name="/start_session")
-          except Exception as e:
-              print("start_session:", e)
-          img = c.predict(handle_file("/tmp/in.jpg"), api_name="/preprocess_image")
-          print("pré-traitement", img, round(time.time() - t1, 1), "s")
-          t2 = time.time()
-          out = c.predict(image=handle_file(img if isinstance(img, str) else img.get("path")), seed=0, resolution="512", api_name="/image_to_3d")
-          print("image_to_3d", str(out)[:300], round(time.time() - t2, 1), "s")
-          t3 = time.time()
-          glb = c.predict(decimation_target=200000, texture_size=1024, api_name="/extract_glb")
-          print("extract_glb", str(glb)[:300], round(time.time() - t3, 1), "s")
-          p = glb[0] if isinstance(glb, (list, tuple)) else glb
-          p = p.get("path") if isinstance(p, dict) else p
-          if p and os.path.exists(p):
-              print("GLB", os.path.getsize(p), "octets", open(p, "rb").read(4))
-          print("total", round(time.time() - t0, 1), "s")
+          for u in https://poly.pizza/docs/api https://poly.pizza/docs https://api.poly.pizza/v1.1/search/car "https://api.poly.pizza/v1/search/car" ; do
+            echo "=================== $u"
+            curl -sS -m 20 -L -D /tmp/h "$u" -o /tmp/b || true
+            head -1 /tmp/h; grep -i "content-type" /tmp/h | head -1
+            python3 - <<'PY'
+          import re, html
+          t = open("/tmp/b", encoding="utf-8", errors="replace").read()
+          t = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", t)
+          t = html.unescape(re.sub(r"<[^>]+>", " ", t))
+          t = re.sub(r"\s+", " ", t)
+          print(t[:6000])
           PY
-          python /tmp/t.py 2>&1 | tail -120
+          done
