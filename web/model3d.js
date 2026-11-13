@@ -112,6 +112,29 @@
     return { holder, group, parts, height: size.y * k, radius: Math.max(size.x, size.z) * k / 2 };
   }
 
+  // Vrai modèle 3D texturé (GLB créé par l'IA de génération 3D) : centré, posé au sol, taille standard.
+  function buildFromGltf(root) {
+    const parts = [];
+    root.traverse((o) => {
+      if (o.isMesh) {
+        o.userData.orig = o.material;
+        parts.push({ mesh: o, glb: true });
+      }
+    });
+    const group = new THREE.Group();
+    group.add(root);
+    const box = new THREE.Box3().setFromObject(group);
+    const size = box.getSize(new THREE.Vector3());
+    const k = 10 / Math.max(size.x, size.y, size.z, 0.001);
+    const center = box.getCenter(new THREE.Vector3());
+    root.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
+    const holder = new THREE.Group();
+    holder.add(group);
+    holder.scale.setScalar(k);
+    return { holder, group, parts, height: size.y * k, radius: Math.max(size.x, size.z) * k / 2, glb: true };
+  }
+  let holoMat = null;
+
   // ------------------------------------------------------------------ décor holographique
   function buildStage(scene) {
     const stage = new THREE.Group();
@@ -157,7 +180,13 @@
   function applyMode() {
     if (!st) return;
     const holo = st.mode === "holo";
+    if (st.model.glb) {
+      if (!holoMat) holoMat = new THREE.MeshStandardMaterial({ color: HOLO, emissive: HOLO, emissiveIntensity: 0.6,
+        transparent: true, opacity: 0.45, wireframe: true });
+      st.model.parts.forEach(({ mesh }) => { mesh.material = holo ? holoMat : mesh.userData.orig; });
+    }
     st.model.parts.forEach(({ mesh, edges, color }) => {
+      if (!edges) return;
       mesh.material.color.set(holo ? HOLO : color);
       mesh.material.emissive.set(holo ? HOLO : color);
       mesh.material.emissiveIntensity = holo ? 0.7 : 0.16;
@@ -251,7 +280,12 @@
     cancelAnimationFrame(st.raf);
     st.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
-      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+      const mats = [o.material, o.userData && o.userData.orig].filter(Boolean);
+      mats.flat().forEach((m) => {
+        if (m === holoMat) return;
+        ["map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap"].forEach((t) => m[t] && m[t].dispose());
+        m.dispose();
+      });
     });
   }
 
@@ -281,9 +315,9 @@
     document.getElementById("m3d-parts-head").classList.toggle("hidden", !names.length);
   }
 
-  function show(ev) {
+  function show(ev, gltfRoot) {
     const hasTpl = !!(ev && ev.template && window.SyriusTemplates3D && window.SyriusTemplates3D[ev.template]);
-    if (!ev || (!hasTpl && (!Array.isArray(ev.parts) || !ev.parts.length))) return;
+    if (!ev || (!gltfRoot && !hasTpl && (!Array.isArray(ev.parts) || !ev.parts.length))) return;
     const box = document.getElementById("m3d");
     box.classList.remove("hidden");
     fillInfo(ev);
@@ -300,7 +334,8 @@
     const scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x10131c, 40, 110);
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    scene.add(new THREE.AmbientLight(0xffffff, gltfRoot ? 0.5 : 0.75));
+    scene.add(new THREE.HemisphereLight(0xdfe3ff, 0x1a1d2b, gltfRoot ? 1.1 : 0.4));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
     sun.position.set(8, 14, 10);
     scene.add(sun);
@@ -308,7 +343,7 @@
     rim.position.set(-8, 6, -8);
     scene.add(rim);
     const stage = buildStage(scene);
-    const model = buildModel(ev);
+    const model = gltfRoot ? buildFromGltf(gltfRoot) : buildModel(ev);
     model.k = model.holder.scale.x;
     scene.add(model.holder);
     const home = Math.max(16, model.height * 1.7, model.radius * 3.2);
@@ -329,5 +364,16 @@
     });
   });
 
-  window.SyriusModel = { show, close };
+  /** Affiche un vrai modèle 3D (fichier GLB) ; info = titre, description, faits. */
+  function showGlb(buffer, info) {
+    return new Promise((resolve, reject) => {
+      if (typeof THREE === "undefined" || !THREE.GLTFLoader) { reject(new Error("Affichage 3D indisponible")); return; }
+      new THREE.GLTFLoader().parse(buffer, "", (gltf) => {
+        show({ ...(info || {}), parts: [], template: "" }, gltf.scene);
+        resolve();
+      }, (err) => reject(new Error("Modèle 3D illisible" + (err && err.message ? " : " + err.message : ""))));
+    });
+  }
+
+  window.SyriusModel = { show, showGlb, close };
 })();
