@@ -306,6 +306,11 @@ class LocalAI {
         stopped = requestId;
     }
 
+    /** Libère la mémoire du modèle (rechargé automatiquement à la prochaine question). */
+    void release() {
+        worker.execute(this::closeEngine);
+    }
+
     void shutdown() {
         worker.execute(this::closeEngine);
         worker.shutdown();

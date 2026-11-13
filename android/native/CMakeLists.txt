@@ -18,4 +18,5 @@ else()
 endif()
 target_include_directories(syrius_sd PRIVATE
     ${MNN_SRC}/include ${MNN_SRC}/source ${MNN_SRC}/3rd_party ${MNN_SRC}/tools/cv/include ${SD}/include ${SD}/src)
-target_compile_options(syrius_sd PRIVATE -O3 -fvisibility=hidden)
+# (en-tête manquant dans tokenizer.hpp de MNN avec les compilateurs récents)
+target_compile_options(syrius_sd PRIVATE -O3 -fvisibility=hidden -include cstdint)

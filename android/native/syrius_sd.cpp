@@ -14,6 +14,7 @@
 #include <string>
 
 #include "diffusion/stable_diffusion.hpp"
+#include "tokenizer.hpp"  // type complet nécessaire pour détruire StableDiffusion
 
 namespace MNN {
 namespace DIFFUSION {

@@ -66,6 +66,13 @@ DEVICE_TOOLS = [
            "query": {"type": "string", "description": "Ce qu'il faut jouer (pour play), ex. « Daft Punk Get Lucky »"},
            "app": {"type": "string", "description": "auto (par défaut), spotify, youtube_music, youtube ou deezer"}},
           ["action"]),
+    _tool("phone_image",
+          "Crée une IMAGE (dessin, illustration, logo, paysage, portrait imaginaire…) : elle est calculée "
+          "directement sur le téléphone de l'utilisateur, gratuitement et sans Internet (1 à 5 minutes). "
+          "Écris le prompt EN ANGLAIS, précis et visuel (sujet, style, couleurs, lumière), 10 à 60 mots.",
+          {"prompt": {"type": "string", "description": "Description de l'image EN ANGLAIS pour le générateur"},
+           "caption": {"type": "string", "description": "Titre court en français, ex. « Chat astronaute »"}},
+          ["prompt"]),
     _tool("phone_calendar",
           "Ajoute un RENDEZ-VOUS dans l'agenda du téléphone (l'utilisateur valide dans son agenda).",
           {"title": {"type": "string"}, "start": {"type": "string", "description": "AAAA-MM-JJTHH:MM (heure locale)"},
@@ -81,6 +88,7 @@ DEVICE_LABELS = {
     "phone_volume": "Je règle le volume", "phone_settings": "J'ouvre les réglages",
     "phone_reminder": "Je programme le rappel", "phone_reminder_cancel": "J'annule le rappel",
     "phone_calendar": "J'ajoute le rendez-vous", "phone_music": "Je m'occupe de la musique",
+    "phone_image": "Je crée l'image sur ton téléphone",
 }
 
 # Actions qui exigent un appui de l'utilisateur dans Syrius avant de s'exécuter.
@@ -212,6 +220,15 @@ def build_action(name: str, args: dict) -> tuple[dict, str]:
         else:
             done = {"pause": "Musique mise en pause.", "resume": "Lecture reprise.", "next": "Titre suivant.",
                     "previous": "Titre précédent."}[action]
+    elif name == "phone_image":
+        prompt = " ".join(_text(args.get("prompt"), "prompt", 400).split())
+        if len(prompt) < 3:
+            raise DeviceInputError("description d'image trop courte")
+        caption = _text(args.get("caption", ""), "caption", 80, required=False) or prompt[:60]
+        p = {"prompt": prompt, "caption": caption}
+        done = (f"Image « {caption} » en cours de création sur le téléphone (1 à 5 minutes, sans Internet). "
+                "Préviens l'utilisateur qu'elle s'affichera ici dès qu'elle sera prête ; ne la décris pas "
+                "comme si elle était déjà visible.")
     elif name == "phone_calendar":
         dt = parse_local(args.get("start"), "start", max_days=730)
         dur = args.get("duration_min", 60)

@@ -253,6 +253,26 @@
         <p id="local-status" class="small"></p>
         <label class="switch"><input id="local-fallback" type="checkbox"><span>Prendre le relais tout seul (pas de réseau ou IA en ligne épuisées)</span></label>
         <label class="switch"><input id="local-force" type="checkbox"><span>Toujours utiliser l'IA hors ligne</span></label>
+        <div id="packs" class="hidden">
+          <div class="pack" data-pack="vision">
+            <h5>👁 Vision hors ligne <span class="muted small">— 820 Mo</span></h5>
+            <p class="muted small">Comprend tes photos sans Internet (InternVL 3.5, open source). Utilisée avec 📷
+              quand l'IA hors ligne répond. Environ 30 s à 1 min par photo.</p>
+            <div class="local-actions"><button type="button" class="ghost pack-dl">⬇ Télécharger</button>
+              <button type="button" class="ghost pack-del hidden">🗑 Supprimer</button></div>
+            <div class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+            <p class="small pack-status"></p>
+          </div>
+          <div class="pack" data-pack="sd15">
+            <h5>🎨 Images hors ligne <span class="muted small">— 1,2 Go</span></h5>
+            <p class="muted small">Crée des images sur ton téléphone, gratuitement et sans limite (Stable Diffusion 1.5).
+              C'est lent sur ce téléphone : 2 à 6 minutes par image. Demande par ex. « Dessine un chat astronaute ».</p>
+            <div class="local-actions"><button type="button" class="ghost pack-dl">⬇ Télécharger</button>
+              <button type="button" class="ghost pack-del hidden">🗑 Supprimer</button></div>
+            <div class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+            <p class="small pack-status"></p>
+          </div>
+        </div>
         </div>
       </div>
 

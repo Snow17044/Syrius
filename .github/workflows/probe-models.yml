@@ -8,34 +8,13 @@ permissions:
   contents: read
 
 jobs:
-  vision:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    steps:
-      - name: Révision et fichiers
-        run: |
-          curl -sS "https://huggingface.co/api/models/litert-community/InternVL3_5-1B" | python3 -c 'import json,sys; print("revision", json.load(sys.stdin)["sha"])'
-      - name: Test de la vision hors ligne (InternVL 3.5 1B)
-        run: |
-          python3 -m venv /tmp/v && . /tmp/v/bin/activate
-          pip install -q "litert-lm==0.19.1" 2>&1 | tail -2 || pip install -q litert-lm 2>&1 | tail -2
-          pip show litert-lm | head -3
-          curl -sSfL -o /tmp/model.litertlm https://huggingface.co/litert-community/InternVL3_5-1B/resolve/main/model.litertlm
-          sha256sum /tmp/model.litertlm
-          curl -sSfL -o /tmp/chat.png https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png
-          for q in "Décris cette photo en une phrase, en français." "Combien y a-t-il d'animaux et lesquels ? Réponds en français."; do
-            echo "=== $q"
-            /usr/bin/time -f "%e s, %M Ko" litert-lm run /tmp/model.litertlm --attachment /tmp/chat.png --prompt "$q" 2>&1 | tail -15
-          done
-          litert-lm run --help 2>&1 | head -60
-
   image:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Construction (Linux) du moteur d'images
-        run: ./android/native/build.sh linux /tmp/sd 2>&1 | tail -20
+        run: set -o pipefail; ./android/native/build.sh linux /tmp/sd 2>&1 | tail -20
       - name: Modèle Stable Diffusion 1.5 (MNN) et empreintes
         run: |
           REPO=taobao-mnn/stable-diffusion-v1-5-mnn-general
@@ -50,7 +29,7 @@ jobs:
         run: |
           pip install -q pillow
           cd /tmp/sd
-          for steps in 10; do
+          for steps in 12; do
             /usr/bin/time -f "%e s, %M Ko max" ./syrius_sd /tmp/m $steps 42 /tmp/out.jpg "a cute cat astronaut floating in space, digital art, highly detailed" 2>&1 | grep -v "^progression" | tail -15
           done
           python3 -c '
@@ -61,7 +40,7 @@ jobs:
           chars = " .:-=+*#%@"
           for y in range(24):
               print("".join(chars[small.getpixel((x, y)) * 9 // 255] for x in range(48)))'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-test
           path: /tmp/out.jpg

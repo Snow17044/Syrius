@@ -54,6 +54,8 @@ public class MainActivity extends Activity {
     private SpeechRecognizer recognizer;
     private DeviceActions device;
     private LocalAI local;
+    private Vision vision;
+    private ImageGen imageGen;
     private boolean pendingBriefing;
     private boolean voiceMode;
     private static final int REQ_PHOTO = 47;
@@ -167,6 +169,8 @@ public class MainActivity extends Activity {
         });
         device = new DeviceActions(this);
         local = new LocalAI(this);
+        vision = new Vision(this);
+        imageGen = new ImageGen(this);
         Reminders.ensureChannel(this);
         Reminders.rescheduleAll(this);
         // « Hey Syrius » : relancé à l'ouverture de l'app (Android l'interdit au démarrage du téléphone).
@@ -406,7 +410,7 @@ public class MainActivity extends Activity {
         /** Fonctions disponibles dans cette version de l'application. */
         @JavascriptInterface
         public String features() {
-            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\",\"music\"]";
+            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\",\"music\",\"vision\",\"imagegen\"]";
         }
 
         @JavascriptInterface
@@ -571,6 +575,113 @@ public class MainActivity extends Activity {
             if (requestId != null && trusted()) local.stop(requestId);
         }
 
+        // ---------------------------------------------------------- vision et images hors ligne
+        private ModelPack pack(String id) {
+            if ("vision".equals(id)) return vision.pack;
+            if ("sd15".equals(id)) return imageGen.pack;
+            return null;
+        }
+
+        /** État des modèles hors ligne de vision et d'images. */
+        @JavascriptInterface
+        public String packInfo() {
+            if (!trusted()) return "{}";
+            try {
+                JSONObject o = new JSONObject();
+                o.put("vision", vision.pack.info());
+                o.put("sd15", imageGen.pack.info().put("engine", ImageGen.nativeAvailable()).put("busy", imageGen.busy()));
+                return o.toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
+        @JavascriptInterface
+        public String packDownload(String id) {
+            ModelPack p = pack(id);
+            if (p == null || !trusted()) return "Refusé";
+            return p.download();
+        }
+
+        @JavascriptInterface
+        public void packCancel(String id) {
+            ModelPack p = pack(id);
+            if (p != null && trusted()) p.cancel();
+        }
+
+        @JavascriptInterface
+        public void packDelete(String id) {
+            if (!trusted()) return;
+            if ("vision".equals(id)) vision.delete();
+            else if ("sd15".equals(id) && !imageGen.busy()) imageGen.pack.delete();
+        }
+
+        /** Question sur une photo, sans Internet : réponse morceau par morceau dans window.SyriusLocal._chunk. */
+        @JavascriptInterface
+        public String visionAsk(String requestId, String json) {
+            if (requestId == null || json == null || json.length() > 4_000_000 || !trusted()) return "Refusé";
+            if (!requestId.matches("[A-Za-z0-9_-]{1,40}")) return "Refusé";
+            final String system, question;
+            final byte[] jpeg;
+            try {
+                JSONObject req = new JSONObject(json);
+                system = req.optString("system", "");
+                question = req.optString("question", "").trim();
+                String image = req.optString("image", "");
+                String prefix = "data:image/jpeg;base64,";
+                if (question.isEmpty() || question.length() > 2000 || !image.startsWith(prefix)) return "Demande illisible";
+                jpeg = android.util.Base64.decode(image.substring(prefix.length()), android.util.Base64.DEFAULT);
+                if (jpeg.length < 4 || (jpeg[0] & 0xff) != 0xFF || (jpeg[1] & 0xff) != 0xD8) return "Image invalide";
+            } catch (Exception e) {
+                return "Demande illisible";
+            }
+            if (!vision.pack.ready()) return "Vision hors ligne non installée";
+            if (imageGen.busy()) return "Une image est en cours de création : réessaie après.";
+            local.release();
+            vision.ask(requestId, system, question, jpeg, (id, text, done, error) -> sendJs(
+                    "window.SyriusLocal && window.SyriusLocal._chunk(" + JSONObject.quote(id) + ", "
+                            + JSONObject.quote(text == null ? "" : text) + ", " + done + ", "
+                            + (error == null ? "null" : JSONObject.quote(error)) + ")"));
+            return "ok";
+        }
+
+        @JavascriptInterface
+        public void visionStop() {
+            if (trusted()) vision.stop();
+        }
+
+        /** Crée une image sans Internet ; progression puis résultat dans window.SyriusLocal._image. */
+        @JavascriptInterface
+        public String imageGenerate(String requestId, String prompt, int steps) {
+            if (requestId == null || prompt == null || !trusted()) return "Refusé";
+            if (!requestId.matches("[A-Za-z0-9_-]{1,40}")) return "Refusé";
+            prompt = prompt.replaceAll("[\\x00-\\x1f\\x7f]", " ").trim();
+            if (prompt.isEmpty() || prompt.length() > 400) return "Description d'image invalide";
+            int n = Math.max(4, Math.min(25, steps));
+            local.release();  // libère la mémoire des autres IA du téléphone
+            vision.releaseAsync();
+            final String rid = requestId;
+            String r = imageGen.generate(rid, prompt, n,
+                    percent -> sendJs("window.SyriusLocal && window.SyriusLocal._image(" + JSONObject.quote(rid) + ", "
+                            + percent + ", null, null)"),
+                    (id, dataUrl, error) -> sendJs("window.SyriusLocal && window.SyriusLocal._image(" + JSONObject.quote(id)
+                            + ", 100, " + (dataUrl == null ? "null" : JSONObject.quote(dataUrl)) + ", "
+                            + (error == null ? "null" : JSONObject.quote(error)) + ")"));
+            if ("ok".equals(r)) runOnUiThread(() -> getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+            return r;
+        }
+
+        @JavascriptInterface
+        public String imageSave(String dataUrl) {
+            if (!trusted()) return "Refusé";
+            return ImageGen.save(MainActivity.this, dataUrl);
+        }
+
+        @JavascriptInterface
+        public void imageDone() {
+            if (trusted()) runOnUiThread(() -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+        }
+
         @JavascriptInterface
         public void stopListening() {
             runOnUiThread(() -> {
@@ -623,6 +734,8 @@ public class MainActivity extends Activity {
         if (recognizer != null) recognizer.destroy();
         if (tts != null) tts.shutdown();
         if (local != null) local.shutdown();
+        if (vision != null) vision.shutdown();
+        if (imageGen != null) imageGen.shutdown();
         web.destroy();
         super.onDestroy();
     }
