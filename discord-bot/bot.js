@@ -177,5 +177,14 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   }
 });
 
+// Hébergement de type « Space » (Hugging Face) : une petite page d'état sur le port demandé.
+if (process.env.PORT) {
+  require("node:http").createServer((req, res) => {
+    const ready = client.isReady();
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(ready ? `Syrius sur Discord : connecté (${client.user.tag})` : "Syrius sur Discord : démarrage…");
+  }).listen(Number(process.env.PORT), "0.0.0.0");
+}
+
 process.on("unhandledRejection", (e) => console.error("Erreur :", e && e.message));
 client.login(process.env.DISCORD_TOKEN);

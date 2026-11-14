@@ -1,0 +1,35 @@
+# Vérifie le bot Discord : tests du son, construction du conteneur et essai de la voix française.
+name: Bot Discord
+
+on:
+  push:
+    paths: ["discord-bot/**", ".github/workflows/discord-bot.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tests du son
+        working-directory: discord-bot
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm test && npm audit --omit=dev
+      - name: Construction du conteneur (comme sur Hugging Face)
+        run: docker build -t syrius-discord --build-arg SYRIUS_REF="${GITHUB_REF_NAME}" discord-bot
+      - name: Essai de la voix française
+        run: |
+          docker run -d --name v --entrypoint /opt/piper/bin/python syrius-discord \
+            -m piper.http_server -m fr_FR-siwis-medium --data-dir /opt/voices --host 0.0.0.0 --port 5000
+          for i in $(seq 1 30); do
+            docker exec v wget -q -O /tmp/t.wav --post-data='{"text":"Bonjour, je suis Syrius."}' \
+              --header='Content-Type: application/json' http://127.0.0.1:5000 && break
+            sleep 2
+          done
+          docker exec v sh -c 'ls -l /tmp/t.wav && head -c 4 /tmp/t.wav' | tee /dev/stderr | grep -q RIFF
+          echo "Voix française : OK"
