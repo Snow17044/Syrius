@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+from .. import safety
+
 TZ = ZoneInfo("Europe/Paris")
 JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
@@ -225,6 +227,8 @@ def build_action(name: str, args: dict) -> tuple[dict, str]:
         if len(prompt) < 3:
             raise DeviceInputError("description d'image trop courte")
         caption = _text(args.get("caption", ""), "caption", 80, required=False) or prompt[:60]
+        if safety.blocked(prompt, caption):  # ni contenu sexuel ni violence, quoi que dise l'IA
+            raise DeviceInputError(safety.MESSAGE.replace("de schéma ni de maquette", "d'image"))
         p = {"prompt": prompt, "caption": caption}
         done = (f"Image « {caption} » en cours de création : elle s'affiche juste en dessous dans quelques "
                 "secondes (ou quelques minutes si le téléphone la crée sans Internet). Dis-le en une phrase, "

@@ -339,6 +339,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/image", dependencies=[Depends(require_auth)])
     def create_image(body: ImageBody):
         """Image créée en ligne (gratuit, sans clé), relayée par le serveur (voir tools/imagegen.py)."""
+        if safety.blocked(body.prompt):
+            raise HTTPException(400, "Contenu refusé : Syrius ne crée pas d'image à caractère sexuel ou violent.")
         try:
             ctype, data = imagegen.generate(body.prompt)
         except imagegen.ImageGenError as e:
