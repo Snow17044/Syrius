@@ -10,18 +10,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Bibliothèque Poly Pizza (documentation de l'API)
+      - name: IA gratuites OpenRouter capables d'utiliser des outils
         run: |
-          for u in https://poly.pizza/docs/api https://poly.pizza/docs https://api.poly.pizza/v1.1/search/car "https://api.poly.pizza/v1/search/car" ; do
-            echo "=================== $u"
-            curl -sS -m 20 -L -D /tmp/h "$u" -o /tmp/b || true
-            head -1 /tmp/h; grep -i "content-type" /tmp/h | head -1
-            python3 - <<'PY'
-          import re, html
-          t = open("/tmp/b", encoding="utf-8", errors="replace").read()
-          t = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", t)
-          t = html.unescape(re.sub(r"<[^>]+>", " ", t))
-          t = re.sub(r"\s+", " ", t)
-          print(t[:6000])
+          cat > /tmp/or.py <<'PY'
+          import json, sys
+          d = json.load(sys.stdin)["data"]
+          for m in d:
+              if not m["id"].endswith(":free"):
+                  continue
+              sp = m.get("supported_parameters") or []
+              print(m["id"], "| outils" if "tools" in sp else "| -", "|",
+                    ",".join((m.get("architecture") or {}).get("input_modalities") or []), "|", m.get("context_length"),
+                    "|", (m.get("description") or "")[:120].replace("\n", " "))
           PY
-          done
+          curl -sS -m 20 https://openrouter.ai/api/v1/models | python3 /tmp/or.py
