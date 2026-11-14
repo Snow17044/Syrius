@@ -61,3 +61,41 @@ def test_suivi_en_direct_avec_cle(make_client):
     assert worker.post("/api/training/worker/report", json={"run": "../x", "type": "step"}, headers=W).status_code == 400
     owner.post("/api/training/token", headers=H)
     assert worker.get("/api/training/worker/examples", headers=W).status_code == 401
+
+
+def test_ameliorer_syrius(make_client):
+    owner = make_client()
+    login(owner)
+    lea = member_client(owner)
+    assert lea.post("/api/selfcode", json={"text": "Ajoute un bouton rouge partout"}, headers=H).status_code == 403
+    r = owner.post("/api/selfcode", json={"text": "Ajoute un bouton pour copier une réponse"}, headers=H)
+    assert r.status_code == 200 and owner.get("/api/selfcode").json()[0]["status"] == "pending"
+    assert owner.post("/api/selfcode", json={"text": "Fais une page avec des armes à feu"}, headers=H).status_code == 400
+    tok = owner.get("/api/training/token").json()["token"]
+    worker = TestClient(owner.app, base_url="https://testserver")
+    W = {**H, "Authorization": f"Bearer {tok}"}
+    assert worker.post("/api/training/worker/code-next", headers=H).status_code == 401
+    item = worker.post("/api/training/worker/code-next", headers=W).json()["request"]
+    assert item["text"] == "Ajoute un bouton pour copier une réponse"
+    assert worker.post("/api/training/worker/code-next", headers=W).json()["request"] is None  # déjà prise
+    bad = {"id": item["id"], "status": "proposed", "pr": "https://evil.example.com/x"}
+    assert worker.post("/api/training/worker/code-report", json=bad, headers=W).status_code == 400
+    ok = {"id": item["id"], "status": "proposed", "pr": "https://github.com/Snow17044/Syrius/pull/99",
+          "summary": "1 fichier modifié", "tests": "505 passed"}
+    assert worker.post("/api/training/worker/code-report", json=ok, headers=W).status_code == 200
+    it = owner.get("/api/selfcode").json()[0]
+    assert it["status"] == "proposed" and it["pr"].endswith("/pull/99")
+
+
+def test_garde_fous_de_l_ia_programmeuse(tmp_path, monkeypatch):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parents[1] / "selfcode"))
+    import agent
+    monkeypatch.setattr(agent, "changed", lambda: [("M", "server/auth.py"), ("M", "tests/test_agent.py"),
+                                                    ("??", "tests/test_nouveau.py"), ("M", "web/app.js"),
+                                                    ("M", ".github/workflows/x.yml")])
+    bad = agent.violations()
+    assert any("server/auth.py" in b for b in bad) and any("tests/test_agent.py" in b for b in bad)
+    assert any(".github" in b for b in bad)
+    assert not any("web/app.js" in b or "test_nouveau" in b for b in bad)

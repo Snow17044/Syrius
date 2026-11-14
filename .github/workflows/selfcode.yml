@@ -1,0 +1,90 @@
+# « Améliorer Syrius » : prend la demande suivante du tableau de bord, une IA programmeuse gratuite propose le
+# changement, les tests tournent dans un conteneur isolé (sans Internet ni secrets), puis une proposition
+# (pull request) est ouverte. RIEN n'est publié sans l'accord du propriétaire.
+name: Améliorer Syrius
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: selfcode
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  code:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Une demande en attente ?
+        id: next
+        env:
+          SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN }}
+        run: |
+          if [ -z "$SYRIUS_TRAINING_TOKEN" ]; then echo "Clé d'entraînement absente."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          python3 selfcode/agent.py next
+
+      - name: Préparer les outils (versions figées)
+        if: steps.next.outputs.go == 'true'
+        run: |
+          W="$RUNNER_TEMP/selfcode"
+          python3 -m venv "$W/avenv" && "$W/avenv/bin/pip" install --quiet aider-chat==0.86.2
+          mkdir -p "$W/cvenv"
+          docker run --rm -v "$PWD:/w:ro" -v "$W/cvenv:/cv" python:3.12-slim sh -c \
+            "python -m venv /cv && /cv/bin/pip install --quiet -r /w/requirements.txt -r /w/requirements-dev.txt"
+
+      - name: L'IA programmeuse travaille
+        id: code
+        if: steps.next.outputs.go == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AIDER_ANALYTICS: "false"
+        run: |
+          git config user.name "Syrius (IA programmeuse)"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 selfcode/agent.py code
+
+      - name: Ouvrir la proposition
+        id: pr
+        if: steps.code.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ID: ${{ steps.next.outputs.id }}
+        run: |
+          b="syrius-auto/$ID"
+          git checkout -b "$b"
+          git add -A -- . ':!.aider*'
+          git commit -q -m "Syrius s'améliore : demande $ID"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$b"
+          req=$(python3 -c "import json,os;print(json.load(open(os.environ['RUNNER_TEMP']+'/selfcode/request.json'))['text'])")
+          url=$(gh pr create --head "$b" --base main --title "Syrius s'améliore : ${req:0:60}" \
+            --body "Demande du propriétaire : $req
+
+          Changement écrit par l'IA programmeuse gratuite. Tous les tests passent (exécutés sans Internet ni secrets).
+          À vérifier avant de publier.")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Résultat vers le tableau de bord
+        if: always() && steps.next.outputs.go == 'true'
+        env:
+          SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN }}
+        run: |
+          if [ -n "${{ steps.pr.outputs.url }}" ]; then
+            python3 selfcode/agent.py report proposed "${{ steps.pr.outputs.url }}"
+          else
+            python3 selfcode/agent.py report failed
+          fi
