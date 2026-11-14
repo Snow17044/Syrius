@@ -19,6 +19,11 @@ import time
 from . import safety
 
 KEY = "family_selfcode_v1"
+SETTINGS_KEY = "family_selfcode_settings_v1"
+MAX_LESSONS = 40
+# IA programmeuses gratuites proposées (OpenRouter, modèles « :free »).
+CODER_MODELS = ["qwen/qwen3-coder:free", "nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free",
+                "inclusionai/ling-3.2-flash:free"]
 MAX_ITEMS = 30
 STATUSES = ("pending", "running", "proposed", "failed", "refused")
 _PR = re.compile(r"^https://github\.com/[\w.-]+/[\w.-]+/pull/\d+$")
@@ -76,6 +81,66 @@ def cancel(base, iid: str) -> bool:
     return False
 
 
+# ------------------------------------------------------------------ rendre l'IA programmeuse meilleure
+def settings(base) -> dict:
+    try:
+        s = json.loads(base.get_secret(SETTINGS_KEY) or "{}")
+    except ValueError:
+        s = {}
+    s = s if isinstance(s, dict) else {}
+    lessons = [x for x in s.get("lessons", []) if isinstance(x, dict)]
+    model = s.get("model") if s.get("model") in CODER_MODELS else ""
+    return {"lessons": lessons, "model": model, "models": CODER_MODELS}
+
+
+def _save_settings(base, s: dict) -> None:
+    base.set_secret(SETTINGS_KEY, json.dumps({"lessons": s["lessons"][-MAX_LESSONS:], "model": s["model"]},
+                                             ensure_ascii=False))
+
+
+def add_lesson(base, text: str) -> dict:
+    t = " ".join(str(text).split())
+    if not 5 <= len(t) <= 400:
+        raise SelfCodeError("Un conseil fait 5 à 400 caractères.")
+    if safety.blocked(t):
+        raise SelfCodeError("Conseil refusé : pas de contenu sexuel ni violent.")
+    s = settings(base)
+    item = {"id": secrets.token_hex(4), "text": t, "at": int(time.time())}
+    s["lessons"].append(item)
+    _save_settings(base, s)
+    return item
+
+
+def delete_lesson(base, lid: str) -> bool:
+    s = settings(base)
+    keep = [x for x in s["lessons"] if x.get("id") != lid]
+    if len(keep) == len(s["lessons"]):
+        return False
+    s["lessons"] = keep
+    _save_settings(base, s)
+    return True
+
+
+def set_model(base, model: str) -> None:
+    if model and model not in CODER_MODELS:
+        raise SelfCodeError("IA programmeuse inconnue.")
+    s = settings(base)
+    s["model"] = model
+    _save_settings(base, s)
+
+
+def retry(base, iid: str, feedback: str) -> dict:
+    """Proposition pas satisfaisante : l'avis devient un conseil durable et la demande est relancée."""
+    fb = " ".join(str(feedback).split())
+    if not 5 <= len(fb) <= 400:
+        raise SelfCodeError("Explique en quelques mots ce qui ne va pas (5 à 400 caractères).")
+    old = next((d for d in _load(base) if d.get("id") == iid), None)
+    if not old or old.get("status") not in ("proposed", "failed"):
+        raise SelfCodeError("Demande introuvable.")
+    add_lesson(base, fb)
+    return add(base, f"{old['text']} (Nouvel essai. Remarque du propriétaire sur l'essai précédent : {fb})"[:1500])
+
+
 def take_next(base) -> dict | None:
     """Pour le serveur de GitHub : la plus ancienne demande en attente (marquée « en cours »)."""
     data = _load(base)
@@ -83,7 +148,9 @@ def take_next(base) -> dict | None:
         if d.get("status") == "pending":
             d["status"], d["updated"] = "running", int(time.time())
             _save(base, data)
-            return {"id": d["id"], "text": d["text"]}
+            s = settings(base)
+            return {"id": d["id"], "text": d["text"], "lessons": [x["text"] for x in s["lessons"]],
+                    "model": s["model"]}
     return None
 
 

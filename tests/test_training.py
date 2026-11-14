@@ -99,3 +99,25 @@ def test_garde_fous_de_l_ia_programmeuse(tmp_path, monkeypatch):
     assert any("server/auth.py" in b for b in bad) and any("tests/test_agent.py" in b for b in bad)
     assert any(".github" in b for b in bad)
     assert not any("web/app.js" in b or "test_nouveau" in b for b in bad)
+
+
+def test_rendre_l_ia_programmeuse_meilleure(make_client):
+    owner = make_client()
+    login(owner)
+    assert owner.post("/api/selfcode/lessons", json={"text": "Garde le style des boutons existants"}, headers=H).status_code == 200
+    assert owner.put("/api/selfcode/model", json={"model": "qwen/qwen3-coder:free"}, headers=H).status_code == 200
+    assert owner.put("/api/selfcode/model", json={"model": "evil/model"}, headers=H).status_code == 400
+    s = owner.get("/api/selfcode/settings").json()
+    assert s["model"] == "qwen/qwen3-coder:free" and s["lessons"][0]["text"] == "Garde le style des boutons existants"
+    owner.post("/api/selfcode", json={"text": "Ajoute un bouton pour copier une réponse"}, headers=H)
+    tok = owner.get("/api/training/token").json()["token"]
+    worker = TestClient(owner.app, base_url="https://testserver")
+    W = {**H, "Authorization": f"Bearer {tok}"}
+    item = worker.post("/api/training/worker/code-next", headers=W).json()["request"]
+    assert item["model"] == "qwen/qwen3-coder:free" and item["lessons"] == ["Garde le style des boutons existants"]
+    worker.post("/api/training/worker/code-report", json={"id": item["id"], "status": "failed", "summary": "x"}, headers=W)
+    r = owner.post(f"/api/selfcode/{item['id']}/retry", json={"text": "Le bouton doit être en bas"}, headers=H)
+    assert r.status_code == 200 and "Le bouton doit être en bas" in r.json()["text"]
+    assert len(owner.get("/api/selfcode/settings").json()["lessons"]) == 2
+    lea = member_client(owner)
+    assert lea.get("/api/selfcode/settings").status_code == 403

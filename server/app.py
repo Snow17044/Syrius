@@ -98,6 +98,14 @@ class SelfCodeBody(BaseModel):
     text: str = Field(min_length=10, max_length=1500)
 
 
+class LessonBody(BaseModel):
+    text: str = Field(min_length=5, max_length=400)
+
+
+class CoderModelBody(BaseModel):
+    model: str = Field(default="", max_length=100)
+
+
 class ExampleBody(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     answer: str = Field(min_length=1, max_length=2000)
@@ -562,6 +570,38 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if not selfcode.cancel(db.base, iid[:20]):
             raise HTTPException(404, "Demande introuvable ou déjà prise en charge")
         return {"ok": True}
+
+    @app.get("/api/selfcode/settings", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_settings():
+        return selfcode.settings(db.base)
+
+    @app.post("/api/selfcode/lessons", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_lesson(body: LessonBody):
+        try:
+            return selfcode.add_lesson(db.base, body.text)
+        except selfcode.SelfCodeError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.delete("/api/selfcode/lessons/{lid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_lesson_delete(lid: str):
+        if not selfcode.delete_lesson(db.base, lid[:20]):
+            raise HTTPException(404, "Conseil introuvable")
+        return {"ok": True}
+
+    @app.put("/api/selfcode/model", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_model(body: CoderModelBody):
+        try:
+            selfcode.set_model(db.base, body.model)
+        except selfcode.SelfCodeError as e:
+            raise HTTPException(400, str(e)) from None
+        return {"ok": True}
+
+    @app.post("/api/selfcode/{iid}/retry", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_retry(iid: str, body: LessonBody):
+        try:
+            return selfcode.retry(db.base, iid[:20], body.text)
+        except selfcode.SelfCodeError as e:
+            raise HTTPException(400, str(e)) from None
 
     @app.post("/api/training/worker/code-next", dependencies=[Depends(require_trainer)])
     async def selfcode_next():

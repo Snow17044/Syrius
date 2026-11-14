@@ -1742,7 +1742,53 @@ function renderTraining(d) {
 async function refreshTraining() {
   try { renderTraining(await api("/api/training")); } catch (err) { setMsg($("#t-phase"), "⚠ " + err.message); }
   try { renderSelfCode(await api("/api/selfcode")); } catch (_) { /* ignore */ }
+  try { renderCoder(await api("/api/selfcode/settings")); } catch (_) { /* ignore */ }
 }
+
+function renderCoder(s) {
+  const sel = $("#sc-model");
+  if (sel.options.length <= 1) {
+    for (const m of s.models) {
+      const o = document.createElement("option");
+      o.value = m; o.textContent = m.replace(":free", "").split("/").pop();
+      sel.append(o);
+    }
+  }
+  if (document.activeElement !== sel) sel.value = s.model || "";
+  const list = $("#sc-lessons");
+  list.textContent = "";
+  if (!s.lessons.length) list.append(node("li", "muted small", "Aucun conseil pour l'instant."));
+  for (const l of s.lessons) {
+    const li = node("li", "");
+    li.append(node("span", "", l.text));
+    const del = node("button", "ghost subtle", "Retirer");
+    del.type = "button";
+    del.addEventListener("click", async () => {
+      try { await api(`/api/selfcode/lessons/${encodeURIComponent(l.id)}`, { method: "DELETE" }); refreshTraining(); }
+      catch (err) { setMsg($("#sc-msg"), "⚠ " + err.message); }
+    });
+    li.append(del);
+    list.append(li);
+  }
+}
+
+$("#sc-model").addEventListener("change", async () => {
+  try {
+    await api("/api/selfcode/model", { method: "PUT", body: JSON.stringify({ model: $("#sc-model").value }) });
+    setMsg($("#sc-msg"), "✅ IA programmeuse choisie.");
+  } catch (err) { setMsg($("#sc-msg"), "⚠ " + err.message); }
+});
+
+$("#sc-lesson-add").addEventListener("click", async () => {
+  const text = $("#sc-lesson").value.trim();
+  if (text.length < 5) { setMsg($("#sc-msg"), "⚠ Écris un conseil un peu plus long."); return; }
+  try {
+    await api("/api/selfcode/lessons", { method: "POST", body: JSON.stringify({ text }) });
+    $("#sc-lesson").value = "";
+    setMsg($("#sc-msg"), "✅ Conseil ajouté : l'IA programmeuse le suivra désormais.");
+    refreshTraining();
+  } catch (err) { setMsg($("#sc-msg"), "⚠ " + err.message); }
+});
 
 // « Améliorer Syrius » : demandes de changement préparées par une IA programmeuse (proposées, jamais publiées seules)
 function renderSelfCode(items) {
@@ -1763,6 +1809,20 @@ function renderSelfCode(items) {
       const a = node("a", "ghost btn-link", "Voir la proposition sur GitHub");
       a.href = it.pr; a.target = "_blank"; a.rel = "noopener";
       li.append(a, node("span", "small muted", "Pour publier : ouvre-la puis « Merge pull request », ou demande à Claude."));
+    }
+    if (it.status === "proposed" || it.status === "failed") {
+      const r = node("button", "ghost", "Pas satisfaite : réessayer");
+      r.type = "button";
+      r.addEventListener("click", async () => {
+        const fb = prompt("Qu'est-ce qui ne va pas ? (ta remarque servira aussi pour les prochaines fois)");
+        if (!fb) return;
+        try {
+          await api(`/api/selfcode/${encodeURIComponent(it.id)}/retry`, { method: "POST", body: JSON.stringify({ text: fb }) });
+          setMsg($("#sc-msg"), "✅ Nouvel essai demandé, avec ta remarque.");
+          refreshTraining();
+        } catch (err) { setMsg($("#sc-msg"), "⚠ " + err.message); }
+      });
+      li.append(r);
     }
     if (it.status === "pending") {
       const c = node("button", "ghost subtle", "Annuler");

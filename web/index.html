@@ -247,6 +247,16 @@
       <button type="button" id="sc-add" class="primary wide" data-icon="send"><span>Envoyer la demande</span></button>
       <p id="sc-msg" class="small"></p>
       <ul id="sc-list" class="family-list"></ul>
+      <details class="train-setup" id="sc-better">
+        <summary>Rendre l'IA programmeuse meilleure</summary>
+        <label>IA programmeuse
+          <select id="sc-model"><option value="">Automatique (la meilleure gratuite disponible)</option></select></label>
+        <p class="muted small">Conseils qu'elle suivra à chaque fois (ex. « Garde toujours le style des boutons
+          existants », « Écris des messages courts »). Quand tu refuses une proposition, ta remarque est ajoutée ici.</p>
+        <label>Nouveau conseil<input id="sc-lesson" type="text" maxlength="400" placeholder="Ex. : Les nouveaux boutons doivent avoir une icône."></label>
+        <button type="button" id="sc-lesson-add" class="ghost wide" data-icon="plus"><span>Ajouter le conseil</span></button>
+        <ul id="sc-lessons" class="family-list"></ul>
+      </details>
 
       <h4 data-icon="eye"><span>Réponses de test</span></h4>
       <p class="muted small">Les mêmes questions, posées avant et après l'entraînement.</p>
