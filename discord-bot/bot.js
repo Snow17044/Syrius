@@ -57,7 +57,7 @@ async function refreshAllowed() {
 
 /** Texte → voix (Piper, sur ce serveur) → son au format Discord. */
 async function synthesize(text) {
-  const res = await fetch(PIPER_URL, {
+  const res = await fetch(PIPER_URL + "/synthesize", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: text.slice(0, 1200) }), signal: AbortSignal.timeout(60_000),
   });
@@ -153,6 +153,19 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 client.once(Events.ClientReady, async (c) => {
   console.log(`Connecté à Discord : ${c.user.tag}`);
   await refreshAllowed();
+  if (!allowed.size) {  // personne d'autorisé : le créateur du bot (toi) l'est automatiquement
+    try {
+      const app = await c.application.fetch();
+      const owner = app.owner && (app.owner.ownerId || app.owner.id);
+      if (owner) {
+        await syrius("/api/bot/owner", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discord_id: String(owner) }) });
+        await refreshAllowed();
+      }
+    } catch (err) {
+      console.error("Créateur du bot introuvable :", err.message);
+    }
+  }
   setInterval(refreshAllowed, 5 * 60_000);
   // Si tu es déjà dans un salon au démarrage, Syrius te rejoint.
   for (const guild of c.guilds.cache.values()) {
@@ -176,6 +189,15 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
     }
   }
 });
+
+// Hébergement de type « Space » (Hugging Face) : une petite page d'état sur le port demandé.
+if (process.env.PORT) {
+  require("node:http").createServer((req, res) => {
+    const ready = client.isReady();
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(ready ? `Syrius sur Discord : connecté (${client.user.tag})` : "Syrius sur Discord : démarrage…");
+  }).listen(Number(process.env.PORT), "0.0.0.0");
+}
 
 process.on("unhandledRejection", (e) => console.error("Erreur :", e && e.message));
 client.login(process.env.DISCORD_TOKEN);

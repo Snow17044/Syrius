@@ -28,7 +28,29 @@ Il te faut un petit serveur toujours allumé, gratuit chez Google Cloud. Compte 
 2. Colle-le dans Syrius, puis touche **Enregistrer**.
 3. Touche **Copier la clé du bot**. Tu en auras besoin à l'étape 4.
 
-## 3. Le serveur gratuit Google Cloud (5 min)
+## 3. Option sans carte bancaire : Hugging Face (5 min)
+
+Avec ton compte Hugging Face habituel, c'est gratuit et sans carte.
+
+1. Ouvre <https://huggingface.co/new-space>.
+   - **Space name** : `syrius-discord`.
+   - **SDK** : **Docker**, puis **Blank**.
+   - **Hardware** : **CPU basic (free)**.
+   - **Visibility** : **Private**.
+   - Touche **Create Space**.
+2. Dans le Space, va dans **Files**, puis **+ Add file** → **Create a new file**.
+   - Nom du fichier : `Dockerfile`.
+   - Contenu : copie celui de <https://github.com/Snow17044/Syrius/blob/main/discord-bot/Dockerfile> (bouton
+     « Copy raw file »).
+   - Touche **Commit**.
+3. Va dans **Settings → Variables and secrets → New secret** et ajoute deux secrets :
+   - `DISCORD_TOKEN` : le jeton du bot Discord ;
+   - `SYRIUS_BOT_KEY` : la clé copiée dans Syrius.
+4. Retourne sur l'onglet **App**. Après quelques minutes, tu dois lire « Syrius sur Discord : connecté ».
+
+Si tu ne l'utilises pas, le Space s'endort au bout de 48 h. Pour le réveiller, il suffit d'ouvrir sa page.
+
+## 3 bis. Le serveur gratuit Google Cloud (si tu as plus de 18 ans, 5 min)
 
 1. Ouvre <https://console.cloud.google.com> et connecte-toi avec ton compte Google.
    - Il faut activer la facturation. La carte sert seulement à vérifier ton identité : rien n'est prélevé
@@ -44,7 +66,7 @@ Il te faut un petit serveur toujours allumé, gratuit chez Google Cloud. Compte 
 
 3. Touche **Créer**.
 
-## 4. Installer Syrius sur le serveur (3 min)
+## 4. Installer Syrius sur le serveur Google (3 min, seulement pour l'option 3 bis)
 
 1. Sur la ligne de ta VM, touche **SSH**. Une fenêtre noire s'ouvre.
 2. Colle cette ligne, puis appuie sur Entrée :

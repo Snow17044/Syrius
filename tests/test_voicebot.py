@@ -39,3 +39,15 @@ def test_bot_vocal(make_client, monkeypatch):
     convs = owner.get("/api/conversations").json()
     assert convs[0]["title"] == voicebot.CONV_TITLE
     assert bot.get("/api/bot/config", headers=B).json() == {"discord_ids": [ME]}
+
+
+def test_createur_du_bot_autorise_automatiquement(make_client):
+    owner = make_client()
+    login(owner)
+    key = owner.get("/api/voicebot/key").json()["key"]
+    bot = TestClient(owner.app, base_url="https://testserver")
+    B = {**H, "Authorization": f"Bearer {key}"}
+    assert bot.post("/api/bot/owner", json={"discord_id": ME}, headers=B).json() == {"discord_ids": [ME]}
+    # déjà configuré : un autre identifiant ne remplace pas le premier
+    assert bot.post("/api/bot/owner", json={"discord_id": "999999999999999999"}, headers=B).json() == {"discord_ids": [ME]}
+    assert bot.post("/api/bot/owner", json={"discord_id": ME}, headers={**H, "Authorization": "Bearer faux"}).status_code == 401
