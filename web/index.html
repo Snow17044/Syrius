@@ -71,6 +71,7 @@
       <div class="list-label">Discussions</div>
       <ul id="conv-list"></ul>
       <div class="drawer-foot">
+        <button id="open-training" class="ghost wide hidden" data-icon="chart"><span>Entraînement de Syrius</span></button>
         <button id="open-settings" class="ghost wide" data-icon="settings"><span>Réglages</span></button>
         <button id="logout" class="ghost wide subtle" data-icon="logout"><span>Déconnexion</span></button>
       </div>
@@ -206,6 +207,65 @@
     </div>
   </section>
   <!-- Réglages -->
+  <dialog id="training">
+    <form method="dialog" class="sheet" id="training-form">
+      <header class="sheet-head"><h3>Entraînement de Syrius</h3><button class="icon-btn" value="close" aria-label="Fermer" data-icon="close"></button></header>
+
+      <div class="train-status">
+        <div class="train-top">
+          <span id="t-badge" class="t-badge">—</span>
+          <span id="t-phase" class="small muted"></span>
+        </div>
+        <progress id="t-progress" max="100" value="0"></progress>
+        <div class="train-kpis">
+          <div><strong id="t-step">—</strong><span>étapes</span></div>
+          <div><strong id="t-loss">—</strong><span>erreur actuelle</span></div>
+          <div><strong id="t-eta">—</strong><span>temps restant</span></div>
+          <div><strong id="t-ex">—</strong><span>exemples</span></div>
+        </div>
+      </div>
+
+      <h4 data-icon="chart"><span>Courbe d'apprentissage</span></h4>
+      <p class="muted small">L'« erreur » mesure à quel point Syrius se trompe sur les exemples : plus la courbe
+        descend, mieux elle a appris.</p>
+      <div id="t-chart" class="train-chart" role="img" aria-label="Courbe d'apprentissage"></div>
+
+      <h4 data-icon="sparkle"><span>Apprendre une nouvelle phrase</span></h4>
+      <p class="muted small">Écris une question et la réponse idéale que Syrius doit donner. Elles sont apprises au
+        prochain entraînement (chaque nuit si tu en as ajouté).</p>
+      <label>Question ou demande<input id="t-q" type="text" maxlength="500" placeholder="Ex. : C'est qui ma meilleure amie ?"></label>
+      <label>Réponse idéale de Syrius<textarea id="t-a" rows="3" maxlength="2000" placeholder="Ex. : C'est Julie, que tu connais depuis le collège !"></textarea></label>
+      <button type="button" id="t-add" class="primary wide" data-icon="plus"><span>Ajouter cet exemple</span></button>
+      <p id="t-msg" class="small"></p>
+      <ul id="t-examples" class="family-list"></ul>
+
+      <h4 data-icon="eye"><span>Réponses de test</span></h4>
+      <p class="muted small">Les mêmes questions, posées avant et après l'entraînement.</p>
+      <div id="t-tests" class="train-tests"></div>
+
+      <h4 data-icon="clock"><span>Historique</span></h4>
+      <ul id="t-history" class="family-list"></ul>
+
+      <details class="train-setup">
+        <summary>Brancher le suivi en direct (une seule fois)</summary>
+        <ol class="small">
+          <li>Touche « Copier la clé » ci-dessous.</li>
+          <li>Sur GitHub : ton dépôt Syrius → <strong>Settings → Secrets and variables → Actions → New repository
+            secret</strong>.</li>
+          <li>Nom : <code>SYRIUS_TRAINING_TOKEN</code>, valeur : colle la clé, puis « Add secret ».</li>
+        </ol>
+        <div class="local-actions">
+          <button type="button" id="t-copy" class="ghost" data-icon="link"><span>Copier la clé</span></button>
+          <button type="button" id="t-renew" class="ghost subtle" data-icon="refresh"><span>Nouvelle clé</span></button>
+        </div>
+        <p class="small muted">Cette clé permet seulement d'envoyer la progression et de lire tes exemples
+          d'entraînement, jamais tes discussions. Pour lancer un entraînement tout de suite : GitHub → Actions →
+          « Entraîner l'IA Syrius » → Run workflow.</p>
+        <p id="t-setup-msg" class="small"></p>
+      </details>
+    </form>
+  </dialog>
+
   <dialog id="settings">
     <form method="dialog" class="sheet" id="settings-form">
       <header class="sheet-head"><h3>Réglages</h3><button class="icon-btn" value="close" aria-label="Fermer" data-icon="close"></button></header>

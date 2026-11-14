@@ -9,6 +9,7 @@
     menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    chart: '<path d="M4 19h16"/><path d="M5 15l4-5 4 3 6-7"/><circle cx="9" cy="10" r="1"/><circle cx="13" cy="13" r="1"/>',
     compose: '<path d="M4.5 19.5h4L19 9a2.1 2.1 0 0 0-3-3L5.5 16.5z"/><path d="M14 8l3 3"/>',
     search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
     settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',

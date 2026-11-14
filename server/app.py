@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, diagnostic, family, safety
+from . import auth, diagnostic, family, safety, training
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -92,6 +92,11 @@ class SetupBody(BaseModel):
 
 class AccountDelete(BaseModel):
     password: str = Field(default="", max_length=256)
+
+
+class ExampleBody(BaseModel):
+    question: str = Field(min_length=2, max_length=500)
+    answer: str = Field(min_length=1, max_length=2000)
 
 
 class ReportBody(BaseModel):
@@ -498,6 +503,56 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         for m in db.list_memories():
             db.delete_memory(m["id"])
         return {"ok": True, "deleted": "data"}
+
+    # ------------------------------------------------------------------ entraînement de l'IA Syrius
+    def require_trainer(request: Request) -> None:
+        auth_h = request.headers.get("authorization", "")
+        given = auth_h[7:] if auth_h.lower().startswith("bearer ") else ""
+        if not training.check_token(db.base, given):
+            raise HTTPException(401, "Clé d'entraînement invalide")
+
+    @app.get("/api/training", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def training_state():
+        return training.state(db.base)
+
+    @app.get("/api/training/token", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def training_token():
+        return {"token": training.token(db.base)}
+
+    @app.post("/api/training/token", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def training_token_renew():
+        return {"token": training.token(db.base, renew=True)}
+
+    @app.post("/api/training/examples", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def training_add(body: ExampleBody):
+        try:
+            return training.add_example(db.base, body.question, body.answer)
+        except training.TrainingError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.delete("/api/training/examples/{eid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def training_delete(eid: str):
+        if not training.delete_example(db.base, eid[:20]):
+            raise HTTPException(404, "Exemple introuvable")
+        return {"ok": True}
+
+    @app.get("/api/training/worker/examples", dependencies=[Depends(require_trainer)])
+    async def training_worker_examples():
+        """Pour le serveur d'entraînement : les exemples à apprendre (rien d'autre)."""
+        return [{"q": e["q"], "a": e["a"]} for e in training.examples(db.base)]
+
+    @app.get("/api/training/worker/should-train", dependencies=[Depends(require_trainer)])
+    async def training_worker_should():
+        return {"train": training.should_train(db.base)}
+
+    @app.post("/api/training/worker/report", dependencies=[Depends(require_trainer)])
+    async def training_worker_report(request: Request):
+        try:
+            body = await request.json()
+            training.report(db.base, body)
+        except (ValueError, training.TrainingError) as e:
+            raise HTTPException(400, str(e)[:200]) from None
+        return {"ok": True}
 
     @app.post("/api/report", dependencies=[Depends(require_auth)])
     async def report_content(body: ReportBody, request: Request):

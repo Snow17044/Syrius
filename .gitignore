@@ -7,3 +7,5 @@ data/
 *.db
 *.db-journal
 android/app/src/main/jniLibs/
+training/data/
+build/
