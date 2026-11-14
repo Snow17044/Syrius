@@ -72,6 +72,8 @@ class Config:
     # Empreintes SHA-256 supplémentaires de l'application Android (liens qui ouvrent l'app), séparées par des virgules.
     android_certs: list = field(default_factory=lambda: [
         c.strip() for c in _env("SYRIUS_ANDROID_CERT_SHA256").split(",") if c.strip()])
+    # Adresse de contact affichée dans la politique de confidentialité (facultative).
+    contact_email: str = field(default_factory=lambda: _env("SYRIUS_CONTACT_EMAIL"))
     # Création d'images : clé Pollinations facultative (plus fiable que l'accès anonyme).
     pollinations_api_key: str = field(default_factory=lambda: _env("POLLINATIONS_API_KEY"))
     # Vraies maquettes 3D : bibliothèque Poly Pizza + création TRELLIS.2 (Hugging Face).

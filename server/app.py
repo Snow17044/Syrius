@@ -29,6 +29,7 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
+    "legal.css": "text/css",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -85,6 +86,15 @@ class ConversationPatch(BaseModel):
 class SetupBody(BaseModel):
     code: str = Field(max_length=256)
     password: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
+
+
+class AccountDelete(BaseModel):
+    password: str = Field(default="", max_length=256)
+
+
+class ReportBody(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    reason: str = Field(default="", max_length=300)
 
 
 class PasswordChange(BaseModel):
@@ -207,6 +217,14 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/")
     async def index():
         return FileResponse(WEB_DIR / "index.html", media_type="text/html")
+
+    @app.get("/confidentialite")
+    async def privacy():
+        """Politique de confidentialité (exigée par Google Play) et marche à suivre pour supprimer son compte."""
+        page = (WEB_DIR / "confidentialite.html").read_text(encoding="utf-8")
+        contact = (f"Pour toute question : {html.escape(cfg.contact_email)}" if cfg.contact_email
+                   else "Pour toute question, adressez-vous à la personne qui vous a invité sur ce Syrius.")
+        return HTMLResponse(page.replace("{{CONTACT}}", contact))
 
     @app.get("/rejoindre/{code}")
     @app.get("/essai/{link}")
@@ -443,6 +461,51 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if not family.remove_member(db.base, uid[:20]):
             raise HTTPException(404, "Compte introuvable")
         db.wipe(uid[:20])  # ses discussions, sa mémoire et ses réglages sont effacés
+        return {"ok": True}
+
+    @app.post("/api/account/delete", dependencies=[Depends(require_auth)])
+    async def delete_account(body: AccountDelete, request: Request):
+        """Suppression du compte et de toutes ses données (exigence Google Play)."""
+        uid, ip = request.state.uid, client_ip(request)
+        if auth.is_locked_out(db, ip):
+            raise HTTPException(429, "Trop d'essais. Réessaie dans 15 minutes.")
+        if uid:
+            ok = await asyncio.to_thread(family.check_member_password, db.base, uid, body.password)
+        else:
+            ok = await asyncio.to_thread(auth.verify_password, body.password, db.base.get_secret(auth.PASSWORD_KEY) or "")
+        if not ok:
+            db.record_failed_login(ip)
+            await asyncio.sleep(1)
+            raise HTTPException(403, "Mot de passe incorrect")
+        if uid:  # membre ou test : compte et espace privé effacés
+            family.remove_member(db.base, uid)
+            db.wipe(uid)
+            auth.logout(db, request.cookies.get(auth.COOKIE_NAME))
+            resp = JSONResponse({"ok": True, "deleted": "account"})
+            resp.delete_cookie(auth.COOKIE_NAME, path="/")
+            return resp
+        # Propriétaire : ses discussions, souvenirs et rappels sont effacés (le serveur reste à lui).
+        for c in db.list_conversations():
+            db.delete_conversation(c["id"])
+        for m in db.list_memories():
+            db.delete_memory(m["id"])
+        return {"ok": True, "deleted": "data"}
+
+    @app.post("/api/report", dependencies=[Depends(require_auth)])
+    async def report_content(body: ReportBody, request: Request):
+        """Signaler une réponse ou une image de l'IA (exigence Google Play sur l'IA générative)."""
+        uid = request.state.uid
+        who = family.member_name(db.base, uid) if uid else "propriétaire"
+        family.add_report(db.base, who, body.text, body.reason)
+        return {"ok": True}
+
+    @app.get("/api/reports", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def list_reports():
+        return family.reports(db.base)
+
+    @app.delete("/api/reports", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def clear_reports():
+        family.clear_reports(db.base)
         return {"ok": True}
 
     @app.post("/api/logout")

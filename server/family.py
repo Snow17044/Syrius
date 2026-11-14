@@ -275,6 +275,40 @@ def set_member_password(base, uid: str, current: str, new: str) -> None:
     _save_users(base, users)
 
 
+def check_member_password(base, uid: str, password: str) -> bool:
+    u = _users(base).get(uid)
+    if not u:
+        return False
+    if u.get("guest"):
+        return True  # compte de test : pas de mot de passe
+    return auth.verify_password(password, u.get("pw", ""))
+
+
+REPORTS_KEY = "family_reports_v1"
+
+
+def add_report(base, who: str, text: str, reason: str) -> None:
+    """Contenu de l'IA signalé par un utilisateur (visible par le propriétaire)."""
+    try:
+        reports = json.loads(base.get_secret(REPORTS_KEY) or "[]")
+    except ValueError:
+        reports = []
+    reports.append({"at": int(time.time()), "who": who[:40], "reason": reason[:300], "text": text[:1500]})
+    base.set_secret(REPORTS_KEY, json.dumps(reports[-50:], ensure_ascii=False))
+
+
+def reports(base) -> list[dict]:
+    try:
+        data = json.loads(base.get_secret(REPORTS_KEY) or "[]")
+    except ValueError:
+        return []
+    return [r for r in data if isinstance(r, dict)][::-1]
+
+
+def clear_reports(base) -> None:
+    base.set_secret(REPORTS_KEY, "[]")
+
+
 def remove_member(base, uid: str) -> bool:
     users = _users(base)
     if uid not in users:

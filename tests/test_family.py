@@ -281,3 +281,35 @@ def test_diagnostic_reserve_au_proprietaire(make_client, monkeypatch):
     assert any(c["ok"] and c["name"].startswith("Images") for c in checks)
     photo = [c for c in checks if c["name"].startswith("Photos")]
     assert photo and not photo[0]["ok"] and "secretkey" not in photo[0]["detail"]
+
+
+def test_suppression_de_compte_et_signalement(make_client):
+    owner = make_client(responses=[reply("ok")])
+    login(owner)
+    lea = member_client(owner)
+    cid = lea.post("/api/conversations", headers=H).json()["id"]
+    assert lea.post("/api/report", json={"text": "réponse bizarre", "reason": "faux"}, headers=H).status_code == 200
+    assert lea.get("/api/reports").status_code == 403
+    rep = owner.get("/api/reports").json()
+    assert rep[0]["who"] == "Léa" and rep[0]["reason"] == "faux"
+    assert lea.post("/api/account/delete", json={"password": "mauvais"}, headers=H).status_code == 403
+    r = lea.post("/api/account/delete", json={"password": MEMBER_PW}, headers=H)
+    assert r.status_code == 200 and r.json()["deleted"] == "account"
+    assert lea.get("/api/conversations").status_code == 401
+    assert owner.get("/api/family").json()["members"] == []
+    # propriétaire : ses discussions sont effacées, son compte reste
+    owner.post("/api/conversations", headers=H)
+    assert owner.post("/api/account/delete", json={"password": PASSWORD}, headers=H).json()["deleted"] == "data"
+    assert owner.get("/api/conversations").json() == []
+    assert owner.get("/api/session").json()["authenticated"] is True
+    del cid
+
+
+def test_pages_publiques_play_store(make_client):
+    c = make_client()
+    r = c.get("/confidentialite")
+    assert r.status_code == 200 and "Supprimer mon compte" in r.text and "{{CONTACT}}" not in r.text
+    assert c.get("/rejoindre/ABCD-EFGH").status_code == 200
+    assert c.get("/essai/abcdefabcdef-xyz").status_code == 200
+    links = c.get("/.well-known/assetlinks.json").json()
+    assert links[0]["target"]["package_name"] == "fr.syrius.app"
