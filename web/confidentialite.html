@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confidentialité · Syrius</title>
+  <link rel="stylesheet" href="/static/legal.css">
+</head>
+<body>
+<main>
+  <h1>Politique de confidentialité de Syrius</h1>
+  <p class="muted">Dernière mise à jour : novembre 2026</p>
+
+  <p>Syrius est un assistant personnel privé, utilisé par son propriétaire et, sur invitation, par sa famille
+    (10 comptes au maximum). Il n'y a ni publicité, ni revente de données, ni pistage.</p>
+
+  <h2>Données enregistrées</h2>
+  <ul>
+    <li><strong>Compte</strong> : prénom et mot de passe (le mot de passe est chiffré de façon irréversible).</li>
+    <li><strong>Discussions, souvenirs, réglages et rappels</strong> de chaque personne, dans son espace privé,
+      sur le serveur de ce Syrius (hébergé par Vercel, données stockées chez Upstash). Les autres membres de la
+      famille, propriétaire compris, n'y ont pas accès.</li>
+    <li><strong>Comptes de test</strong> : effacés automatiquement 24 heures après la création du lien.</li>
+  </ul>
+
+  <h2>Données envoyées à des services d'IA</h2>
+  <p>Pour répondre, vos messages (et les photos que vous envoyez) sont transmis à un service d'intelligence
+    artificielle : OpenRouter, Groq, Mistral, GitHub Models ou Google Gemini, selon la disponibilité.
+    Les photos ne sont jamais enregistrées par Syrius. Les messages vocaux sont transcrits par Groq (Whisper)
+    puis l'enregistrement est oublié. Les descriptions d'images ou de maquettes 3D sont envoyées à Pollinations,
+    Hugging Face ou Poly Pizza pour les créer. Aucune de ces demandes ne contient votre nom ou votre adresse.</p>
+
+  <h2>Sur votre téléphone (application Android)</h2>
+  <ul>
+    <li><strong>Micro</strong> : utilisé quand vous appuyez sur le micro, ou pour « Hey Syrius » si vous
+      l'activez (reconnaissance du mot-clé sur le téléphone, signalée par une notification permanente).</li>
+    <li><strong>Contacts</strong> : lus uniquement pour trouver le numéro de la personne que vous demandez
+      d'appeler ou d'écrire. Ils restent sur le téléphone et ne sont jamais envoyés.</li>
+    <li><strong>Position approximative</strong> : seulement si vous l'autorisez, pour la météo et les lieux
+      « près de moi ».</li>
+    <li><strong>Appels</strong> : un appel n'est passé qu'après votre confirmation.</li>
+    <li><strong>IA hors ligne</strong> : les modèles téléchargés fonctionnent entièrement sur le téléphone.</li>
+  </ul>
+
+  <h2 id="suppression">Supprimer votre compte et vos données</h2>
+  <p>Dans Syrius (application ou site) : <strong>Réglages → Sécurité → Supprimer mon compte</strong>.
+    Votre compte, vos discussions, souvenirs, réglages et rappels sont effacés immédiatement et définitivement.
+    Sans accès à l'application, ouvrez l'adresse de ce Syrius dans un navigateur, connectez-vous et suivez le
+    même chemin, ou demandez la suppression à la personne qui vous a invité.</p>
+
+  <h2>Signaler un contenu</h2>
+  <p>Chaque réponse de l'IA peut être signalée avec le bouton « Signaler » ; le propriétaire de ce Syrius
+    voit les signalements.</p>
+
+  <h2>Sécurité</h2>
+  <p>Connexions chiffrées (HTTPS), mots de passe chiffrés, sessions limitées dans le temps, accès aux données
+    limité à la personne connectée.</p>
+
+  <h2>Enfants</h2>
+  <p>Syrius n'est pas destiné aux enfants de moins de 13 ans sans l'accord et la présence d'un parent.</p>
+
+  <h2>Contact</h2>
+  <p>{{CONTACT}}</p>
+</main>
+</body>
+</html>

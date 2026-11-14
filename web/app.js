@@ -28,7 +28,7 @@ function watchMsg(el) {
 }
 document.addEventListener("DOMContentLoaded", () => {
   ["#local-status", "#wake-status", "#wake-learn-msg", "#briefing-msg", "#google-msg", "#outlook-msg",
-    "#settings-msg", "#pw-msg", "#family-msg"].forEach((q) => watchMsg($(q)));
+    "#settings-msg", "#pw-msg", "#family-msg", "#del-msg"].forEach((q) => watchMsg($(q)));
   document.querySelectorAll(".pack-status").forEach(watchMsg);
 });
 
@@ -155,6 +155,15 @@ async function renderFamily(account) {
   const box = $("#family-box");
   const owner = !account || account.owner !== false;
   box.classList.toggle("hidden", !owner);
+  $("#diag-box").classList.toggle("hidden", !owner);
+  const guest = !!(account && account.guest);
+  $("#del-title").textContent = owner ? "Effacer mes discussions et ma mémoire" : "Supprimer mon compte";
+  $("#del-text").textContent = owner
+    ? "Toutes tes discussions et tout ce que Syrius a retenu sur toi seront effacés définitivement."
+    : "Ton compte, tes discussions, ta mémoire, tes réglages et tes rappels seront effacés définitivement.";
+  $("#del-password").classList.toggle("hidden", guest);
+  $("#del-msg").textContent = "";
+  if (owner) renderReports();
   $("#s-account").textContent = owner ? "Compte principal (propriétaire de ce Syrius)."
     : account.guest ? `Compte de test — accès jusqu'à ${hourText(account.expires)}, puis tout est effacé.`
     : `Compte de ${account.name} — tes discussions, ta mémoire et tes réglages sont privés.`;
@@ -193,6 +202,80 @@ async function renderFamily(account) {
   } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
 }
 
+async function renderReports() {
+  const list = $("#report-list");
+  try {
+    const items = await api("/api/reports");
+    list.textContent = "";
+    $("#report-clear").classList.toggle("hidden", !items.length);
+    if (!items.length) {
+      const li = document.createElement("li");
+      li.className = "muted small"; li.textContent = "Aucun signalement.";
+      list.append(li);
+    }
+    for (const r of items) {
+      const li = document.createElement("li");
+      li.className = "diag";
+      const t = document.createElement("strong");
+      t.textContent = `${r.who} · ${new Date(r.at * 1000).toLocaleString("fr-FR")}` + (r.reason ? ` — ${r.reason}` : "");
+      const d = document.createElement("span");
+      d.className = "small muted"; d.textContent = r.text.slice(0, 300);
+      li.append(t, d);
+      list.append(li);
+    }
+  } catch (_) { /* hors ligne */ }
+}
+$("#report-clear").addEventListener("click", async () => {
+  if (!confirm("Effacer tous les signalements ?")) return;
+  try { await api("/api/reports", { method: "DELETE" }); renderReports(); } catch (_) { /* ignore */ }
+});
+
+$("#del-run").addEventListener("click", async () => {
+  const owner = !state.settings?.account || state.settings.account.owner !== false;
+  if (!confirm(owner ? "Effacer toutes tes discussions et ta mémoire ? C'est définitif."
+    : "Supprimer ton compte et toutes tes données ? C'est définitif.")) return;
+  try {
+    const r = await api("/api/account/delete", { method: "POST",
+      body: JSON.stringify({ password: $("#del-password").value }) });
+    $("#del-password").value = "";
+    if (r.deleted === "account") {
+      store.set("syrius:loginName", "");
+      $("#settings").close();
+      showLogin();
+      $("#login-error").textContent = "Ton compte a été supprimé.";
+    } else {
+      $("#del-msg").textContent = "✅ Discussions et mémoire effacées.";
+      await loadConversations();
+      newConversationView();
+    }
+  } catch (err) { $("#del-msg").textContent = "⚠ " + err.message; }
+});
+
+$("#diag-run").addEventListener("click", async () => {
+  const btn = $("#diag-run"), list = $("#diag-list");
+  btn.disabled = true;
+  list.textContent = "";
+  const wait = document.createElement("li");
+  wait.className = "muted small"; wait.textContent = "Test en cours…";
+  list.append(wait);
+  try {
+    const r = await api("/api/diagnostic", { method: "POST" });
+    list.textContent = "";
+    for (const c of r.checks) {
+      const li = document.createElement("li");
+      li.className = "diag " + (c.ok ? "ok" : "ko");
+      const t = document.createElement("strong");
+      t.textContent = (c.ok ? "✅ " : "❌ ") + c.name;
+      const d = document.createElement("span");
+      d.className = "small muted";
+      d.textContent = `${c.detail} (${c.s} s)`;
+      li.append(t, d);
+      list.append(li);
+    }
+  } catch (err) { wait.textContent = "⚠ " + err.message; }
+  finally { btn.disabled = false; }
+});
+
 function hourText(ts) {
   if (!ts) return "";
   return new Date(ts * 1000).toLocaleString("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" });
@@ -208,7 +291,7 @@ async function shareText(text, done) {
 $("#family-test").addEventListener("click", async () => {
   try {
     const r = await api("/api/family/test-link", { method: "POST" });
-    const url = `${location.origin}/?test=${encodeURIComponent(r.link)}`;
+    const url = `${location.origin}/essai/${encodeURIComponent(r.link)}`;
     await shareText(`Essaie mon assistant Syrius pendant ${r.hours} h (aucun compte à créer) : ${url}`,
       "Lien de test copié (valable 24 h).");
     const s = await api("/api/settings");
@@ -225,7 +308,7 @@ $("#family-renew").addEventListener("click", async () => {
 });
 $("#family-share").addEventListener("click", async () => {
   const code = $("#family-code").textContent;
-  const url = `${location.origin}/?rejoindre=${encodeURIComponent(code)}`;
+  const url = `${location.origin}/rejoindre/${encodeURIComponent(code)}`;
   await shareText(`Rejoins mon assistant Syrius : ouvre ce lien et crée ton compte ${url} (code : ${code})`,
     "Invitation copiée.");
 });
@@ -380,7 +463,30 @@ function addMessage(role, text) {
   renderText(view, role);
   state.views = (state.views || []).filter((v) => v.wrap.isConnected);
   state.views.push(view);
+  if (role === "assistant") addReportButton(view);
   return view;
+}
+
+// Signaler une réponse ou une image de l'IA (règle Google Play sur l'IA générative)
+function addReportButton(view) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "msg-report";
+  btn.title = "Signaler cette réponse";
+  Icons.set(btn, "alert", "Signaler");
+  btn.addEventListener("click", async () => {
+    if (state.offline) return;
+    const reason = prompt("Signaler cette réponse : qu'est-ce qui ne va pas ? (facultatif)");
+    if (reason === null) return;
+    const imgs = [...view.wrap.querySelectorAll(".gen-image")].map((i) => "[image : " + (i.alt || "") + "]");
+    try {
+      await api("/api/report", { method: "POST", body: JSON.stringify({
+        text: ([view.text || ""].concat(imgs).join("\n") || "(vide)").slice(0, 4000), reason: reason.slice(0, 300) }) });
+      Icons.set(btn, "check", "Signalé, merci");
+      btn.disabled = true;
+    } catch (err) { Icons.set(btn, "alert", "⚠ " + err.message); }
+  });
+  view.wrap.append(btn);
 }
 
 function renderText(view, role) {
@@ -1219,7 +1325,8 @@ function refreshWakeBox() {
   }
   $("#wake-on").disabled = !w.ready;
   const canOpen = typeof Native.canOpenApps === "function" && Native.canOpenApps();
-  Icons.set($("#wake-overlay"), canOpen ? "ok" : "music", canOpen ? "Musique app fermée autorisée" : "Lancer la musique app fermée (autoriser)");
+  $("#wake-overlay").classList.add("hidden");  // plus nécessaire : la musique s'ouvre via une notification
+  void canOpen;
   $("#wake-on").checked = !!w.enabled;
   $("#wake-status").textContent = w.error ? "⚠ " + w.error
     : w.installing ? "🔒 Vérification et installation…"
@@ -1493,8 +1600,10 @@ if ("serviceWorker" in navigator) {
 (async () => {
   // Liens reçus : invitation famille (?rejoindre=CODE) ou essai de 24 h (?test=...)
   const params = new URLSearchParams(location.search);
-  const joinCode = params.get("rejoindre"), testLink = params.get("test");
-  if (joinCode || testLink) history.replaceState(null, "", "/");
+  const m = location.pathname.match(/^\/(rejoindre|essai)\/([A-Za-z0-9_-]{4,80})\/?$/);
+  const joinCode = m && m[1] === "rejoindre" ? m[2] : params.get("rejoindre");
+  const testLink = m && m[1] === "essai" ? m[2] : params.get("test");
+  if (joinCode || testLink || location.pathname !== "/") history.replaceState(null, "", "/");
   if (testLink) {
     try {
       await api("/api/family/test", { method: "POST", body: JSON.stringify({ link: testLink.slice(0, 80) }) });

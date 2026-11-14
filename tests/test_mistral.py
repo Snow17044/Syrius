@@ -91,7 +91,7 @@ def test_relais_github_et_openrouter(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "g")
     monkeypatch.setenv("GITHUB_MODELS_TOKEN", "gh")
     monkeypatch.setenv("OPENROUTER_API_KEY", "or")
-    ps = providers_from_config(Config())
+    ps = [p for p in providers_from_config(Config()) if not p.photos_only]
     names = [p.name for p in ps]
     # Les IA gratuites les plus puissantes (OpenRouter) d'abord, puis Groq, puis GitHub en relais.
     assert names[:3] == ["openrouter", "openrouter2", "groq"] and names[-2:] == ["github", "github2"]

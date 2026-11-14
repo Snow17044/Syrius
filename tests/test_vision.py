@@ -70,3 +70,26 @@ def test_vision_des_cerveaux(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "k")
     ps = {p.model: p.vision for p in providers_from_config(Config())}
     assert ps["meta-llama/llama-4-scout-17b-16e-instruct"] and not ps["openai/gpt-oss-120b"]
+
+
+def test_photo_refusee_par_une_ia_une_autre_essaie(make_client):
+    from server.llm import LLMError
+    c = make_client([reply("Une pomme rouge.")])
+    for p in c.fake.providers:
+        p.vision = True
+    c.fake.fail["groq"] = LLMError("Groq a refusé la demande (400) : image non acceptée")
+    login(c)
+    cid = c.post("/api/conversations", headers=H).json()["id"]
+    r = c.post(f"/api/conversations/{cid}/messages", json={"text": "C'est quoi ?", "image": JPEG}, headers=H)
+    assert "pomme" in r.text and [q["_provider"] for q in c.fake.requests] == ["groq", "gemini"]
+
+
+def test_relais_photos_seulement(monkeypatch):
+    from server.config import Config
+    from server.llm import ChatClient, providers_from_config
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    llm = ChatClient(providers_from_config(Config()))
+    extra = [p for p in llm.providers if p.photos_only]
+    assert extra and all(p.vision for p in extra)
+    assert not any(p.photos_only for p in llm.ordered())
+    assert any(p.photos_only for p in llm.ordered(photo=True))
