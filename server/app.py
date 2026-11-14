@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, diagnostic, family
+from . import auth, diagnostic, family, safety
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -292,6 +292,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/model3d/search", dependencies=[Depends(require_auth)])
     async def model3d_search(body: Model3DSearch):
         """Cherche de vrais modèles 3D dans la bibliothèque Poly Pizza (artistes, licences CC0 / CC-BY)."""
+        if safety.blocked(body.query):
+            raise HTTPException(400, safety.MESSAGE.split(" Propose")[0])
         try:
             results = await asyncio.to_thread(real3d.poly_search, cfg.polypizza_api_key, body.query)
         except real3d.Real3DError as e:
@@ -310,6 +312,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def model3d_generate(body: Model3DCreate, request: Request):
         """Crée une maquette texturée sur mesure (image → TRELLIS.2). Environ 1 à 2 minutes.
         Une maquette déjà créée (même objet) est réutilisée sans compter dans les quotas."""
+        if safety.blocked(body.prompt, body.key):
+            raise HTTPException(400, safety.MESSAGE.split(" Propose")[0])
         key = body.key.strip() or body.prompt
         cached = await asyncio.to_thread(family.cache_get, db.base, key)
         if cached:
