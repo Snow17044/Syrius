@@ -105,6 +105,16 @@ QA = [
     ("Quelle est la capitale de l'Australie ?", "C'est **Canberra** (et non Sydney, piège classique)."),
     ("Combien de temps faut-il pour cuire des pâtes ?", "En général **8 à 12 minutes** dans une grande casserole "
      "d'eau bouillante salée. Regarde le temps indiqué sur le paquet et goûte une minute avant la fin."),
+    ("Comment faire une pâte à pizza ?", "Pour 2 pizzas :\n- **500 g** de farine\n- **30 cl** d'eau tiède\n- **1 sachet** de "
+     "levure de boulanger\n- **1 c. à café** de sel\n- **2 c. à soupe** d'huile d'olive\n\nMélange, pétris 10 minutes, "
+     "puis laisse lever **1 h 30** sous un torchon. Étale, garnis et fais cuire **12 à 15 min à 250 °C**."),
+    ("Comment faire un gâteau au chocolat ?", "Pour 6 personnes :\n- **200 g** de chocolat noir\n- **125 g** de beurre\n"
+     "- **3** œufs\n- **100 g** de sucre\n- **50 g** de farine\n\nFais fondre le chocolat avec le beurre, ajoute le sucre, "
+     "les œufs puis la farine. Cuis **25 minutes à 180 °C**."),
+    ("Comment cuire du riz ?", "Compte **1 volume de riz pour 2 volumes d'eau**. Rince le riz, porte l'eau salée à "
+     "ébullition, verse le riz, couvre et laisse cuire **12 minutes** à feu doux, puis repose 5 minutes."),
+    ("Comment faire une vinaigrette ?", "Mélange **1 c. à soupe** de vinaigre, **1 c. à café** de moutarde, du sel et du "
+     "poivre, puis ajoute **3 c. à soupe** d'huile en fouettant."),
     ("Comment faire des crêpes ?", "Pour une douzaine de crêpes :\n- **250 g** de farine\n- **4** œufs\n- **50 cl** de "
      "lait\n- **1 pincée** de sel et **2 c. à soupe** de sucre\n- **50 g** de beurre fondu\n\nMélange farine et œufs, "
      "ajoute le lait petit à petit, puis le beurre. Laisse reposer 30 minutes et fais cuire à la poêle bien chaude."),
@@ -258,6 +268,42 @@ MODELS = [
     ("Montre la molécule d'eau en 3D", "Molécule d'eau", "water molecule",
      "a water molecule model, one red oxygen atom and two white hydrogen atoms", "molecule_eau",
      "La molécule d'eau H₂O.", ["1 atome d'oxygène", "2 atomes d'hydrogène"]),
+    ("Montre une maquette 3D d'un moulin à vent", "Moulin à vent", "windmill",
+     "a traditional windmill with a stone tower and four wooden sails", None,
+     "Un moulin à vent traditionnel.", ["Utilise la force du vent", "Servait à moudre le grain"]),
+    ("Fais-moi un ordinateur portable en 3D", "Ordinateur portable", "laptop",
+     "an open silver laptop with a black keyboard and a glowing screen", None,
+     "Un ordinateur portable ouvert.", ["Écran et clavier", "Batterie intégrée"]),
+    ("Maquette 3D d'un dinosaure", "Dinosaure", "dinosaur",
+     "a friendly green tyrannosaurus rex standing, detailed scales", None,
+     "Un tyrannosaure.", ["Vivait il y a 66 millions d'années", "Jusqu'à 12 m de long"]),
+    ("Montre-moi un piano en 3D", "Piano", "grand piano",
+     "a black glossy grand piano with white and black keys, lid open", None,
+     "Un piano à queue.", ["88 touches", "Cordes frappées par des marteaux"]),
+    ("Fais une tasse de café en 3D", "Tasse de café", "coffee cup",
+     "a white ceramic coffee cup on a saucer with hot coffee", None,
+     "Une tasse de café fumante.", ["Porcelaine", "Avec sa soucoupe"]),
+    ("Maquette 3D d'une montagne", "Montagne", "mountain",
+     "a rocky mountain with a snowy peak and green slopes", None,
+     "Une montagne au sommet enneigé.", ["Neige au sommet", "Pentes rocheuses"]),
+    ("Montre-moi un hélicoptère en 3D", "Hélicoptère", "helicopter",
+     "a red rescue helicopter with rotor blades and landing skids", None,
+     "Un hélicoptère de secours.", ["Rotor principal", "Décolle à la verticale"]),
+    ("Fais une maquette 3D d'un robot", "Robot", "robot",
+     "a friendly humanoid robot with white panels and blue lights", None,
+     "Un robot humanoïde.", ["Articulations motorisées", "Capteurs dans la tête"]),
+    ("Montre-moi une table en 3D", "Table", "wooden table",
+     "a rectangular wooden dining table with four legs", None,
+     "Une table en bois.", ["4 pieds", "Plateau rectangulaire"]),
+    ("Maquette 3D d'un train", "Train", "train",
+     "a modern high speed train, white and blue, aerodynamic nose", None,
+     "Un train à grande vitesse.", ["Jusqu'à 320 km/h", "Nez aérodynamique"]),
+    ("Montre-moi une tour de contrôle en 3D", "Tour de contrôle", "control tower",
+     "an airport control tower with a glass cabin at the top", None,
+     "Une tour de contrôle d'aéroport.", ["Cabine vitrée", "Guide les avions"]),
+    ("Fais une maquette 3D d'un cœur humain", "Cœur humain", "human heart",
+     "an anatomical human heart model, red and blue vessels", None,
+     "Le cœur humain.", ["4 cavités", "Bat environ 100 000 fois par jour"]),
     ("Une maquette 3D d'un bateau à voile", "Voilier", "sailboat",
      "a small sailboat with white sails and a wooden hull", None,
      "Un voilier avec ses voiles blanches.", ["Avance grâce au vent", "Coque en bois"]),
@@ -320,6 +366,56 @@ DIAGRAMS = [
             {"id": "p3", "label": "Se préparer", "parent": "o", "kind": "phase"},
             {"id": "p3a", "label": "Dormir 8 h", "parent": "p3", "kind": "risque", "note": "surtout la dernière semaine"}]}),
 ]
+def diag(title: str, style: str, goal: str, phases: list) -> dict:
+    """Schéma compact : objectif → phases → étapes concrètes (label, kind, note)."""
+    nodes = [{"id": "o", "label": goal, "kind": "objectif"}]
+    for i, (phase, steps) in enumerate(phases, 1):
+        pid = f"p{i}"
+        nodes.append({"id": pid, "label": phase, "parent": "o", "kind": "phase"})
+        for j, (label, kind, note) in enumerate(steps, 1):
+            n = {"id": f"{pid}e{j}", "label": label, "parent": pid, "kind": kind}
+            if note:
+                n["note"] = note
+            nodes.append(n)
+    return {"title": title, "style": style, "nodes": nodes}
+
+
+DIAGRAMS += [
+    ("Fais un schéma pour organiser un anniversaire", diag("Organiser un anniversaire", "carte", "Fête réussie", [
+        ("Préparer", [("Fixer la date", "delai", "3 semaines avant"), ("Faire la liste des invités", "etape", "")]),
+        ("Inviter", [("Envoyer les invitations", "action", "message ou carte"), ("Demander les allergies", "risque", "")]),
+        ("Organiser", [("Commander le gâteau", "budget", "30 à 50 €"), ("Préparer la décoration", "action", "ballons, guirlandes")]),
+        ("Le jour J", [("Installer la salle", "etape", "2 h avant"), ("Prévoir une playlist", "outil", "")])])),
+    ("Un schéma pour partir en vacances", diag("Préparer les vacances", "carte", "Partir sereinement", [
+        ("Réserver", [("Comparer les prix", "outil", "sites de comparaison"), ("Réserver le logement", "budget", "")]),
+        ("Préparer", [("Vérifier les papiers", "risque", "carte d'identité, passeport"), ("Faire la valise", "action", "liste la veille")]),
+        ("Avant de partir", [("Fermer l'eau et le gaz", "etape", ""), ("Confier les clés", "action", "voisin ou famille")])])),
+    ("Fais un plan pour perdre du poids sainement", diag("Perdre du poids sainement", "carte", "Retrouver la forme", [
+        ("Alimentation", [("Manger plus de légumes", "action", "la moitié de l'assiette"), ("Limiter le sucre", "risque", "sodas, gâteaux")]),
+        ("Activité", [("Marcher 30 min par jour", "action", ""), ("Faire 2 séances de sport", "etape", "par semaine")]),
+        ("Suivi", [("Se peser 1 fois par semaine", "outil", "même jour, même heure"), ("Demander conseil au médecin", "personne", "")])])),
+    ("Schéma pour apprendre à coder", diag("Apprendre à programmer", "etapes", "Créer ma première appli", [
+        ("Bases", [("Choisir Python", "outil", "gratuit, facile"), ("Suivre un cours en ligne", "action", "30 min par jour")]),
+        ("Pratique", [("Faire de petits exercices", "action", ""), ("Créer un mini-jeu", "etape", "2 semaines")]),
+        ("Projet", [("Imaginer une appli utile", "idee", ""), ("La montrer à des amis", "personne", "")])])),
+    ("Organise mon ménage de la semaine en schéma", diag("Ménage de la semaine", "etapes", "Maison propre sans stress", [
+        ("Lundi", [("Lancer une lessive", "action", ""), ("Ranger le salon", "etape", "15 min")]),
+        ("Mercredi", [("Nettoyer la salle de bain", "action", "")]),
+        ("Samedi", [("Passer l'aspirateur", "action", ""), ("Changer les draps", "etape", "")])])),
+    ("Fais un schéma pour économiser 1000 euros", diag("Économiser 1000 €", "carte", "1000 € de côté en 1 an", [
+        ("Analyser", [("Lister ses dépenses", "outil", "relevés de compte"), ("Repérer les abonnements inutiles", "risque", "")]),
+        ("Épargner", [("Virer 85 € par mois", "budget", "dès le salaire"), ("Ouvrir un livret", "action", "livret A, gratuit")]),
+        ("Tenir", [("Suivre chaque mois", "delai", ""), ("Fêter chaque palier", "idee", "")])])),
+    ("Schéma de l'organisation de ma famille", diag("Organisation familiale", "arbre", "Vie de famille", [
+        ("Courses", [("Faire la liste ensemble", "action", "le dimanche")]),
+        ("Repas", [("Planifier les menus", "outil", "pour la semaine")]),
+        ("Tâches", [("Répartir les corvées", "personne", "tableau sur le frigo"), ("Changer chaque mois", "delai", "")])])),
+    ("Schéma pour réussir un entretien d'embauche", diag("Réussir mon entretien", "etapes", "Décrocher le poste", [
+        ("Avant", [("Étudier l'entreprise", "etape", "site, actualités"), ("Préparer 3 exemples", "action", "réussites concrètes")]),
+        ("Pendant", [("Arriver 10 min en avance", "delai", ""), ("Poser une question", "action", "à la fin")]),
+        ("Après", [("Envoyer un message de remerciement", "action", "le jour même")])])),
+]
+
 CONTACTS = ["maman", "papa", "Léa", "Lucas", "mamie", "Thomas", "Inès", "le docteur Martin", "mon frère", "Chloé"]
 MUSIC = [("Mets du Daft Punk", "play", "Daft Punk", "auto"), ("Lance Bohemian Rhapsody", "play", "Queen Bohemian Rhapsody", "auto"),
          ("Joue Stromae sur Spotify", "play", "Stromae", "spotify"), ("Mets de la musique relaxante", "play", "musique relaxante", "auto"),
@@ -414,7 +510,7 @@ def build(seed: int = 7) -> list[dict]:
         for intro in ("Je prépare la maquette 3D.", "Voici la maquette, je la construis.", "Je te montre ça en 3D."):
             out.append(conv(rng, q, f"{intro}\n" + call("show_model", args)))
     for q, d in DIAGRAMS:
-        for intro in ("Voici un plan d'action en schéma 3D.", "Je te dessine le schéma."):
+        for intro in ("Voici un plan d'action en schéma 3D.", "Je te dessine le schéma.", "Je t'organise ça en schéma."):
             out.append(conv(rng, q, f"{intro}\n" + call("show_diagram", d)))
 
     for _ in range(40):  # rappels

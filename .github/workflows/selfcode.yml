@@ -33,8 +33,9 @@ jobs:
       - name: Une demande en attente ?
         id: next
         env:
-          SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN }}
+          SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN || secrets.SYRIUS_TRAINING_KEY || vars.SYRIUS_TRAINING_TOKEN || vars.SYRIUS_TRAINING_KEY }}
         run: |
+          [ -n "$SYRIUS_TRAINING_TOKEN" ] && echo "::add-mask::$SYRIUS_TRAINING_TOKEN"
           if [ -z "$SYRIUS_TRAINING_TOKEN" ]; then echo "Clé d'entraînement absente."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           python3 selfcode/agent.py next
 
@@ -81,7 +82,7 @@ jobs:
       - name: Résultat vers le tableau de bord
         if: always() && steps.next.outputs.go == 'true'
         env:
-          SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN }}
+          SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN || secrets.SYRIUS_TRAINING_KEY || vars.SYRIUS_TRAINING_TOKEN || vars.SYRIUS_TRAINING_KEY }}
         run: |
           if [ -n "${{ steps.pr.outputs.url }}" ]; then
             python3 selfcode/agent.py report proposed "${{ steps.pr.outputs.url }}"

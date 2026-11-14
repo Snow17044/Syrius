@@ -22,6 +22,9 @@ android {
         versionName "1.0." + (System.getenv("SYRIUS_VERSION_CODE") ?: "1")
         // Adresse de ton Syrius, pré-remplie au premier lancement (variable GitHub SYRIUS_URL).
         buildConfigField "String", "DEFAULT_URL", "\"" + syriusUrl + "\""
+        // Dépôt GitHub d'où vient notre IA Syrius (fichier du modèle, dans les « Releases »).
+        def repo = System.getenv("GITHUB_REPOSITORY") ?: "Snow17044/Syrius"
+        buildConfigField "String", "SYRIUS_REPO", "\"" + (repo ==~ /[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/ ? repo : "Snow17044/Syrius") + "\""
         manifestPlaceholders = [linkHost: linkHost]
         // Téléphones Android 64 bits (ARM) uniquement : application plus légère.
         ndk {

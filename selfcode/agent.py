@@ -24,7 +24,12 @@ WORK = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "selfcode"
 MODELS = [m.strip() for m in os.environ.get(
     "SYRIUS_CODER_MODELS", "qwen/qwen3-coder:free,nvidia/nemotron-3-ultra-550b-a55b:free,google/gemma-4-31b-it:free"
 ).split(",") if m.strip()]
-RULES = """Tu modifies le code de Syrius, un assistant personnel (serveur Python FastAPI dans server/, interface web
+RULES = """{guide}
+
+Conseils du propriétaire (appris des essais précédents, à respecter) :
+{lessons}
+
+Tu modifies le code de Syrius, un assistant personnel (serveur Python FastAPI dans server/, interface web
 dans web/, application Android dans android/). Règles strictes :
 - Fais UNIQUEMENT le changement demandé, le plus petit et le plus propre possible.
 - Interface et messages en français. Garde le style existant.
@@ -78,13 +83,13 @@ def run_tests() -> tuple[bool, str]:
     return p.returncode == 0, tail
 
 
-def pick_model() -> str:
+def pick_model(preferred: str = "") -> str:
     try:
         with urllib.request.urlopen("https://openrouter.ai/api/v1/models", timeout=30) as r:  # nosec B310
             ids = {m["id"] for m in json.loads(r.read())["data"]}
     except Exception:  # noqa: BLE001
         ids = set()
-    for m in MODELS:
+    for m in ([preferred] if preferred else []) + MODELS:
         if not ids or m in ids:
             return m
     return MODELS[0]
@@ -116,9 +121,14 @@ def cmd_next() -> None:
 
 def cmd_code() -> None:
     item = json.loads((WORK / "request.json").read_text(encoding="utf-8"))
-    model = pick_model()
+    model = pick_model(item.get("model") or "")
     print(f"IA programmeuse : {model}")
-    message = RULES.format(forbidden=", ".join(forbidden()), request=item["text"])
+    guide = (ROOT / "selfcode" / "GUIDE.md").read_text(encoding="utf-8")
+    lessons = "\n".join(f"- {x}" for x in item.get("lessons", [])[:40]) or "- (aucun pour l'instant)"
+
+    def base_message() -> str:
+        return RULES.format(guide=guide, lessons=lessons, forbidden=", ".join(forbidden()), request=item["text"])
+    message = base_message()
     result = {"ok": False, "summary": "", "tests": "", "model": model}
     for attempt in range(1, 4):
         aider(model, message)
@@ -126,7 +136,7 @@ def cmd_code() -> None:
         if bad:
             subprocess.run(["git", "checkout", "--", "."], cwd=ROOT, check=False)
             subprocess.run(["git", "clean", "-fdq"], cwd=ROOT, check=False)
-            message = RULES.format(forbidden=", ".join(forbidden()), request=item["text"]) + \
+            message = base_message() + \
                 "\nATTENTION : ton essai précédent a été annulé car il modifiait : " + "; ".join(bad)
             result["summary"] = "Refusé : " + "; ".join(bad)
             continue

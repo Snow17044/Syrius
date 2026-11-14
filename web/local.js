@@ -24,6 +24,7 @@
   }
 
   function ready() {
+    if (syriusReady()) return true;
     const i = info();
     return !!(i && i.installed && !i.verifying);
   }
@@ -35,6 +36,29 @@
     set force(v) { try { localStorage.setItem("syrius:local:force", v ? "1" : "0"); } catch (_) { /* */ } },
   };
 
+  // NOTRE IA Syrius (entraînée pour Syrius : caractère, outils). Même consigne que pendant son entraînement.
+  const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+  const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+    "novembre", "décembre"];
+  const TOOLS_LINE = "show_diagram, show_model, phone_image, phone_reminder, phone_alarm, phone_timer, phone_call, " +
+    "phone_sms, phone_music, phone_map, phone_open_app, phone_flashlight, phone_volume, phone_calendar, remember";
+  function syriusSystem(name) {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+    const who = name ? `de ${name}` : "de ton utilisateur";
+    return `Tu es Syrius, l'assistant personnel ${who}. Tu réponds en français, en tutoyant, de façon ` +
+      `chaleureuse et concise, avec une pointe d'humour fin. Nous sommes le ${JOURS[d.getDay()]} ${d.getDate()} ` +
+      `${MOIS[d.getMonth()]} ${d.getFullYear()}, il est ${hh}:${mm}. Pour agir, écris une courte phrase puis ` +
+      `<tool_call>{"name": ..., "arguments": {...}}</tool_call>. Outils : ${TOOLS_LINE}. ` +
+      "Jamais de contenu sexuel ni violent.";
+  }
+  function syriusReady() {
+    const n = native();
+    if (!n || typeof n.syriusChat !== "function") return false;
+    const p = packs();
+    return !!(p && p.syrius && p.syrius.installed);
+  }
+
   /** Envoie la conversation au modèle local ; onText(texteComplet) à chaque morceau. */
   function chat(messages, onText) {
     return new Promise((resolve, reject) => {
@@ -42,6 +66,15 @@
       const msgs = messages.filter((m) => m && m.text).slice(-12)
         .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", text: String(m.text).slice(0, 2000) }));
       pending.set(id, { text: "", onText, resolve, reject });
+      if (syriusReady() && !SYSTEM_OVERRIDE.value) {  // notre IA en priorité : elle sait aussi agir
+        const r = native().syriusChat(id, JSON.stringify({ system: syriusSystem(chat.userName || ""), messages: msgs }));
+        if (r !== "ok") { pending.delete(id); reject(new Error(r || "Syrius indisponible")); }
+        chat.current = id;
+        chat.vision = false;
+        chat.syrius = true;
+        return;
+      }
+      chat.syrius = false;
       const sys = SYSTEM_OVERRIDE.value || SYSTEM + (window.SyriusVoice && window.SyriusVoice.active
         ? " Ta réponse sera lue à voix haute : 1 à 3 phrases simples, sans liste ni Markdown." : "");
       const r = native().localChat(id, JSON.stringify({ system: sys, messages: msgs }));
@@ -54,6 +87,7 @@
   function stop() {
     if (chat.current && available()) {
       if (chat.vision && typeof native().visionStop === "function") native().visionStop();
+      else if (chat.syrius && typeof native().syriusStop === "function") native().syriusStop();
       else native().localStop(chat.current);
     }
     const p = pending.get(chat.current);
@@ -139,6 +173,6 @@
     if (done) { pending.delete(id); p.resolve(p.text); }
   }
 
-  window.SyriusLocal = { available, info, ready, prefs, chat, stop, _chunk, packs, visionReady, imageReady,
+  window.SyriusLocal = { available, info, ready, prefs, chat, stop, _chunk, packs, visionReady, imageReady, syriusReady,
     askPhoto, wantsImage, imagePrompt, makeImage, saveImage, _image };
 })();

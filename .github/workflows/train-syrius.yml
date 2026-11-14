@@ -23,11 +23,12 @@ jobs:
     timeout-minutes: 350
     env:
       SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
-      SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN }}
+      SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN || secrets.SYRIUS_TRAINING_KEY || vars.SYRIUS_TRAINING_TOKEN || vars.SYRIUS_TRAINING_KEY }}
     steps:
       - name: Faut-il entraîner cette nuit ?
         id: check
         run: |
+          [ -n "$SYRIUS_TRAINING_TOKEN" ] && echo "::add-mask::$SYRIUS_TRAINING_TOKEN"
           go=true
           if [ "${{ github.event_name }}" = "schedule" ]; then
             go=false

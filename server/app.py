@@ -41,7 +41,7 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
 MAX_MESSAGE_CHARS = 20000
 # Empreintes (publiques) des clés qui signent l'application Android : clé de la CI et clé Google Play.
 ANDROID_CERTS: list[str] = [
-    "E4:30:06:4D:B0:68:BA:81:FB:B5:B3:61:F8:61:87:8F:9A:B8:7F:DD:D4:FD:C2:78:14:D7:82:95:2B:60:24:CD",  # clé Syrius
+    # (la nouvelle empreinte est ajoutée après la création de la nouvelle clé de signature)
 ]
 
 
@@ -96,6 +96,14 @@ class AccountDelete(BaseModel):
 
 class SelfCodeBody(BaseModel):
     text: str = Field(min_length=10, max_length=1500)
+
+
+class LessonBody(BaseModel):
+    text: str = Field(min_length=5, max_length=400)
+
+
+class CoderModelBody(BaseModel):
+    model: str = Field(default="", max_length=100)
 
 
 class ExampleBody(BaseModel):
@@ -562,6 +570,38 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if not selfcode.cancel(db.base, iid[:20]):
             raise HTTPException(404, "Demande introuvable ou déjà prise en charge")
         return {"ok": True}
+
+    @app.get("/api/selfcode/settings", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_settings():
+        return selfcode.settings(db.base)
+
+    @app.post("/api/selfcode/lessons", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_lesson(body: LessonBody):
+        try:
+            return selfcode.add_lesson(db.base, body.text)
+        except selfcode.SelfCodeError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.delete("/api/selfcode/lessons/{lid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_lesson_delete(lid: str):
+        if not selfcode.delete_lesson(db.base, lid[:20]):
+            raise HTTPException(404, "Conseil introuvable")
+        return {"ok": True}
+
+    @app.put("/api/selfcode/model", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_model(body: CoderModelBody):
+        try:
+            selfcode.set_model(db.base, body.model)
+        except selfcode.SelfCodeError as e:
+            raise HTTPException(400, str(e)) from None
+        return {"ok": True}
+
+    @app.post("/api/selfcode/{iid}/retry", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_retry(iid: str, body: LessonBody):
+        try:
+            return selfcode.retry(db.base, iid[:20], body.text)
+        except selfcode.SelfCodeError as e:
+            raise HTTPException(400, str(e)) from None
 
     @app.post("/api/training/worker/code-next", dependencies=[Depends(require_trainer)])
     async def selfcode_next():
