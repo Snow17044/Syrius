@@ -1,0 +1,21 @@
+name: Vérification ponctuelle (API LiteRT-LM)
+on:
+  push:
+    branches: ["claude/**"]
+    paths: [".github/workflows/probe-litertlm.yml"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - run: |
+          curl -sS https://dl.google.com/android/maven2/com/google/ai/edge/litertlm/litertlm-android/maven-metadata.xml | grep -o '<version>[^<]*' | tail -6
+          for v in 0.19.1; do
+            curl -sS -o a.aar "https://dl.google.com/android/maven2/com/google/ai/edge/litertlm/litertlm-android/$v/litertlm-android-$v.aar"
+            unzip -q -o a.aar classes.jar && mkdir -p c && cd c && unzip -q -o ../classes.jar && cd ..
+            for k in ConversationConfig Message Message\$Companion Conversation Contents\$Companion SamplerConfig EngineConfig; do
+              echo "=== $k"; javap -cp c "com.google.ai.edge.litertlm.$k" | grep -v '^Compiled' | head -30
+            done
+          done
