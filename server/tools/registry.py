@@ -7,6 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import Config
+from .. import family
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
@@ -141,7 +142,7 @@ TOOL_LABELS = {
 def build_tools(cfg: Config, settings: dict) -> list[dict]:
     """Liste triée et stable (important pour le cache)."""
     tools = list(BASE_TOOLS) + DEVICE_TOOLS
-    if cfg.email_enabled:
+    if family.email_allowed(cfg):
         tools += EMAIL_TOOLS
     if settings.get("internet", True):
         tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL, WEATHER_TOOL]
@@ -210,7 +211,7 @@ class ToolExecutor:
             ok = self.db.delete_memory(a["memory_id"])
             return ("Souvenir supprimé." if ok else "Ce souvenir n'existe pas."), not ok, None
 
-        if not self.cfg.email_enabled and name in {"list_emails", "search_emails", "read_email", "draft_email"}:
+        if not family.email_allowed(self.cfg) and name in {"list_emails", "search_emails", "read_email", "draft_email"}:
             return "Les emails ne sont pas configurés.", True, None
 
         if name == "list_emails":

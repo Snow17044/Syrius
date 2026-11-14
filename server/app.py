@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth
+from . import auth, family
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -42,6 +42,13 @@ MAX_MESSAGE_CHARS = 20000
 
 class LoginBody(BaseModel):
     password: str = Field(max_length=256)
+    name: str = Field(default="", max_length=40)  # vide = propriétaire ; prénom = membre de la famille
+
+
+class JoinBody(BaseModel):
+    code: str = Field(min_length=4, max_length=40)
+    name: str = Field(min_length=1, max_length=40)
+    password: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
 
 
 class MessageBody(BaseModel):
@@ -61,6 +68,7 @@ class Model3DSearch(BaseModel):
 
 class Model3DCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=300)
+    key: str = Field(default="", max_length=80)  # mots-clés de l'objet : maquette déjà créée réutilisée
 
 
 class ConversationPatch(BaseModel):
@@ -122,6 +130,8 @@ def open_database(cfg: Config):
 def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -> FastAPI:
     cfg = cfg or default_config
     db = db or open_database(cfg)
+    if not isinstance(db, family.ScopedDB):  # chaque membre de la famille a son espace privé
+        db = family.ScopedDB(db, family.space_factory(db, cfg.data_dir))
     agent = agent or Agent(cfg, db)
     if agent.db is not db:
         agent.db = db
@@ -170,9 +180,20 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                 return real.split(",")[0].strip()[:64]
         return request.client.host if request.client else "unknown"
 
-    def require_auth(request: Request) -> None:
-        if not auth.check_session(db, request.cookies.get(auth.COOKIE_NAME)):
+    async def require_auth(request: Request) -> None:
+        uid = auth.session_user(db, request.cookies.get(auth.COOKIE_NAME))
+        if uid is None:
             raise HTTPException(status_code=401, detail="Non connecté")
+        family.CURRENT.set(uid)  # toutes les données de la requête vont dans l'espace de cette personne
+        request.state.uid = uid
+
+    def require_owner(request: Request) -> None:
+        if getattr(request.state, "uid", None) != family.OWNER:
+            raise HTTPException(403, "Réservé au propriétaire de Syrius.")
+
+    def set_session_cookie(resp, token: str) -> None:
+        resp.set_cookie(auth.COOKIE_NAME, token, max_age=cfg.session_days * 86400, httponly=True,
+                        secure=cfg.cookie_secure, samesite="strict", path="/")
 
     # ------------------------------------------------------------------ pages
     @app.get("/")
@@ -242,14 +263,24 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return Response(data, media_type=GLB_TYPE, headers={"Cache-Control": "private, max-age=86400"})
 
     @app.post("/api/model3d/generate", dependencies=[Depends(require_auth)])
-    async def model3d_generate(body: Model3DCreate):
-        """Crée une maquette texturée sur mesure (image → TRELLIS.2). Environ 1 à 2 minutes."""
+    async def model3d_generate(body: Model3DCreate, request: Request):
+        """Crée une maquette texturée sur mesure (image → TRELLIS.2). Environ 1 à 2 minutes.
+        Une maquette déjà créée (même objet) est réutilisée sans compter dans les quotas."""
+        key = body.key.strip() or body.prompt
+        cached = await asyncio.to_thread(family.cache_get, db.base, key)
+        if cached:
+            return Response(cached, media_type=GLB_TYPE, headers={"Cache-Control": "no-store", "X-Syrius-Cache": "1"})
         if not cfg.hf_token:
             raise HTTPException(503, "création 3D non configurée (clé HF_TOKEN absente)")
+        uid = request.state.uid
+        if family.quota_left(db.base, "m3d", uid) <= 0:
+            raise HTTPException(429, "ta part de créations 3D du jour est utilisée (réessaie demain)")
         try:
             data = await asyncio.to_thread(real3d.trellis_generate, cfg.hf_token, body.prompt)
         except (real3d.Real3DError, imagegen.ImageGenError) as e:
             raise HTTPException(502, str(e)) from None
+        family.quota_use(db.base, "m3d", uid)
+        await asyncio.to_thread(family.cache_put, db.base, key, data)
         return Response(data, media_type=GLB_TYPE, headers={"Cache-Control": "no-store"})
 
     @app.post("/api/image", dependencies=[Depends(require_auth)])
@@ -289,7 +320,9 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/api/session")
     async def session(request: Request):
         password_set = auth.password_is_set(db)
-        return {"authenticated": auth.check_session(db, request.cookies.get(auth.COOKIE_NAME)),
+        uid = auth.session_user(db, request.cookies.get(auth.COOKIE_NAME))
+        return {"authenticated": uid is not None, "owner": uid == family.OWNER,
+                "member_name": family.member_name(db.base, uid) if uid else "",
                 "password_set": password_set, "setup_available": not password_set and bool(cfg.setup_code)}
 
     @app.post("/api/setup")
@@ -312,14 +345,46 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         ip = client_ip(request)
         if auth.is_locked_out(db, ip):
             raise HTTPException(429, "Trop d'essais. Réessaie dans 15 minutes.")
-        token = await asyncio.to_thread(auth.login, db, ip, body.password, cfg.session_days)
+        token = await asyncio.to_thread(auth.login, db, ip, body.password, cfg.session_days, body.name)
         if not token:
             await asyncio.sleep(1)  # ralentit les attaques par force brute
-            raise HTTPException(401, "Mot de passe incorrect")
+            raise HTTPException(401, "Prénom ou mot de passe incorrect" if body.name.strip() else "Mot de passe incorrect")
         resp = JSONResponse({"ok": True})
-        resp.set_cookie(auth.COOKIE_NAME, token, max_age=cfg.session_days * 86400, httponly=True,
-                        secure=cfg.cookie_secure, samesite="strict", path="/")
+        set_session_cookie(resp, token)
         return resp
+
+    # ------------------------------------------------------------------ famille
+    @app.post("/api/family/join")
+    async def family_join(body: JoinBody, request: Request):
+        """Un proche crée son compte avec le code d'invitation (le propriétaire n'a rien à faire)."""
+        ip = client_ip(request)
+        if auth.is_locked_out(db, ip):
+            raise HTTPException(429, "Trop d'essais. Réessaie dans 15 minutes.")
+        try:
+            uid = await asyncio.to_thread(family.join, db.base, body.code, body.name, body.password)
+        except family.FamilyError as e:
+            if "invitation" in str(e):
+                db.record_failed_login(ip)
+                await asyncio.sleep(1)
+            raise HTTPException(400, str(e)) from None
+        resp = JSONResponse({"ok": True})
+        set_session_cookie(resp, auth.new_session(db, uid, cfg.session_days))
+        return resp
+
+    @app.get("/api/family", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def family_info():
+        return {"code": family.invite_code(db.base), "members": family.members(db.base),
+                "max": family.MAX_MEMBERS}
+
+    @app.post("/api/family/code", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def family_new_code():
+        return {"code": family.invite_code(db.base, renew=True)}
+
+    @app.delete("/api/family/{uid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def family_remove(uid: str):
+        if not family.remove_member(db.base, uid[:20]):
+            raise HTTPException(404, "Compte introuvable")
+        return {"ok": True}
 
     @app.post("/api/logout")
     async def logout(request: Request):
@@ -330,6 +395,12 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
     @app.post("/api/password", dependencies=[Depends(require_auth)])
     async def change_password(body: PasswordChange, request: Request):
+        if request.state.uid:  # membre de la famille : son propre mot de passe
+            try:
+                await asyncio.to_thread(family.set_member_password, db.base, request.state.uid, body.current, body.new)
+            except family.FamilyError as e:
+                raise HTTPException(403, str(e)) from None
+            return {"ok": True, "detail": "Mot de passe changé."}
         stored = db.get_secret(auth.PASSWORD_KEY)
         if not stored or not await asyncio.to_thread(auth.verify_password, body.current, stored):
             raise HTTPException(403, "Mot de passe actuel incorrect")
@@ -408,7 +479,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         # Passage atomique pending -> sending : impossible d'envoyer deux fois.
         if not db.set_action_status(aid, "sending"):
             raise HTTPException(409, "Action déjà traitée.")
-        if action["kind"] != "send_email":
+        if action["kind"] != "send_email" or not family.email_allowed(cfg):
             raise HTTPException(400)
         p = action["payload"]
         try:
@@ -430,9 +501,11 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
     # ------------------------------------------------------------------ réglages & mémoire
     @app.get("/api/settings", dependencies=[Depends(require_auth)])
-    async def get_settings():
-        return {**db.get_settings(), "email_enabled": cfg.email_enabled,
-                "outlook": cfg.email_mode == "outlook" and bool(cfg.ms_client_id),
+    async def get_settings(request: Request):
+        uid = request.state.uid
+        return {**db.get_settings(), "email_enabled": family.email_allowed(cfg),
+                "account": {"owner": uid == family.OWNER, "name": family.member_name(db.base, uid)},
+                "outlook": cfg.email_mode == "outlook" and bool(cfg.ms_client_id) and uid == family.OWNER,
                 "google": cfg.email_mode == "google",
                 "google_connected": cfg.email_mode == "google" and gmail.is_connected(db),
                 "web_search_available": True}
@@ -448,7 +521,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/email/google/start", dependencies=[Depends(require_auth)])
     async def google_start(request: Request):
         try:
-            return {"url": await asyncio.to_thread(gmail.start_url, cfg, db, google_redirect_uri(request))}
+            prefix = request.state.uid + "." if request.state.uid else ""
+            return {"url": await asyncio.to_thread(gmail.start_url, cfg, db, google_redirect_uri(request), prefix)}
         except EmailError as e:
             raise HTTPException(400, str(e)) from None
 
@@ -458,6 +532,10 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             ok, text = False, "Connexion annulée."
         else:
             try:
+                uid = state.split(".", 1)[0] if "." in state else ""
+                if not family.member_exists(db.base, uid):
+                    raise EmailError("Compte introuvable.")
+                family.CURRENT.set(uid)  # retour de Google : on revient dans l'espace de la bonne personne
                 await asyncio.to_thread(gmail.finish, cfg, db, code[:1000], state[:200], google_redirect_uri(request))
                 ok, text = True, "Gmail est connecté à Syrius."
             except EmailError as e:
@@ -476,14 +554,14 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         gmail.disconnect(db)
         return {"ok": True}
 
-    @app.post("/api/email/outlook/start", dependencies=[Depends(require_auth)])
+    @app.post("/api/email/outlook/start", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def outlook_login_start():
         try:
             return await asyncio.to_thread(outlook_start, cfg, db)
         except EmailError as e:
             raise HTTPException(400, str(e)) from None
 
-    @app.post("/api/email/outlook/poll", dependencies=[Depends(require_auth)])
+    @app.post("/api/email/outlook/poll", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def outlook_login_poll():
         try:
             return {"status": await asyncio.to_thread(outlook_poll, cfg, db)}

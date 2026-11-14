@@ -50,12 +50,13 @@ class UpstashREST:
 
 
 class RedisDatabase:
-    def __init__(self, cmd: Callable[..., Any]):
+    def __init__(self, cmd: Callable[..., Any], prefix: str = P):
         self.r = cmd
+        self.p = prefix  # chaque membre de la famille a son propre espace de clés
 
     # --- utilitaires ---------------------------------------------------
     def _hgetall(self, key: str) -> dict:
-        flat = self.r("HGETALL", P + key) or []
+        flat = self.r("HGETALL", self.p + key) or []
         if isinstance(flat, dict):
             return flat
         return dict(zip(flat[0::2], flat[1::2]))
@@ -64,21 +65,21 @@ class RedisDatabase:
     def create_conversation(self, title: str = "Nouvelle discussion") -> dict:
         now = time.time()
         conv = {"id": uuid.uuid4().hex, "title": title, "created_at": now, "updated_at": now, "pinned": 0}
-        self.r("SET", P + "conv:" + conv["id"], json.dumps(conv, ensure_ascii=False))
-        self.r("ZADD", P + "convs", now, conv["id"])
+        self.r("SET", self.p + "conv:" + conv["id"], json.dumps(conv, ensure_ascii=False))
+        self.r("ZADD", self.p + "convs", now, conv["id"])
         return conv
 
     def get_conversation(self, cid: str) -> dict | None:
         if not cid.isalnum() or len(cid) > 64:
             return None
-        raw = self.r("GET", P + "conv:" + cid)
+        raw = self.r("GET", self.p + "conv:" + cid)
         return json.loads(raw) if raw else None
 
     def _save_conv(self, conv: dict) -> None:
-        self.r("SET", P + "conv:" + conv["id"], json.dumps(conv, ensure_ascii=False))
+        self.r("SET", self.p + "conv:" + conv["id"], json.dumps(conv, ensure_ascii=False))
 
     def list_conversations(self, query: str = "") -> list[dict]:
-        ids = self.r("ZREVRANGE", P + "convs", 0, 199) or []
+        ids = self.r("ZREVRANGE", self.p + "convs", 0, 199) or []
         convs = [c for c in (self.get_conversation(i) for i in ids) if c]
         if query:
             q = query.lower()
@@ -101,32 +102,32 @@ class RedisDatabase:
         if conv:
             conv["updated_at"] = time.time()
             self._save_conv(conv)
-            self.r("ZADD", P + "convs", conv["updated_at"], cid)
+            self.r("ZADD", self.p + "convs", conv["updated_at"], cid)
 
     def delete_conversation(self, cid: str) -> bool:
         if not self.get_conversation(cid):
             return False
-        self.r("DEL", P + "conv:" + cid)
-        self.r("DEL", P + "msgs:" + cid)
-        self.r("ZREM", P + "convs", cid)
+        self.r("DEL", self.p + "conv:" + cid)
+        self.r("DEL", self.p + "msgs:" + cid)
+        self.r("ZREM", self.p + "convs", cid)
         return True
 
     # --- Messages ------------------------------------------------------
     def add_messages(self, cid: str, messages: list[dict]) -> None:
         now = time.time()
         if messages:
-            self.r("RPUSH", P + "msgs:" + cid, *[json.dumps({"role": m["role"], "content": m["content"],
+            self.r("RPUSH", self.p + "msgs:" + cid, *[json.dumps({"role": m["role"], "content": m["content"],
                                                              "created_at": now}, ensure_ascii=False)
                                                  for m in messages])
         self.touch_conversation(cid)
 
     def get_messages(self, cid: str) -> list[dict]:
-        return [json.loads(x) for x in (self.r("LRANGE", P + "msgs:" + cid, 0, -1) or [])]
+        return [json.loads(x) for x in (self.r("LRANGE", self.p + "msgs:" + cid, 0, -1) or [])]
 
     # --- Mémoire long terme -------------------------------------------
     def add_memory(self, content: str) -> int:
-        mid = int(self.r("INCR", P + "memory_seq"))
-        self.r("HSET", P + "memories", mid, json.dumps({"id": mid, "content": content[:500],
+        mid = int(self.r("INCR", self.p + "memory_seq"))
+        self.r("HSET", self.p + "memories", mid, json.dumps({"id": mid, "content": content[:500],
                                                         "created_at": time.time()}, ensure_ascii=False))
         return mid
 
@@ -135,7 +136,7 @@ class RedisDatabase:
         return sorted(items, key=lambda m: m["id"])
 
     def delete_memory(self, mid: int) -> bool:
-        return int(self.r("HDEL", P + "memories", mid) or 0) > 0
+        return int(self.r("HDEL", self.p + "memories", mid) or 0) > 0
 
     # --- Réglages ------------------------------------------------------
     def get_settings(self) -> dict:
@@ -147,48 +148,48 @@ class RedisDatabase:
 
     def update_settings(self, values: dict) -> dict:
         for key, val in validate_settings(values).items():
-            self.r("HSET", P + "settings", key, json.dumps(val))
+            self.r("HSET", self.p + "settings", key, json.dumps(val))
         return self.get_settings()
 
     # --- Secrets -------------------------------------------------------
     def get_secret(self, key: str) -> str | None:
-        return self.r("HGET", P + "secrets", key)
+        return self.r("HGET", self.p + "secrets", key)
 
     def set_secret(self, key: str, value: str) -> None:
-        self.r("HSET", P + "secrets", key, value)
+        self.r("HSET", self.p + "secrets", key, value)
 
     # --- Sessions & connexion -----------------------------------------
     def add_session(self, token_hash: str, ttl: float) -> None:
-        self.r("SET", P + "session:" + token_hash, "1", "EX", int(ttl))
-        self.r("SADD", P + "sessions", token_hash)
+        self.r("SET", self.p + "session:" + token_hash, "1", "EX", int(ttl))
+        self.r("SADD", self.p + "sessions", token_hash)
 
     def session_valid(self, token_hash: str) -> bool:
-        return self.r("GET", P + "session:" + token_hash) is not None
+        return self.r("GET", self.p + "session:" + token_hash) is not None
 
     def delete_session(self, token_hash: str) -> None:
-        self.r("DEL", P + "session:" + token_hash)
-        self.r("SREM", P + "sessions", token_hash)
+        self.r("DEL", self.p + "session:" + token_hash)
+        self.r("SREM", self.p + "sessions", token_hash)
 
     def delete_all_sessions(self) -> None:
-        for h in self.r("SMEMBERS", P + "sessions") or []:
-            self.r("DEL", P + "session:" + h)
-        self.r("DEL", P + "sessions")
+        for h in self.r("SMEMBERS", self.p + "sessions") or []:
+            self.r("DEL", self.p + "session:" + h)
+        self.r("DEL", self.p + "sessions")
 
     def record_failed_login(self, ip: str) -> None:
-        key = P + "fails:" + ip[:64]
+        key = self.p + "fails:" + ip[:64]
         self.r("INCR", key)
         self.r("EXPIRE", key, 15 * 60)
 
     def failed_logins_since(self, ip: str, since: float) -> int:
-        return int(self.r("GET", P + "fails:" + ip[:64]) or 0)
+        return int(self.r("GET", self.p + "fails:" + ip[:64]) or 0)
 
     def clear_failed_logins(self, ip: str) -> None:
-        self.r("DEL", P + "fails:" + ip[:64])
+        self.r("DEL", self.p + "fails:" + ip[:64])
 
     # --- Actions en attente de confirmation ----------------------------
     def add_pending_action(self, kind: str, payload: dict) -> str:
         aid = uuid.uuid4().hex
-        self.r("SET", P + "action:" + aid, json.dumps({"id": aid, "kind": kind, "payload": payload,
+        self.r("SET", self.p + "action:" + aid, json.dumps({"id": aid, "kind": kind, "payload": payload,
                                                        "status": "pending", "created_at": time.time()},
                                                       ensure_ascii=False), "EX", 7 * 86400)
         return aid
@@ -196,7 +197,7 @@ class RedisDatabase:
     def get_pending_action(self, aid: str) -> dict | None:
         if not aid.isalnum() or len(aid) > 64:
             return None
-        raw = self.r("GET", P + "action:" + aid)
+        raw = self.r("GET", self.p + "action:" + aid)
         return json.loads(raw) if raw else None
 
     def set_action_status(self, aid: str, status: str, expected: str = "pending") -> bool:
@@ -205,10 +206,10 @@ class RedisDatabase:
             return False
         if expected == "pending":
             # Verrou atomique : une seule transition possible depuis « pending » (anti double envoi).
-            if self.r("SET", P + "action_lock:" + aid, status, "NX", "EX", 7 * 86400) is None:
+            if self.r("SET", self.p + "action_lock:" + aid, status, "NX", "EX", 7 * 86400) is None:
                 return False
         action["status"] = status
-        self.r("SET", P + "action:" + aid, json.dumps(action, ensure_ascii=False), "EX", 7 * 86400)
+        self.r("SET", self.p + "action:" + aid, json.dumps(action, ensure_ascii=False), "EX", 7 * 86400)
         return True
 
 

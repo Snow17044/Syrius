@@ -11,7 +11,7 @@ from .config import Config
 from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
 from .tools import diagram, model3d
-from . import vision
+from . import family, vision
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
 
 log = logging.getLogger("syrius.agent")
@@ -209,6 +209,12 @@ class Agent:
                 yield {"type": "error", "message": "Aucune de tes IA ne sait regarder une photo pour l'instant "
                                                    "(il faut Groq Llama 4, GitHub Models ou Mistral)."}
                 return
+        # Part équitable de l'IA la plus puissante (limite gratuite partagée par la famille).
+        base = getattr(self.db, "base", self.db)
+        uid = family.CURRENT.get()
+        if family.quota_left(base, "power", uid) <= 0:
+            providers = [p for p in providers if not p.name.startswith("openrouter")] or providers
+        power_counted = False
         effort = "high" if settings.get("effort") == "high" else "low"
         untrusted_seen = False
         web_calls = 0
@@ -279,6 +285,9 @@ class Agent:
                         {"role": "assistant", "content": [{"type": "text", "text": state["text"]}]}])
                 return
 
+            if provider.name.startswith("openrouter") and not power_counted:
+                power_counted = True
+                family.quota_use(base, "power", uid)
             # Journal de diagnostic : seulement le nom des outils, jamais le contenu.
             log.info("Réponse %s : %d caractères, outils=%s", provider.name, len(state["text"]),
                      [c["name"] for c in state["calls"]] or "aucun")
