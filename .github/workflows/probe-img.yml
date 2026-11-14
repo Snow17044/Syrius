@@ -1,0 +1,45 @@
+name: Vérification ponctuelle (images et 3D)
+on:
+  push:
+    branches: ["claude/**"]
+    paths: [".github/workflows/probe-img.yml"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Pollinations (création d'images)
+        run: |
+          for u in "https://image.pollinations.ai/prompt/a%20red%20apple?width=512&height=512&seed=1&nologo=true&private=true&safe=true" \
+                   "https://image.pollinations.ai/prompt/a%20red%20apple?width=512&height=512&seed=2" \
+                   "https://gen.pollinations.ai/image/a%20red%20apple?width=512&height=512&seed=3" ; do
+            echo "== $u"
+            curl -sS -m 90 -A "SyriusAssistant/1.0" -o /tmp/img -D /tmp/h -w "http %{http_code} type %{content_type} taille %{size_download} temps %{time_total}\n" "$u" || true
+            grep -i -E '^(x-|retry|location)' /tmp/h | head -5 || true
+            head -c 300 /tmp/img | tr -cd '[:print:]\n' | head -c 300; echo
+          done
+      - name: OpenRouter - modèles gratuits qui voient
+        run: |
+          curl -sS -m 20 https://openrouter.ai/api/v1/models | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['data']
+          for m in d:
+            if m['id'].endswith(':free') and 'image' in ((m.get('architecture') or {}).get('input_modalities') or []):
+              print(m['id'], m.get('context_length'), 'outils' if 'tools' in (m.get('supported_parameters') or []) else 'SANS outils')
+          ids={m['id'] for m in d}
+          for want in ['google/gemma-4-31b-it:free','nvidia/nemotron-3-ultra-550b-a55b:free']:
+            print(want, 'PRESENT' if want in ids else 'ABSENT')
+          "
+      - name: TRELLIS.2
+        run: |
+          curl -sS -m 20 https://huggingface.co/api/spaces/microsoft/TRELLIS.2 | python3 -c "import json,sys; d=json.load(sys.stdin); r=d.get('runtime') or {}; print(r.get('stage'), (r.get('hardware') or {}).get('current'), d.get('lastModified'))"
+          curl -sS -m 30 -o /tmp/c.json -w "config http %{http_code}\n" https://microsoft-trellis-2.hf.space/config || true
+          python3 -c "
+          import json; d=json.load(open('/tmp/c.json'))
+          print([(i,x.get('api_name')) for i,x in enumerate(d.get('dependencies',[])) if x.get('api_name')])
+          print('version', d.get('version'), 'protocol', d.get('protocol'))
+          " || head -c 300 /tmp/c.json
+      - name: Groq / Gemini (liste publique impossible sans clé) - Poly Pizza
+        run: curl -sS -m 20 -o /dev/null -w "poly pizza http %{http_code}\n" https://api.poly.pizza/v1.1/search/car || true
