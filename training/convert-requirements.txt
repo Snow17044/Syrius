@@ -4,3 +4,4 @@ torch==2.14.1+cpu
 torchao==0.18.0
 litert-torch==0.10.0
 tensorflow-cpu==2.21.0
+litert-lm-builder==0.18.1

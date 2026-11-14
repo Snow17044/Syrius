@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, diagnostic, family, safety, selfcode, training
+from . import auth, diagnostic, family, safety, selfcode, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -104,6 +104,10 @@ class LessonBody(BaseModel):
 
 class CoderModelBody(BaseModel):
     model: str = Field(default="", max_length=100)
+
+
+class DiscordIdsBody(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=5)
 
 
 class ExampleBody(BaseModel):
@@ -728,6 +732,85 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"})
+
+    # ------------------------------------------------------------------ Syrius sur Discord (salon vocal)
+    @app.get("/api/voicebot", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def voicebot_settings():
+        s = voicebot.settings(db.base)
+        return {"discord_ids": s["discord_ids"], "configured": bool(s["key"])}
+
+    @app.get("/api/voicebot/key", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def voicebot_key():
+        return {"key": voicebot.key(db.base)}
+
+    @app.post("/api/voicebot/key", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def voicebot_key_renew():
+        return {"key": voicebot.key(db.base, renew=True)}
+
+    @app.put("/api/voicebot/ids", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def voicebot_ids(body: DiscordIdsBody):
+        try:
+            return {"discord_ids": voicebot.set_ids(db.base, body.ids)}
+        except voicebot.VoiceBotError as e:
+            raise HTTPException(400, str(e)) from None
+
+    def require_bot(request: Request) -> None:
+        auth_h = request.headers.get("authorization", "")
+        given = auth_h[7:] if auth_h.lower().startswith("bearer ") else ""
+        if not voicebot.check_key(db.base, given):
+            raise HTTPException(401, "Clé du bot invalide")
+        family.CURRENT.set(family.OWNER)  # le bot parle au nom du propriétaire, dans son espace
+        family.GUEST.set(False)
+
+    @app.get("/api/bot/config", dependencies=[Depends(require_bot)])
+    async def bot_config():
+        """Pour le bot : qui il a le droit d'écouter."""
+        return {"discord_ids": voicebot.settings(db.base)["discord_ids"]}
+
+    @app.post("/api/bot/voice", dependencies=[Depends(require_bot)])
+    async def bot_voice(request: Request):
+        """Une phrase entendue dans le salon vocal (WAV) → réponse de Syrius (texte à lire)."""
+        who = request.headers.get("x-discord-user", "")
+        if not voicebot.allowed(db.base, who):
+            raise HTTPException(403, "Cette personne n'est pas autorisée à parler à Syrius.")
+        try:
+            if int(request.headers.get("content-length", "0")) > transcribe.MAX_BYTES:
+                raise HTTPException(413, "phrase trop longue")
+        except ValueError:
+            raise HTTPException(400, "taille invalide") from None
+        data = await request.body()
+        try:
+            heard = await asyncio.to_thread(transcribe.transcribe, cfg.groq_api_key, data)
+        except transcribe.TranscribeError as e:
+            return {"heard": "", "ignored": True, "reason": str(e)}
+        question = voicebot.wake(heard)
+        if question is None:
+            return {"heard": heard, "ignored": True}
+        if not question:
+            return {"heard": heard, "ignored": False, "text": "Oui ? Je t'écoute."}
+        s = voicebot.settings(db.base)
+        conv = db.get_conversation(s["conversation"]) if s["conversation"] else None
+        if not conv:
+            conv = db.create_conversation(voicebot.CONV_TITLE)
+            voicebot.remember_conversation(db.base, conv["id"])
+        cid = conv["id"]
+        if cid in busy:
+            return {"heard": heard, "ignored": False, "text": "Une seconde, je termine ma réponse précédente."}
+        busy.add(cid)
+        parts, error = [], ""
+        try:
+            async for event in agent.chat(cid, question, None, voice=True):
+                if event.get("type") == "text":
+                    parts.append(event.get("text", ""))
+                elif event.get("type") == "text_replace":
+                    parts = [event.get("text", "")]
+                elif event.get("type") == "error":
+                    error = event.get("message", "")
+        finally:
+            busy.discard(cid)
+        text = re.sub(r"[*_`#>]+", "", "".join(parts)).strip() or (
+            "Désolé, je n'ai pas pu répondre." + (f" {error}" if error else ""))
+        return {"heard": heard, "ignored": False, "text": text[:1500]}
 
     # ------------------------------------------------------------------ actions confirmées
     @app.post("/api/actions/{aid}/confirm", dependencies=[Depends(require_auth)])

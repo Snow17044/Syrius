@@ -24,3 +24,5 @@ docker-compose.yml
 vercel.json
 app.py
 .gitignore
+server/voicebot.py
+discord-bot/

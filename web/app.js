@@ -28,7 +28,7 @@ function watchMsg(el) {
 }
 document.addEventListener("DOMContentLoaded", () => {
   ["#local-status", "#wake-status", "#wake-learn-msg", "#briefing-msg", "#google-msg", "#outlook-msg",
-    "#settings-msg", "#pw-msg", "#family-msg", "#del-msg"].forEach((q) => watchMsg($(q)));
+    "#settings-msg", "#pw-msg", "#family-msg", "#del-msg", "#dc-msg"].forEach((q) => watchMsg($(q)));
   document.querySelectorAll(".pack-status").forEach(watchMsg);
 });
 
@@ -157,6 +157,8 @@ async function renderFamily(account) {
   const owner = !account || account.owner !== false;
   box.classList.toggle("hidden", !owner);
   $("#diag-box").classList.toggle("hidden", !owner);
+  $("#discord-box").classList.toggle("hidden", !owner);
+  if (owner) api("/api/voicebot").then((v) => { $("#dc-id").value = (v.discord_ids || [])[0] || ""; }).catch(() => {});
   const guest = !!(account && account.guest);
   $("#del-title").textContent = owner ? "Effacer mes discussions et ma mémoire" : "Supprimer mon compte";
   $("#del-text").textContent = owner
@@ -250,6 +252,29 @@ $("#del-run").addEventListener("click", async () => {
       newConversationView();
     }
   } catch (err) { $("#del-msg").textContent = "⚠ " + err.message; }
+});
+
+$("#dc-save").addEventListener("click", async () => {
+  const id = $("#dc-id").value.replace(/\D/g, "");
+  try {
+    await api("/api/voicebot/ids", { method: "PUT", body: JSON.stringify({ ids: id ? [id] : [] }) });
+    setMsg($("#dc-msg"), "✅ Enregistré : Syrius n'écoutera que ce compte Discord.");
+  } catch (err) { setMsg($("#dc-msg"), "⚠ " + err.message); }
+});
+$("#dc-key").addEventListener("click", async () => {
+  try {
+    const { key } = await api("/api/voicebot/key");
+    await navigator.clipboard.writeText(key);
+    setMsg($("#dc-msg"), "✅ Clé du bot copiée : colle-la quand le serveur la demande.");
+  } catch (err) { setMsg($("#dc-msg"), "⚠ " + (err.message || "Copie impossible")); }
+});
+$("#dc-renew").addEventListener("click", async () => {
+  if (!confirm("Créer une nouvelle clé ? L'ancienne ne marchera plus : il faudra la changer sur le serveur.")) return;
+  try {
+    const { key } = await api("/api/voicebot/key", { method: "POST" });
+    await navigator.clipboard.writeText(key).catch(() => {});
+    setMsg($("#dc-msg"), "✅ Nouvelle clé copiée.");
+  } catch (err) { setMsg($("#dc-msg"), "⚠ " + err.message); }
 });
 
 $("#diag-run").addEventListener("click", async () => {

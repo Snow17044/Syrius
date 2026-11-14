@@ -417,6 +417,22 @@
         <p id="family-msg" class="small"></p>
       </div>
 
+      <div id="discord-box" class="hidden">
+        <h4 data-icon="mic"><span>Syrius sur Discord</span></h4>
+        <p class="muted small">Parle à Syrius dans un salon vocal Discord, même en jouant sur ta console. Il ne répond
+          qu'à toi, et seulement si ta phrase commence par « Syrius ».</p>
+        <label>Ton identifiant Discord
+          <input id="dc-id" type="text" inputmode="numeric" maxlength="21" placeholder="Ex. : 123456789012345678"></label>
+        <p class="muted small">Discord → Paramètres → Avancés → active « Mode développeur », puis appui long sur ton
+          pseudo → « Copier l'identifiant de l'utilisateur ».</p>
+        <div class="local-actions">
+          <button type="button" id="dc-save" class="ghost" data-icon="check"><span>Enregistrer</span></button>
+          <button type="button" id="dc-key" class="ghost" data-icon="link"><span>Copier la clé du bot</span></button>
+          <button type="button" id="dc-renew" class="ghost subtle" data-icon="refresh"><span>Nouvelle clé</span></button>
+        </div>
+        <p id="dc-msg" class="small"></p>
+      </div>
+
       <div id="diag-box" class="hidden">
         <h4 data-icon="shield"><span>Vérifier les services</span></h4>
         <p class="muted small">Teste en direct la création d'images, la lecture des photos et les maquettes 3D

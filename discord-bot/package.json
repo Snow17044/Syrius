@@ -1,0 +1,17 @@
+{
+  "name": "syrius-discord",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Syrius dans un salon vocal Discord : il écoute, ton Syrius répond à voix haute.",
+  "main": "bot.js",
+  "type": "commonjs",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": { "start": "node bot.js", "test": "node --test test/audio.test.js" },
+  "dependencies": {
+    "@discordjs/voice": "0.19.2",
+    "@snazzah/davey": "0.1.12",
+    "discord.js": "14.27.0",
+    "opusscript": "0.0.8",
+    "prism-media": "1.3.5"
+  }
+}
