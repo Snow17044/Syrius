@@ -41,7 +41,7 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
 MAX_MESSAGE_CHARS = 20000
 # Empreintes (publiques) des clés qui signent l'application Android : clé de la CI et clé Google Play.
 ANDROID_CERTS: list[str] = [
-    # (la nouvelle empreinte est ajoutée après la création de la nouvelle clé de signature)
+    "E1:20:AC:BB:05:F8:5B:DD:E9:3B:04:91:09:2A:E2:5C:A5:C2:BA:C1:70:B7:1E:89:1E:22:23:B8:1D:86:BA:9F",  # clé Syrius
 ]
 
 
