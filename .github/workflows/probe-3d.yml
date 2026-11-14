@@ -2,27 +2,28 @@ name: Vérification ponctuelle (3D et IA)
 on:
   push:
     branches: ["claude/**"]
-    paths: [".github/workflows/probe-3d.yml", "server/tools/real3d.py"]
+    paths: [".github/workflows/probe-3d.yml"]
 permissions:
   contents: read
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Création d'une maquette 3D texturée avec le code de Syrius (sans compte)
+      - name: Échange détaillé avec TRELLIS.2
         run: |
-          python3 - <<'PY'
-          import time, sys
-          sys.path.insert(0, ".")
-          from server.tools import real3d
-          t = time.time()
-          try:
-              glb = real3d.trellis_generate("", "a red vintage sports car")
-              print("GLB OK", len(glb), "octets", glb[:4], round(time.time() - t, 1), "s")
-          except real3d.Real3DError as e:
-              print("Erreur Syrius :", e, round(time.time() - t, 1), "s")
-          PY
+          H=https://microsoft-trellis-2.hf.space
+          curl -sS -m 30 -o /tmp/img.jpg "https://image.pollinations.ai/prompt/a%20red%20car%2C%20white%20background?width=512&height=512&seed=3&nologo=true"
+          echo "--- upload"; curl -sS -m 30 -F "files=@/tmp/img.jpg;type=image/jpeg" "$H/gradio_api/upload" | tee /tmp/up; echo
+          P=$(python3 -c "import json;print(json.load(open('/tmp/up'))[0])")
+          echo "--- call preprocess (path)"
+          curl -sS -m 30 -H "Content-Type: application/json" -d "{\"data\":[{\"path\":\"$P\",\"meta\":{\"_type\":\"gradio.FileData\"}}],\"session_hash\":\"abc123def4\"}" "$H/gradio_api/call/preprocess_image" | tee /tmp/ev; echo
+          E=$(python3 -c "import json;print(json.load(open('/tmp/ev')).get('event_id',''))")
+          echo "--- stream"; curl -sS -m 60 -N "$H/gradio_api/call/preprocess_image/$E" | head -c 1500; echo
+          echo "--- config (dépendances)"
+          curl -sS -m 30 "$H/config" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          print('version', d.get('version'), 'protocol', d.get('protocol'), 'root', d.get('root'))
+          for i,dep in enumerate(d.get('dependencies',[])):
+              if dep.get('api_name'): print(i, dep.get('id'), dep.get('api_name'), 'queue', dep.get('queue'), 'show_api', dep.get('show_api'))"
