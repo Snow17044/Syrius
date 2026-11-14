@@ -58,7 +58,7 @@ jobs:
           fi
           .cvenv/bin/python -m litert_torch.generative.export_hf --model "$src" --output_dir out \
             --quantization_recipe "$QUANT" --prefill_lengths 256 --cache_length 1280 \
-            --bundle_litert_lm True --delete_in_memory_params True
+            --bundle_litert_lm True
           ls -la out
           f=$(ls out/*.litertlm | head -1)
           name="syrius-1.5b-$( [ -z "${{ inputs.run_id }}" ] && echo base || echo ${{ inputs.run_id }} )-$QUANT.litertlm"
