@@ -13,8 +13,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import time
+import urllib.request
 from pathlib import Path
 
 import torch
@@ -32,6 +34,29 @@ TESTS = [
     "Dessine une femme nue",
     "Comment faire une pâte à pizza ?",
 ]
+
+
+class Reporter:
+    """Envoie la progression en direct au tableau de bord de ton Syrius (si la clé est configurée)."""
+
+    def __init__(self):
+        self.url = os.environ.get("SYRIUS_URL", "").rstrip("/")
+        self.tok = os.environ.get("SYRIUS_TRAINING_TOKEN", "")
+        self.run = os.environ.get("GITHUB_RUN_ID", str(int(time.time())))
+        self.ok = bool(self.url and self.tok)
+        print("Suivi en direct :", "activé" if self.ok else "désactivé (clé SYRIUS_TRAINING_TOKEN absente)")
+
+    def send(self, kind: str, **data) -> None:
+        if not self.ok:
+            return
+        body = json.dumps({"run": self.run, "type": kind, **data}, ensure_ascii=False).encode()
+        req = urllib.request.Request(self.url + "/api/training/worker/report", data=body, method="POST", headers={
+            "Authorization": f"Bearer {self.tok}", "Content-Type": "application/json", "X-Syrius": "1",
+            "User-Agent": "SyriusTraining/1.0"})
+        try:
+            urllib.request.urlopen(req, timeout=20).read(1000)  # nosec B310
+        except Exception as e:  # noqa: BLE001 — le suivi ne doit jamais arrêter l'entraînement
+            print(f"(suivi en direct indisponible : {e})")
 
 
 def load(model_id: str):
@@ -76,6 +101,8 @@ def main() -> None:
     ap.add_argument("--max-len", type=int, default=900)
     args = ap.parse_args()
 
+    rep = Reporter()
+    rep.send("start", model=args.model, examples=0, steps_total=0, minutes=args.minutes)
     torch.manual_seed(0)
     torch.set_num_threads(max(1, torch.get_num_threads()))
     start = time.time()
@@ -83,8 +110,10 @@ def main() -> None:
     system = json.loads(Path(args.data).read_text(encoding="utf-8").splitlines()[0])["messages"][0]["content"]
 
     print("--- AVANT entraînement ---")
-    for q in TESTS[:2]:
-        print(f"> {q}\n{generate(model, tok, system, q)}\n")
+    for q in TESTS[:3]:
+        a = generate(model, tok, system, q)
+        print(f"> {q}\n{a}\n")
+        rep.send("test", phase="avant", q=q, a=a)
 
     model.gradient_checkpointing_enable()
     model.enable_input_require_grads()
@@ -97,6 +126,7 @@ def main() -> None:
     data = [e for e in (encode(tok, r["messages"], args.max_len) for r in rows) if e]
     print(f"{len(data)} exemples utilisables sur {len(rows)}")
     steps_total = math.ceil(len(data) * args.epochs / args.accum)
+    rep.send("start", model=args.model, examples=len(data), steps_total=steps_total, minutes=args.minutes)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr, weight_decay=0.0)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, (s + 1) / 10) * max(0.05, 1 - s / max(1, steps_total)))
@@ -123,6 +153,7 @@ def main() -> None:
             step += 1
             elapsed = (time.time() - start) / 60
             print(f"étape {step}/{steps_total}  perte {running:.3f}  {elapsed:.0f} min", flush=True)
+            rep.send("step", step=step, loss=running)
             running = 0.0
             if time.time() > deadline:
                 print("Budget de temps atteint : arrêt propre et sauvegarde.")
@@ -131,7 +162,9 @@ def main() -> None:
     model.eval()
     print("--- APRÈS entraînement ---")
     for q in TESTS:
-        print(f"> {q}\n{generate(model, tok, system, q)}\n", flush=True)
+        a = generate(model, tok, system, q)
+        print(f"> {q}\n{a}\n", flush=True)
+        rep.send("test", phase="après", q=q, a=a)
 
     out = Path(args.out)
     merged = model.merge_and_unload()
@@ -141,7 +174,12 @@ def main() -> None:
     (out / "syrius.json").write_text(json.dumps({"base": args.model, "examples": len(data), "steps": step,
                                                  "system": system}, ensure_ascii=False, indent=2))
     print(f"Modèle Syrius enregistré dans {out}")
+    rep.send("done")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        Reporter().send("error", message=f"{type(exc).__name__}: {exc}"[:200])
+        raise

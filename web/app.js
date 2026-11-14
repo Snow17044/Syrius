@@ -106,6 +106,7 @@ async function showApp() {
   $("#login").classList.add("hidden");
   $("#app").classList.remove("hidden");
   await loadSettings();
+  $("#open-training").classList.toggle("hidden", state.settings?.account?.owner === false);
   refreshLocation();
   await loadConversations();
   const last = store.get("syrius:lastConv");
@@ -1614,6 +1615,169 @@ $("#pw-save").addEventListener("click", async () => {
     $("#pw-msg").textContent = r.detail;
     setTimeout(() => { $("#settings").close(); showLogin(); }, 1200);
   } catch (err) { $("#pw-msg").textContent = "⚠ " + err.message; }
+});
+
+// ------------------------------------------------------------------ entraînement de l'IA Syrius
+const TRAIN = { timer: null, data: null };
+
+function fmtDuration(sec) {
+  if (!isFinite(sec) || sec < 0) return "—";
+  const m = Math.round(sec / 60);
+  if (m < 1) return "< 1 min";
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}
+
+function drawLossChart(box, points) {
+  box.textContent = "";
+  if (!points || points.length < 2) {
+    box.append(node("p", "small muted", points && points.length ? "La courbe apparaît après quelques étapes…"
+      : "Pas encore de données : la courbe s'affichera pendant le prochain entraînement."));
+    return;
+  }
+  const W = 640, H = 240, L = 44, R = 12, T = 14, B = 30;
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), yMax = Math.max(...ys) * 1.08, yMin = 0;
+  const sx = (x) => L + (x - x0) / Math.max(1, x1 - x0) * (W - L - R);
+  const sy = (y) => T + (1 - (y - yMin) / Math.max(1e-6, yMax - yMin)) * (H - T - B);
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("class", "loss-svg");
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text != null) e.textContent = text;
+    svg.append(e);
+    return e;
+  };
+  for (let i = 0; i <= 4; i++) {  // quadrillage et graduations
+    const y = yMin + (yMax - yMin) * i / 4;
+    el("line", { x1: L, x2: W - R, y1: sy(y), y2: sy(y), class: "grid" });
+    el("text", { x: L - 6, y: sy(y) + 4, class: "tick", "text-anchor": "end" }, y.toFixed(y < 1 ? 2 : 1));
+  }
+  el("text", { x: L, y: H - 8, class: "tick" }, `étape ${x0}`);
+  el("text", { x: W - R, y: H - 8, class: "tick", "text-anchor": "end" }, `étape ${x1}`);
+  // moyenne glissante pour une courbe lisible
+  const smooth = ys.map((_, i) => { const a = ys.slice(Math.max(0, i - 4), i + 1); return a.reduce((s, v) => s + v, 0) / a.length; });
+  const line = (arr) => arr.map((y, i) => `${i ? "L" : "M"}${sx(xs[i]).toFixed(1)},${sy(y).toFixed(1)}`).join(" ");
+  el("path", { d: `${line(smooth)} L${sx(x1)},${sy(0)} L${sx(x0)},${sy(0)} Z`, class: "area" });
+  el("path", { d: line(ys), class: "raw" });
+  el("path", { d: line(smooth), class: "trend" });
+  const last = points[points.length - 1];
+  el("circle", { cx: sx(last[0]), cy: sy(smooth[smooth.length - 1]), r: 5, class: "dot" });
+  box.append(svg);
+}
+
+function renderTraining(d) {
+  TRAIN.data = d;
+  const run = d.runs[0];
+  const badge = $("#t-badge");
+  const labels = { running: "En cours", done: "Terminé", error: "Erreur", stale: "Interrompu" };
+  badge.textContent = run ? labels[run.status] || run.status : "Aucun entraînement suivi";
+  badge.className = "t-badge " + (run ? run.status : "none");
+  $("#t-phase").textContent = run ? run.phase || "" : "Branche le suivi en direct (en bas) pour voir le prochain.";
+  const pts = run?.points || [];
+  const step = pts.length ? pts[pts.length - 1][0] : 0;
+  const total = run?.steps_total || 0;
+  $("#t-progress").value = total ? Math.min(100, step / total * 100) : (run?.status === "done" ? 100 : 0);
+  $("#t-step").textContent = total ? `${step} / ${total}` : "—";
+  $("#t-loss").textContent = pts.length ? pts[pts.length - 1][1].toFixed(3) : "—";
+  let eta = NaN;
+  if (run?.status === "running" && pts.length > 1 && total) {
+    const rate = (pts[pts.length - 1][2] - pts[0][2]) / Math.max(1, pts[pts.length - 1][0] - pts[0][0]);
+    eta = (total - step) * rate;
+  }
+  $("#t-eta").textContent = run?.status === "done" ? "fini" : fmtDuration(eta);
+  $("#t-ex").textContent = run?.examples || "—";
+  drawLossChart($("#t-chart"), pts);
+
+  const list = $("#t-examples");
+  list.textContent = "";
+  if (!d.examples.length) list.append(node("li", "muted small", "Aucune phrase personnelle pour l'instant."));
+  for (const e of d.examples) {
+    const li = node("li", "diag");
+    li.append(node("strong", "", "« " + e.q + " »"), node("span", "small muted", "→ " + e.a));
+    const del = node("button", "ghost subtle", "Supprimer");
+    del.type = "button";
+    del.addEventListener("click", async () => {
+      try { await api(`/api/training/examples/${encodeURIComponent(e.id)}`, { method: "DELETE" }); refreshTraining(); }
+      catch (err) { setMsg($("#t-msg"), "⚠ " + err.message); }
+    });
+    li.append(del);
+    list.append(li);
+  }
+
+  const tests = $("#t-tests");
+  tests.textContent = "";
+  const qs = [...new Set((run?.tests || []).map((t) => t.q))];
+  if (!qs.length) tests.append(node("p", "small muted", "Les réponses de test apparaîtront pendant l'entraînement."));
+  for (const q of qs) {
+    const card = node("div", "train-test");
+    card.append(node("strong", "", q));
+    for (const ph of ["avant", "après"]) {
+      const t = run.tests.find((x) => x.q === q && x.phase === ph);
+      if (!t) continue;
+      const row = node("div", "tt-row " + (ph === "avant" ? "before" : "after"));
+      row.append(node("span", "tt-tag", ph === "avant" ? "Avant" : "Après"), node("span", "tt-text", t.a));
+      card.append(row);
+    }
+    tests.append(card);
+  }
+
+  const hist = $("#t-history");
+  hist.textContent = "";
+  if (!d.runs.length) hist.append(node("li", "muted small", "Aucun entraînement suivi pour l'instant."));
+  for (const r of d.runs) {
+    const li = node("li", "diag");
+    const p = r.points || [];
+    const first = p.length ? p[0][1] : null, lastL = p.length ? p[p.length - 1][1] : null;
+    li.append(node("strong", "", `${new Date(r.started * 1000).toLocaleString("fr-FR")} — ${labels[r.status] || r.status}`),
+      node("span", "small muted", `${r.examples || 0} exemples · ${p.length ? p[p.length - 1][0] : 0} étapes` +
+        (first != null ? ` · erreur ${first.toFixed(2)} → ${lastL.toFixed(2)}` : "")));
+    hist.append(li);
+  }
+}
+
+async function refreshTraining() {
+  try { renderTraining(await api("/api/training")); } catch (err) { setMsg($("#t-phase"), "⚠ " + err.message); }
+}
+
+$("#open-training").addEventListener("click", async () => {
+  closeDrawer();
+  $("#training").showModal();
+  await refreshTraining();
+  clearInterval(TRAIN.timer);
+  TRAIN.timer = setInterval(() => { if ($("#training").open) refreshTraining(); else clearInterval(TRAIN.timer); }, 8000);
+});
+
+$("#t-add").addEventListener("click", async () => {
+  const q = $("#t-q").value.trim(), a = $("#t-a").value.trim();
+  if (q.length < 2 || !a) { setMsg($("#t-msg"), "⚠ Écris une question et une réponse."); return; }
+  if (unsafeContent(q + " " + a)) { setMsg($("#t-msg"), "⚠ Exemple refusé : pas de contenu sexuel ni violent."); return; }
+  try {
+    await api("/api/training/examples", { method: "POST", body: JSON.stringify({ question: q, answer: a }) });
+    $("#t-q").value = ""; $("#t-a").value = "";
+    setMsg($("#t-msg"), "✅ Ajouté : Syrius l'apprendra au prochain entraînement.");
+    refreshTraining();
+  } catch (err) { setMsg($("#t-msg"), "⚠ " + err.message); }
+});
+
+$("#t-copy").addEventListener("click", async () => {
+  try {
+    const { token } = await api("/api/training/token");
+    await navigator.clipboard.writeText(token);
+    setMsg($("#t-setup-msg"), "✅ Clé copiée. Colle-la dans le secret GitHub SYRIUS_TRAINING_TOKEN.");
+  } catch (err) { setMsg($("#t-setup-msg"), "⚠ " + (err.message || "Copie impossible")); }
+});
+
+$("#t-renew").addEventListener("click", async () => {
+  if (!confirm("Créer une nouvelle clé ? L'ancienne ne marchera plus : il faudra mettre la nouvelle sur GitHub.")) return;
+  try {
+    const { token } = await api("/api/training/token", { method: "POST" });
+    await navigator.clipboard.writeText(token).catch(() => {});
+    setMsg($("#t-setup-msg"), "✅ Nouvelle clé copiée : remplace-la dans le secret GitHub.");
+  } catch (err) { setMsg($("#t-setup-msg"), "⚠ " + err.message); }
 });
 
 // ------------------------------------------------------------------ démarrage

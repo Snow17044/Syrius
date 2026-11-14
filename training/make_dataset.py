@@ -15,7 +15,9 @@ Aucune donnée personnelle : tout est écrit à la main ou généré à partir d
 from __future__ import annotations
 
 import json
+import os
 import random
+import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -508,8 +510,35 @@ def build(seed: int = 7) -> list[dict]:
     return out
 
 
+def owner_examples(rng: random.Random) -> list[dict]:
+    """Exemples donnés par le propriétaire dans le tableau de bord (chacun appris 3 fois)."""
+    url, tok = os.environ.get("SYRIUS_URL", "").rstrip("/"), os.environ.get("SYRIUS_TRAINING_TOKEN", "")
+    if not url or not tok:
+        return []
+    try:
+        req = urllib.request.Request(url + "/api/training/worker/examples", headers={
+            "Authorization": f"Bearer {tok}", "User-Agent": "SyriusTraining/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as r:  # nosec B310 (adresse de ton Syrius)
+            items = json.loads(r.read(5_000_000))
+    except Exception as e:  # noqa: BLE001 — l'entraînement continue sans
+        print(f"Exemples personnels indisponibles : {e}")
+        return []
+    out = []
+    for it in items if isinstance(items, list) else []:
+        q, a = str(it.get("q", ""))[:500], str(it.get("a", ""))[:2000]
+        if q and a:
+            out += [conv(rng, q, a) for _ in range(3)]
+    print(f"{len(out) // 3} exemples personnels ajoutés")
+    return out
+
+
 def main() -> None:
     data = build()
+    extra = owner_examples(random.Random(11))
+    for o in extra:
+        o.pop("_now", None)
+    data += extra
+    random.Random(3).shuffle(data)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w", encoding="utf-8") as f:
         for d in data:

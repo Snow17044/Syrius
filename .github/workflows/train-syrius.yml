@@ -11,9 +11,8 @@ on:
       minutes:
         description: "Budget de temps d'entraînement (minutes)"
         default: "290"
-  push:
-    branches: ["claude/**"]
-    paths: ["training/**", ".github/workflows/train-syrius.yml"]
+  schedule:
+    - cron: "17 1 * * *"  # chaque nuit (~3 h, heure de Paris), seulement si tes exemples ont changé
 
 permissions:
   contents: read
@@ -22,21 +21,43 @@ jobs:
   train:
     runs-on: ubuntu-24.04
     timeout-minutes: 350
+    env:
+      SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
+      SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN }}
     steps:
+      - name: Faut-il entraîner cette nuit ?
+        id: check
+        run: |
+          go=true
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            go=false
+            if [ -n "$SYRIUS_TRAINING_TOKEN" ]; then
+              r=$(curl -sS -m 30 -H "Authorization: Bearer $SYRIUS_TRAINING_TOKEN" "$SYRIUS_URL/api/training/worker/should-train" || true)
+              echo "Réponse : $r"
+              case "$r" in *'"train":true'*) go=true ;; esac
+            fi
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "Entraînement : $go"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.check.outputs.go == 'true'
         with:
           persist-credentials: false
 
       - name: Outils (versions figées)
+        if: steps.check.outputs.go == 'true'
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --quiet -r training/requirements.txt
           .venv/bin/python -c "import torch; print('torch', torch.__version__, 'threads', torch.get_num_threads())"
 
       - name: Exemples d'entraînement
+        if: steps.check.outputs.go == 'true'
         run: .venv/bin/python training/make_dataset.py
 
       - name: Entraînement
+        if: steps.check.outputs.go == 'true'
         env:
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
@@ -44,6 +65,7 @@ jobs:
             --minutes "${{ inputs.minutes || '290' }}" --out build/syrius
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.check.outputs.go == 'true'
         with:
           name: syrius-modele
           path: build/syrius
