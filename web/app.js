@@ -610,6 +610,7 @@ function refreshPacks() {
   let anyBusy = false;
   document.querySelectorAll("#packs .pack").forEach((el) => {
     const i = p[el.dataset.pack] || {};
+    el.classList.toggle("hidden", el.dataset.pack === "syrius" && !i.available);
     const busy = !!(i.downloading || i.verifying);
     anyBusy = anyBusy || busy;
     el.querySelector(".pack-dl").classList.toggle("hidden", busy || !!i.installed);
@@ -672,17 +673,162 @@ function localWanted() {
   return !!(l && l.ready() && (l.prefs.force || state.offline || !navigator.onLine));
 }
 
+// ------------------------------------------------------------------ actions de NOTRE IA Syrius (sur le téléphone)
+// Elle écrit <tool_call>{"name": ..., "arguments": {...}}</tool_call> : on vérifie tout ici (comme le serveur)
+// avant d'agir. Les appels et SMS demandent toujours une confirmation.
+const TOOL_RE = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
+const TEMPLATES3D = ["tour_eiffel", "pyramide", "fusee", "voiture", "maison", "avion", "arbre", "atome",
+  "systeme_solaire", "molecule_eau", "adn", "phare"];
+const KINDS = ["objectif", "phase", "etape", "action", "outil", "budget", "delai", "risque", "idee", "ressource", "personne"];
+
+function visibleText(text) {  // pendant l'écriture, on cache le code des actions
+  const t = String(text || "").replace(TOOL_RE, "");
+  const cut = t.indexOf("<tool_call>");
+  return (cut >= 0 ? t.slice(0, cut) : t).trim();
+}
+
+function cleanStr(v, max, required = true) {
+  if (typeof v !== "string" || (required && !v.trim())) throw new Error("valeur invalide");
+  const t = v.replace(/[\x00-\x1f\x7f]/g, " ").trim();
+  if (t.length > max) throw new Error("texte trop long");
+  return t;
+}
+function cleanInt(v, lo, hi) {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < lo || v > hi) throw new Error("nombre invalide");
+  return v;
+}
+function parseLocalDate(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(v || ""));
+  if (!m) throw new Error("date invalide");
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  if (d.getTime() < Date.now() - 60000) throw new Error("date déjà passée");
+  if (d.getTime() > Date.now() + 366 * 86400000) throw new Error("date trop lointaine");
+  return d;
+}
+function humanDate(d) {
+  const J = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+  const M = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  return `${J[d.getDay()]} ${d.getDate()} ${M[d.getMonth()]} à ${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Transforme l'action demandée par notre IA en événement vérifié (même forme que celles du serveur). */
+function localToolEvent(name, a) {
+  if (!a || typeof a !== "object") throw new Error("action invalide");
+  if (unsafeContent(JSON.stringify(a))) throw new Error(UNSAFE_MSG);
+  const dev = (action, params, confirm = false) => ({ type: "device", action, params, confirm });
+  switch (name) {
+    case "phone_alarm": return dev(name, { hour: cleanInt(a.hour, 0, 23), minute: cleanInt(a.minute ?? 0, 0, 59),
+      label: a.label ? cleanStr(a.label, 60) : "Syrius" });
+    case "phone_timer": return dev(name, { seconds: cleanInt(a.seconds, 1, 86400), label: a.label ? cleanStr(a.label, 60) : "Syrius" });
+    case "phone_call": case "phone_sms": {
+      const contact = cleanStr(a.contact, 80);
+      const p = { contact, is_number: /^\+?[0-9 .()-]{3,20}$/.test(contact) };
+      if (name === "phone_sms") p.message = cleanStr(a.message, 1000);
+      return dev(name, p, true);
+    }
+    case "phone_open_app": return dev(name, { app: cleanStr(a.app, 60) });
+    case "phone_map": return dev(name, { query: cleanStr(a.query, 200), navigate: !!a.navigate });
+    case "phone_flashlight": if (typeof a.on !== "boolean") throw new Error("invalide"); return dev(name, { on: a.on });
+    case "phone_volume": return dev(name, { level: cleanInt(a.level, 0, 100) });
+    case "phone_music": {
+      if (!["play", "pause", "resume", "next", "previous"].includes(a.action)) throw new Error("action inconnue");
+      const p = { action: a.action, app: ["spotify", "youtube_music", "youtube", "deezer"].includes(a.app) ? a.app : "auto" };
+      if (a.action === "play") p.query = cleanStr(a.query, 120);
+      return dev(name, p);
+    }
+    case "phone_reminder": {
+      const d = parseLocalDate(a.when);
+      const id = Array.from(crypto.getRandomValues(new Uint8Array(5)), (b) => b.toString(16).padStart(2, "0")).join("");
+      return dev(name, { id, text: cleanStr(a.text, 200), at: d.getTime(),
+        repeat: ["daily", "weekly"].includes(a.repeat) ? a.repeat : "none", label: humanDate(d) });
+    }
+    case "phone_calendar": {
+      const d = parseLocalDate(a.start);
+      const dur = Number.isInteger(a.duration_min) && a.duration_min >= 5 && a.duration_min <= 1440 ? a.duration_min : 60;
+      return dev(name, { title: cleanStr(a.title, 120), start: d.getTime(), end: d.getTime() + dur * 60000,
+        location: a.location ? cleanStr(a.location, 160, false) : "", label: humanDate(d) });
+    }
+    case "phone_image": {
+      const prompt = cleanStr(a.prompt, 400);
+      return dev(name, { prompt, caption: a.caption ? cleanStr(a.caption, 80) : prompt.slice(0, 60) });
+    }
+    case "show_diagram": {
+      const raw = Array.isArray(a.nodes) ? a.nodes.slice(0, 30) : [];
+      const ids = new Set();
+      const nodes = [];
+      for (const n of raw) {
+        if (!n || typeof n !== "object") continue;
+        const id = String(n.id || "").slice(0, 20), label = String(n.label || "").slice(0, 60).trim();
+        if (!id || !label || ids.has(id)) continue;
+        ids.add(id);
+        nodes.push({ id, label, parent: String(n.parent || ""), note: String(n.note || "").slice(0, 160),
+          kind: KINDS.includes(n.kind) ? n.kind : "" });
+      }
+      if (nodes.length < 2) throw new Error("schéma incomplet");
+      for (const n of nodes) if (n.parent && (!ids.has(n.parent) || n.parent === n.id)) n.parent = "";
+      for (const n of nodes.slice(1)) if (!n.parent) n.parent = nodes[0].id;
+      nodes[0].parent = "";
+      return { type: "diagram", title: cleanStr(a.title, 80), style: ["carte", "etapes", "arbre"].includes(a.style) ? a.style : "carte",
+        nodes, links: [] };
+    }
+    case "show_model": {
+      const ev = { type: "model", title: cleanStr(a.title, 80), description: typeof a.description === "string" ? a.description.slice(0, 300) : "",
+        parts: [], facts: Array.isArray(a.facts) ? a.facts.filter((f) => typeof f === "string").slice(0, 6).map((f) => f.slice(0, 80)) : [] };
+      if (TEMPLATES3D.includes(a.template)) ev.template = a.template;
+      if (typeof a.search_en === "string" && /^[a-zA-Z0-9 '-]{2,60}$/.test(a.search_en)) ev.search_en = a.search_en;
+      if (typeof a.prompt_en === "string") ev.prompt_en = a.prompt_en.slice(0, 300);
+      return ev;
+    }
+    default: throw new Error("action inconnue");
+  }
+}
+
+/** Exécute les actions écrites par notre IA (après la réponse) ; renvoie le texte sans le code. */
+function runLocalTools(view) {
+  const calls = [...String(view.text || "").matchAll(TOOL_RE)];
+  if (!calls.length) return;
+  view.text = visibleText(view.text);
+  renderText(view, "assistant");
+  const labels = [];
+  for (const m of calls.slice(0, 3)) {
+    let call;
+    try { call = JSON.parse(m[1]); } catch (_) { labels.push("Action illisible ignorée"); continue; }
+    const name = call && call.name, args = call && (call.arguments || call.parameters);
+    if (name === "remember") { labels.push("À mémoriser une fois en ligne : " + String(args?.fact || "").slice(0, 80)); continue; }
+    let ev;
+    try { ev = localToolEvent(name, args); } catch (err) { labels.push("Action refusée : " + err.message); continue; }
+    labels.push(TOOL_LABELS_LOCAL[name] || "Action");
+    if (ev.type === "device") handleDevice(view, ev);
+    else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
+    else if (ev.type === "model") {
+      addDiagramCard(view, ev);
+      if (window.SyriusModel) window.SyriusModel.show(ev);
+      if (navigator.onLine && !state.offline) realModel(view, ev);
+    }
+  }
+  setTools(view, ["Syrius (notre IA, sur ton téléphone)", ...labels]);
+  scrollDown();
+}
+const TOOL_LABELS_LOCAL = { show_diagram: "Je dessine le schéma 3D", show_model: "Je construis la maquette 3D",
+  phone_image: "Je crée l'image", phone_reminder: "Je programme le rappel", phone_alarm: "Je programme le réveil",
+  phone_timer: "Je lance le minuteur", phone_call: "Je prépare l'appel", phone_sms: "Je prépare le SMS",
+  phone_music: "Je m'occupe de la musique", phone_map: "J'ouvre la carte", phone_open_app: "J'ouvre l'application",
+  phone_flashlight: "Je m'occupe de la lampe", phone_volume: "Je règle le volume", phone_calendar: "J'ajoute le rendez-vous" };
+
 async function answerLocally(view, note) {
   const l = L();
   const history = (state.views || []).filter((v) => v.wrap.isConnected && v !== view)
     .map((v) => ({ role: v.role, text: v.text }));
-  setTools(view, [note || "IA hors ligne (sur ton téléphone)"]);
+  const ours = typeof l.syriusReady === "function" && l.syriusReady();
+  l.chat.userName = state.settings?.user_name || "";
+  setTools(view, [ours ? "Syrius (notre IA, sur ton téléphone)" : (note || "IA hors ligne (sur ton téléphone)")]);
   setStreaming(true);
   state.localRunning = true;
   let pending = false;
   try {
     await l.chat(history, (full) => {
-      view.text = full;
+      view.text = ours ? visibleText(full) : full;
+      view.raw = full;
       if (pending) return;
       pending = true;
       requestAnimationFrame(() => { pending = false; renderText(view, "assistant"); scrollDown(); });
@@ -692,6 +838,7 @@ async function answerLocally(view, note) {
   } finally {
     state.localRunning = false;
     setStreaming(false);
+    if (ours && view.raw) { view.text = view.raw; runLocalTools(view); view.text = visibleText(view.text); }
     renderText(view, "assistant");
     state.lastReply = view.text;
     if (view.text && state.settings.voice_reply && !window.SyriusVoice?.active) speak(view.text);

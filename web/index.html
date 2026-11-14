@@ -362,6 +362,16 @@
         <label class="switch"><input id="local-fallback" type="checkbox"><span>Prendre le relais tout seul (pas de réseau ou IA en ligne épuisées)</span></label>
         <label class="switch"><input id="local-force" type="checkbox"><span>Toujours utiliser l'IA hors ligne</span></label>
         <div id="packs" class="hidden">
+          <div class="pack hidden" data-pack="syrius">
+            <h5 data-icon="sparkle"><span>Syrius — notre IA</span><span class="muted small">1,6 Go</span></h5>
+            <p class="muted small">Notre propre IA, entraînée pour être Syrius : elle parle comme lui et sait agir
+              (rappels, réveils, images, schémas, maquettes, appels, musique…). Gratuite, sans limite, sans Internet.
+              Une fois installée, c'est elle qui répond hors ligne.</p>
+            <div class="local-actions"><button type="button" class="ghost pack-dl" data-icon="download"><span>Télécharger</span></button>
+              <button type="button" class="ghost pack-del hidden"></button></div>
+            <div class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+            <p class="small pack-status"></p>
+          </div>
           <div class="pack" data-pack="vision">
             <h5 data-icon="eye"><span>Vision hors ligne</span><span class="muted small">820 Mo</span></h5>
             <p class="muted small">Comprend tes photos sans Internet (InternVL 3.5, open source). Utilisée avec l'appareil photo

@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
     private LocalAI local;
     private Vision vision;
     private ImageGen imageGen;
+    private SyriusAI syrius;
     private boolean pendingBriefing;
     private boolean voiceMode;
     private static final int REQ_PHOTO = 47;
@@ -187,6 +188,7 @@ public class MainActivity extends Activity {
         local = new LocalAI(this);
         vision = new Vision(this);
         imageGen = new ImageGen(this);
+        syrius = new SyriusAI(this);
         Reminders.ensureChannel(this);
         Reminders.rescheduleAll(this);
         // « Hey Syrius » : relancé à l'ouverture de l'app (Android l'interdit au démarrage du téléphone).
@@ -664,6 +666,7 @@ public class MainActivity extends Activity {
         private ModelPack pack(String id) {
             if ("vision".equals(id)) return vision.pack;
             if ("sd15".equals(id)) return imageGen.pack;
+            if ("syrius".equals(id) && syrius.available()) return syrius.pack;
             return null;
         }
 
@@ -675,6 +678,8 @@ public class MainActivity extends Activity {
                 JSONObject o = new JSONObject();
                 o.put("vision", vision.pack.info());
                 o.put("sd15", imageGen.pack.info().put("engine", ImageGen.nativeAvailable()).put("busy", imageGen.busy()));
+                o.put("syrius", syrius.available() ? syrius.pack.info().put("available", true)
+                        : new JSONObject().put("available", false).put("installed", false));
                 return o.toString();
             } catch (Exception e) {
                 return "{}";
@@ -698,6 +703,7 @@ public class MainActivity extends Activity {
         public void packDelete(String id) {
             if (!trusted()) return;
             if ("vision".equals(id)) vision.delete();
+            else if ("syrius".equals(id)) syrius.delete();
             else if ("sd15".equals(id) && !imageGen.busy()) imageGen.pack.delete();
         }
 
@@ -723,11 +729,39 @@ public class MainActivity extends Activity {
             if (!vision.pack.ready()) return "Vision hors ligne non installée";
             if (imageGen.busy()) return "Une image est en cours de création : réessaie après.";
             local.release();
+            syrius.releaseAsync();
             vision.ask(requestId, system, question, jpeg, (id, text, done, error) -> sendJs(
                     "window.SyriusLocal && window.SyriusLocal._chunk(" + JSONObject.quote(id) + ", "
                             + JSONObject.quote(text == null ? "" : text) + ", " + done + ", "
                             + (error == null ? "null" : JSONObject.quote(error)) + ")"));
             return "ok";
+        }
+
+        /** Conversation avec NOTRE IA Syrius (sur le téléphone) : morceaux dans window.SyriusLocal._chunk. */
+        @JavascriptInterface
+        public String syriusChat(String requestId, String json) {
+            if (requestId == null || json == null || json.length() > 30000 || !trusted()) return "Refusé";
+            if (!requestId.matches("[A-Za-z0-9_-]{1,40}")) return "Refusé";
+            final JSONObject req;
+            try {
+                req = new JSONObject(json);
+            } catch (Exception e) {
+                return "Demande illisible";
+            }
+            if (!syrius.available() || !syrius.pack.ready()) return "Notre IA Syrius n'est pas installée";
+            if (imageGen.busy()) return "Une image est en cours de création : réessaie après.";
+            local.release();
+            vision.releaseAsync();
+            syrius.chat(requestId, req, (id, text, done, error) -> sendJs(
+                    "window.SyriusLocal && window.SyriusLocal._chunk(" + JSONObject.quote(id) + ", "
+                            + JSONObject.quote(text == null ? "" : text) + ", " + done + ", "
+                            + (error == null ? "null" : JSONObject.quote(error)) + ")"));
+            return "ok";
+        }
+
+        @JavascriptInterface
+        public void syriusStop() {
+            if (trusted()) syrius.stop();
         }
 
         @JavascriptInterface
@@ -745,6 +779,7 @@ public class MainActivity extends Activity {
             int n = Math.max(2, Math.min(8, steps));
             local.release();  // libère la mémoire des autres IA du téléphone
             vision.releaseAsync();
+            syrius.releaseAsync();
             final String rid = requestId;
             String r = imageGen.generate(rid, prompt, n,
                     percent -> sendJs("window.SyriusLocal && window.SyriusLocal._image(" + JSONObject.quote(rid) + ", "
@@ -830,6 +865,7 @@ public class MainActivity extends Activity {
         if (local != null) local.shutdown();
         if (vision != null) vision.shutdown();
         if (imageGen != null) imageGen.shutdown();
+        if (syrius != null) syrius.shutdown();
         web.destroy();
         super.onDestroy();
     }

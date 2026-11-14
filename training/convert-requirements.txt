@@ -1,4 +1,5 @@
-# Conversion de Syrius pour téléphone (LiteRT-LM) — versions figées.
+# Conversion de Syrius pour téléphone (LiteRT-LM) — versions figées et compatibles entre elles.
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.9.1+cpu
+torch==2.14.1+cpu
+torchao==0.18.0
 litert-torch==0.10.0
