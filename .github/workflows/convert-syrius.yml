@@ -1,0 +1,91 @@
+# Transforme le modèle Syrius entraîné en fichier .litertlm (LiteRT-LM, Google) pour les téléphones,
+# puis le publie dans les « Releases » (téléchargé par l'application).
+name: Convertir l'IA Syrius pour téléphone
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Numéro de l'entraînement (vide = modèle de départ Qwen, pour tester la chaîne)"
+        default: ""
+      quant:
+        description: "Compression : dynamic_wi8_afp32 (qualité) ou dynamic_wi4_afp32 (plus léger)"
+        default: "dynamic_wi8_afp32"
+  push:  # essai de la chaîne sur une branche de travail (modèle de départ)
+    branches: ["claude/**"]
+    paths: [".github/workflows/convert-syrius.yml", "training/convert-requirements.txt"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  convert:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      QUANT: ${{ inputs.quant || 'dynamic_wi8_afp32' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Place disque (outils inutiles retirés)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h / | tail -1
+
+      - name: Modèle Syrius entraîné
+        if: inputs.run_id != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: syrius-modele
+          path: build/syrius
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Outils de conversion (versions figées)
+        run: |
+          python3 -m venv .cvenv
+          .cvenv/bin/pip install --quiet -r training/convert-requirements.txt
+          .cvenv/bin/pip show litert-torch | head -2
+
+      - name: Conversion en LiteRT-LM
+        run: |
+          src="build/syrius"
+          if [ -z "${{ inputs.run_id }}" ]; then
+            src="$(.cvenv/bin/python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen2.5-1.5B-Instruct', allow_patterns=['*.json','*.safetensors','merges.txt','vocab.json']))")"
+          fi
+          .cvenv/bin/python -m litert_torch.generative.export_hf --model "$src" --output_dir out \
+            --quantization_recipe "$QUANT" --prefill_lengths 256 --cache_length 1280 \
+            --bundle_litert_lm True --delete_in_memory_params True
+          ls -la out
+          f=$(ls out/*.litertlm | head -1)
+          name="syrius-1.5b-$( [ -z "${{ inputs.run_id }}" ] && echo base || echo ${{ inputs.run_id }} )-$QUANT.litertlm"
+          mv "$f" "out/$name"
+          sha256sum "out/$name" | tee "out/$name.sha256"
+          echo "FILE=out/$name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          name: syrius-litertlm-essai
+          path: out/*.sha256
+          retention-days: 3
+
+      - name: Essai rapide du fichier
+        run: |
+          .cvenv/bin/pip install --quiet litert-lm 2>/dev/null && .cvenv/bin/python - <<'PY' || echo "(essai sur ordinateur indisponible : vérifié sur téléphone)"
+          import os, litert_lm
+          print("litert_lm", getattr(litert_lm, "__version__", "?"))
+          PY
+
+      - name: Publier
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view syrius-ia >/dev/null 2>&1 || gh release create syrius-ia --title "IA Syrius (modèles)" \
+            --notes "Fichiers de l'IA Syrius pour l'application (LiteRT-LM). Téléchargés automatiquement par l'app."
+          gh release upload syrius-ia "$FILE" "$FILE.sha256" --clobber
