@@ -6,7 +6,7 @@ plugins {
 // (les mises à jour s'installent par-dessus). Sinon, clé de test (désinstaller avant mise à jour).
 def ks = System.getenv("SYRIUS_KEYSTORE_FILE")
 // Adresse de ton Syrius : ses liens (invitations, essais) ouvrent directement l'application.
-def syriusUrl = System.getenv("SYRIUS_URL") ?: ""
+def syriusUrl = System.getenv("SYRIUS_URL") ?: "https://syriusprojet1.vercel.app"  // ton Syrius par défaut
 def linkHost = syriusUrl.replaceFirst(/^https?:\/\//, "").replaceFirst(/[\/:?#].*$/, "")
 if (!(linkHost ==~ /[A-Za-z0-9.-]+/)) linkHost = "syrius.invalid"
 
