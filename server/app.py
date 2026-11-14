@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, diagnostic, family, github_oidc, safety, selfcode, training, voicebot
+from . import auth, autogen, diagnostic, family, github_oidc, safety, selfcode, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -533,7 +533,17 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
     @app.get("/api/training", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_state():
-        return training.state(db.base)
+        st = training.state(db.base)
+        auto = autogen.stored(db.base)
+        st["auto"] = {"total": len(auto), "recent": [{"i": n, "q": e["q"], "a": e["a"][:400]}
+                                                    for n, e in enumerate(reversed(auto[-15:]))]}
+        return st
+
+    @app.delete("/api/training/auto/{i}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def training_auto_delete(i: int):
+        if not autogen.delete(db.base, i):
+            raise HTTPException(404, "Exemple introuvable")
+        return {"ok": True}
 
     @app.get("/api/training/token", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_token():
@@ -559,7 +569,17 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/api/training/worker/examples", dependencies=[Depends(require_trainer)])
     async def training_worker_examples():
         """Pour le serveur d'entraînement : les exemples à apprendre (rien d'autre)."""
-        return [{"q": e["q"], "a": e["a"]} for e in training.examples(db.base)]
+        mine = [{"q": e["q"], "a": e["a"]} for e in training.examples(db.base)]
+        auto = [{"q": e["q"], "a": e["a"], "auto": True} for e in autogen.stored(db.base)[-600:]]
+        return mine + auto
+
+    @app.post("/api/training/worker/generate", dependencies=[Depends(require_trainer)])
+    async def training_worker_generate():
+        """Syrius fabrique lui-même un lot d'exemples (vérifiés) avant l'entraînement de la nuit."""
+        res = await asyncio.to_thread(autogen.generate, agent.llm.ordered())
+        added = autogen.add(db.base, res["kept"]) if res["kept"] else 0
+        return {"theme": res["theme"], "added": added, "rejected": res["rejected"], "provider": res.get("provider", ""),
+                "error": res.get("error", ""), "total": len(autogen.stored(db.base))}
 
     # « Améliorer Syrius » : demandes de changement traitées par une IA programmeuse (proposition seulement)
     @app.get("/api/selfcode", dependencies=[Depends(require_auth), Depends(require_owner)])

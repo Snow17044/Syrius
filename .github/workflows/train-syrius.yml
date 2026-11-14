@@ -12,7 +12,7 @@ on:
         description: "Budget de temps d'entraînement (minutes)"
         default: "290"
   schedule:
-    - cron: "17 1 * * *"  # chaque nuit (~3 h, heure de Paris), seulement si tes exemples ont changé
+    - cron: "17 1 * * *"  # chaque nuit (~3 h, heure de Paris)
 
 permissions:
   contents: read
@@ -34,9 +34,7 @@ jobs:
         id: check
         run: |
           go=true
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            go=$(python3 training/syrius_auth.py should-train)
-          fi
+          # Chaque nuit, Syrius crée de nouveaux exemples : il y a donc toujours quelque chose à apprendre.
           echo "go=$go" >> "$GITHUB_OUTPUT"
           echo "Entraînement : $go"
 
@@ -46,6 +44,10 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install --quiet -r training/requirements.txt
           .venv/bin/python -c "import torch; print('torch', torch.__version__, 'threads', torch.get_num_threads())"
+
+      - name: Syrius crée ses propres exemples
+        if: steps.check.outputs.go == 'true'
+        run: python3 training/autogen_run.py 12
 
       - name: Exemples d'entraînement
         if: steps.check.outputs.go == 'true'

@@ -628,9 +628,9 @@ def owner_examples(rng: random.Random) -> list[dict]:
     out = []
     for it in items if isinstance(items, list) else []:
         q, a = str(it.get("q", ""))[:500], str(it.get("a", ""))[:2000]
-        if q and a:
-            out += [conv(rng, q, a) for _ in range(3)]
-    print(f"{len(out) // 3} exemples personnels ajoutés")
+        if q and a:  # tes phrases : apprises 3 fois ; celles créées par Syrius : 1 fois
+            out += [conv(rng, q, a) for _ in range(1 if it.get("auto") else 3)]
+    print(f"{len(out)} exemples venant de ton Syrius ajoutés (tes phrases et celles qu'il a créées)")
     return out
 
 
