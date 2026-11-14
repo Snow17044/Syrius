@@ -153,6 +153,19 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 client.once(Events.ClientReady, async (c) => {
   console.log(`Connecté à Discord : ${c.user.tag}`);
   await refreshAllowed();
+  if (!allowed.size) {  // personne d'autorisé : le créateur du bot (toi) l'est automatiquement
+    try {
+      const app = await c.application.fetch();
+      const owner = app.owner && (app.owner.ownerId || app.owner.id);
+      if (owner) {
+        await syrius("/api/bot/owner", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discord_id: String(owner) }) });
+        await refreshAllowed();
+      }
+    } catch (err) {
+      console.error("Créateur du bot introuvable :", err.message);
+    }
+  }
   setInterval(refreshAllowed, 5 * 60_000);
   // Si tu es déjà dans un salon au démarrage, Syrius te rejoint.
   for (const guild of c.guilds.cache.values()) {

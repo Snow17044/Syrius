@@ -67,6 +67,15 @@ def set_ids(base, ids: list[str]) -> list[str]:
     return s["discord_ids"]
 
 
+def claim_owner(base, discord_id: str) -> list[str]:
+    """Première connexion du bot : si personne n'est encore autorisé, le créateur du bot l'est."""
+    s = settings(base)
+    if not s["discord_ids"] and _ID.match(str(discord_id)):
+        s["discord_ids"] = [str(discord_id)]
+        _save(base, s)
+    return s["discord_ids"]
+
+
 def allowed(base, discord_id: str) -> bool:
     return discord_id in settings(base)["discord_ids"]
 

@@ -767,6 +767,15 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         """Pour le bot : qui il a le droit d'écouter."""
         return {"discord_ids": voicebot.settings(db.base)["discord_ids"]}
 
+    @app.post("/api/bot/owner", dependencies=[Depends(require_bot)])
+    async def bot_owner(request: Request):
+        """Le bot indique qui l'a créé : autorisé automatiquement si personne ne l'est encore."""
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "requête invalide") from None
+        return {"discord_ids": voicebot.claim_owner(db.base, str((body or {}).get("discord_id", "")))}
+
     @app.post("/api/bot/voice", dependencies=[Depends(require_bot)])
     async def bot_voice(request: Request):
         """Une phrase entendue dans le salon vocal (WAV) → réponse de Syrius (texte à lire)."""
