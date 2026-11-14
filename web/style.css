@@ -544,3 +544,5 @@ body.voice-split #voice .voice-hint { display: none; }
   padding: 8px 12px; border-radius: 12px; background: var(--surface-2); }
 .family-list li.muted { background: transparent; padding: 4px 0; }
 #join-form { display: grid; gap: 12px; }
+.family-list li.diag { flex-direction: column; align-items: flex-start; gap: 2px; }
+.family-list li.diag.ko strong { color: var(--danger, #f08a8a); }

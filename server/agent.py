@@ -153,7 +153,8 @@ class Agent:
         self.executor = ToolExecutor(cfg, db)
 
     def brains(self) -> list[dict]:
-        return [{"name": p.name, "label": p.label, "model": p.model} for p in self.llm.providers]
+        return [{"name": p.name, "label": p.label, "model": p.model} for p in self.llm.providers
+                if not getattr(p, "photos_only", False)]
 
     async def _one_step(self, provider, body: dict, state: dict) -> AsyncIterator[dict]:
         """Une réponse du modèle. Remplit state["text"] et state["calls"]."""
@@ -202,7 +203,7 @@ class Agent:
         user_content.append({"type": "text", "text": (user_text + "\n\n[📷 photo jointe]").strip() if image else user_text})
         history = trim_history(stored) + [{"role": "user", "content": user_content}]
         to_save = [history[-1]]
-        providers = self.llm.ordered(settings.get("brain", ""))
+        providers = self.llm.ordered(settings.get("brain", ""), photo=bool(image))
         if image:  # seules les IA qui « voient » peuvent répondre
             providers = [p for p in providers if p.vision]
             if not providers:
@@ -276,6 +277,12 @@ class Agent:
                         tool_retry = True
                         state = {"text": "", "calls": [], "streamed": False}
                         last_error = None
+                        continue
+                    if image and not state["streamed"] and not state["calls"] and len(providers) > 1:
+                        # Photo refusée par ce cerveau (format, taille, outils…) : une autre IA qui voit essaie.
+                        providers = providers[1:]
+                        yield {"type": "tool", "name": "switch",
+                               "label": f"{e} Je passe sur {providers[0].label}."}
                         continue
                     break
             if last_error is not None:

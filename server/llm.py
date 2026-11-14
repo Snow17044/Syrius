@@ -34,6 +34,7 @@ class Provider:
     api_key: str = ""
     reasoning: bool = True  # accepte le paramètre reasoning_effort
     vision: bool = False     # sait regarder une photo
+    photos_only: bool = False  # cerveau de relais réservé aux photos
 
     def __post_init__(self):
         p = urlparse(self.base_url)
@@ -85,10 +86,11 @@ class ChatClient:
         except (urllib.error.URLError, TimeoutError, ConnectionError):
             raise RetryableError(f"{provider.label} ne répond pas.") from None
 
-    def ordered(self, preferred: str = "") -> list[Provider]:
+    def ordered(self, preferred: str = "", photo: bool = False) -> list[Provider]:
+        pool = [p for p in self.providers if photo or not p.photos_only]
         if not preferred:
-            return list(self.providers)
-        return sorted(self.providers, key=lambda p: p.name != preferred)
+            return pool
+        return sorted(pool, key=lambda p: p.name != preferred)
 
     async def stream_chat(self, provider: Provider, body: dict) -> AsyncIterator[dict]:
         """Requête /chat/completions en streaming ; renvoie chaque morceau JSON."""
@@ -155,6 +157,8 @@ def openrouter_label(model: str) -> str:
         return "NVIDIA Nemotron 3 Ultra"
     if name.startswith("gemma-4"):
         return "Google Gemma 4"
+    if "nemotron-3.5-super-vl" in name:
+        return "NVIDIA Nemotron Vision"
     return "OpenRouter · " + name[:24]
 
 
@@ -185,6 +189,11 @@ def providers_from_config(cfg) -> list[Provider]:
     if cfg.gemini_api_key:
         out.append(Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
                             cfg.gemini_model, cfg.gemini_api_key, vision=True))
+    if cfg.openrouter_api_key:  # relais réservés aux photos, en dernier
+        known = set(cfg.openrouter_models)
+        for i, model in enumerate(m for m in getattr(cfg, "openrouter_vision_models", []) if m not in known):
+            out.append(Provider(f"openrouter-vue{i + 1}", openrouter_label(model), "https://openrouter.ai/api/v1",
+                                model, cfg.openrouter_api_key, reasoning=False, vision=True, photos_only=True))
     if cfg.ollama_url:
         out.append(Provider("local", "IA locale", cfg.ollama_url.rstrip("/") + "/v1", cfg.ollama_model,
                             reasoning=False))

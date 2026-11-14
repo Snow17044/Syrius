@@ -64,3 +64,24 @@ def test_route_protegee_et_relayee(make_client, monkeypatch):
     assert r.status_code == 502 and "saturé" in r.json()["detail"]
     r = client.post("/api/image", json={"prompt": "x" * 700}, headers={"X-Syrius": "1"})
     assert r.status_code == 422
+
+
+def test_plusieurs_services_essayes_tour_a_tour(monkeypatch):
+    calls = []
+    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 2000
+
+    def fake_fetch(host, method, path, headers, body=None):
+        calls.append((host, headers.get("Authorization", "")))
+        if host == "router.huggingface.co":
+            return 200, "image/jpeg", jpeg
+        return (429 if host == "image.pollinations.ai" else 401), "application/json", b"{}"
+    monkeypatch.setattr(imagegen, "_fetch", fake_fetch)
+    monkeypatch.setitem(imagegen.KEYS, "pollinations", "pk_test")
+    monkeypatch.setitem(imagegen.KEYS, "hf", "hf_test")
+    assert imagegen.generate("a red apple", seed=3) == ("image/jpeg", jpeg)
+    assert [h for h, _ in calls] == ["gen.pollinations.ai", "image.pollinations.ai", "router.huggingface.co"]
+    assert calls[0][1] == "Bearer pk_test" and calls[1][1] == "" and calls[2][1] == "Bearer hf_test"
+    monkeypatch.setitem(imagegen.KEYS, "hf", "")
+    with pytest.raises(ImageGenError) as e:
+        imagegen.generate("a red apple", seed=3)
+    assert "saturé" in str(e.value)

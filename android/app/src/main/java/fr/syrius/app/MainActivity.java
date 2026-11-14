@@ -67,7 +67,23 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         web = new WebView(this);
         web.setBackgroundColor(Color.parseColor("#0d0f16"));
-        setContentView(web);
+        // Android 15+ : l'app s'affiche bord à bord ; on laisse la place aux barres système et au clavier.
+        android.widget.FrameLayout root = new android.widget.FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor("#0d0f16"));
+        root.addView(web, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        setContentView(root);
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets i = insets.getInsets(android.view.WindowInsets.Type.systemBars()
+                        | android.view.WindowInsets.Type.ime() | android.view.WindowInsets.Type.displayCutout());
+                v.setPadding(i.left, i.top, i.right, i.bottom);
+            }
+            return insets;
+        });
+        if (android.os.Build.VERSION.SDK_INT >= 33) {  // retour (geste prédictif d'Android 13+)
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::goBack);
+        }
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -203,11 +219,37 @@ public class MainActivity extends Activity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String saved = prefs.getString(KEY_URL, "");
+        String link = sharedLink(getIntent());
+        if (saved.isEmpty() && link != null && sameHost(link, BuildConfig.DEFAULT_URL)) {
+            saved = normalize(BuildConfig.DEFAULT_URL);  // invitation reçue avant toute configuration
+            prefs.edit().putString(KEY_URL, saved).apply();
+        }
         if (saved.isEmpty()) {
             askForUrl(BuildConfig.DEFAULT_URL);
         } else {
             open(saved);
+            if (link != null && sameHost(link, saved)) web.loadUrl(link);
         }
+    }
+
+    /** Lien d'invitation ou d'essai (https://ton-syrius/rejoindre/… ou /essai/…) qui a ouvert l'app. */
+    private static String sharedLink(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null) return null;
+        Uri u = intent.getData();
+        String path = u.getPath() == null ? "" : u.getPath();
+        if (!"https".equals(u.getScheme()) || !path.matches("/(rejoindre|essai)/[A-Za-z0-9_-]{4,80}/?")) return null;
+        return "https://" + u.getHost() + path;
+    }
+
+    private static boolean sameHost(String a, String b) {
+        String ha = Uri.parse(a == null ? "" : a).getHost();
+        String hb = Uri.parse(normalize(b) == null ? "" : normalize(b)).getHost();
+        return ha != null && ha.equalsIgnoreCase(hb);
+    }
+
+    private void goBack() {
+        if (web.canGoBack()) web.goBack();
+        else moveTaskToBack(true);
     }
 
     private static String normalize(String raw) {
@@ -550,19 +592,13 @@ public class MainActivity extends Activity {
         /** « Afficher par-dessus les autres applis » : permet à « Hey Syrius » d'ouvrir la musique app fermée. */
         @JavascriptInterface
         public boolean canOpenApps() {
-            return trusted() && android.provider.Settings.canDrawOverlays(MainActivity.this);
+            return false;  // autorisation « par-dessus les autres applis » retirée (exigence Google Play)
         }
 
         @JavascriptInterface
         public void overlaySettings() {
             if (!trusted()) return;
-            runOnUiThread(() -> {
-                try {
-                    startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:" + getPackageName())));
-                } catch (Exception ignored) {
-                }
-            });
+            // Plus utilisé : la musique se lance depuis une notification quand l'app est fermée.
         }
 
         /** Ouvre le réglage « ne pas optimiser la batterie » (sinon le téléphone peut couper l'écoute). */
@@ -570,14 +606,9 @@ public class MainActivity extends Activity {
         public void batterySettings() {
             if (!trusted()) return;
             runOnUiThread(() -> {
-                try {
-                    startActivity(new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                            Uri.parse("package:" + getPackageName())));
-                } catch (Exception e) {
-                    try {
-                        startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-                    } catch (Exception ignored) {
-                    }
+                try {  // liste des applis : l'utilisateur choisit lui-même « Ne pas optimiser » pour Syrius
+                    startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                } catch (Exception ignored) {
                 }
             });
         }
@@ -772,16 +803,14 @@ public class MainActivity extends Activity {
         if (intent != null && intent.getBooleanExtra(Reminders.EXTRA_BRIEFING, false)) {
             sendJs("window.syriusBriefing && window.syriusBriefing()");
         }
+        String link = sharedLink(intent);
+        if (link != null && baseUrl != null && sameHost(link, baseUrl)) web.loadUrl(link);
     }
 
     // ------------------------------------------------------------------ cycle de vie
     @Override
-    public void onBackPressed() {
-        if (web.canGoBack()) {
-            web.goBack();
-        } else {
-            super.onBackPressed();
-        }
+    public void onBackPressed() {  // Android 12 et moins
+        goBack();
     }
 
     @Override

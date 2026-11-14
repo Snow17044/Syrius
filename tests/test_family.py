@@ -265,3 +265,19 @@ def test_seul_le_proprietaire_cree_des_liens(make_client):
         assert c.post("/api/family/code", headers=H).status_code in (401, 403)
         assert c.get("/api/family").status_code in (401, 403)
         assert "code" not in c.get("/api/settings").json()
+
+
+def test_diagnostic_reserve_au_proprietaire(make_client, monkeypatch):
+    from server import diagnostic
+    owner = make_client()
+    login(owner)
+    lea = member_client(owner)
+    assert lea.post("/api/diagnostic", headers=H).status_code == 403
+    monkeypatch.setattr(diagnostic, "_image_source", lambda s: "image reçue (10 Ko)")
+    monkeypatch.setattr(diagnostic, "_vision", lambda p: (_ for _ in ()).throw(RuntimeError("HTTP 400 sk-secretkey123456 refus")))
+    for p in owner.agent.llm.providers:
+        p.vision = True
+    checks = owner.post("/api/diagnostic", headers=H).json()["checks"]
+    assert any(c["ok"] and c["name"].startswith("Images") for c in checks)
+    photo = [c for c in checks if c["name"].startswith("Photos")]
+    assert photo and not photo[0]["ok"] and "secretkey" not in photo[0]["detail"]

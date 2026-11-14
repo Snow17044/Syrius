@@ -64,6 +64,16 @@ class Config:
                                 _env("SYRIUS_OPENROUTER_MODEL") or
                                 "nvidia/nemotron-3-ultra-550b-a55b:free,google/gemma-4-31b-it:free").split(",")
         if m.strip()][:4])
+    # IA gratuites qui « voient », utilisées seulement pour les photos (relais si les autres échouent).
+    openrouter_vision_models: list = field(default_factory=lambda: [
+        m.strip() for m in _env("SYRIUS_OPENROUTER_VISION_MODELS",
+                                "nvidia/nemotron-3.5-super-vl:free,google/gemma-4-26b-a4b-it:free").split(",")
+        if m.strip()][:4])
+    # Empreintes SHA-256 supplémentaires de l'application Android (liens qui ouvrent l'app), séparées par des virgules.
+    android_certs: list = field(default_factory=lambda: [
+        c.strip() for c in _env("SYRIUS_ANDROID_CERT_SHA256").split(",") if c.strip()])
+    # Création d'images : clé Pollinations facultative (plus fiable que l'accès anonyme).
+    pollinations_api_key: str = field(default_factory=lambda: _env("POLLINATIONS_API_KEY"))
     # Vraies maquettes 3D : bibliothèque Poly Pizza + création TRELLIS.2 (Hugging Face).
     polypizza_api_key: str = field(default_factory=lambda: _env("POLYPIZZA_API_KEY") or _env("POLY_PIZZA_API_KEY"))
     hf_token: str = field(default_factory=lambda: _env("HF_TOKEN") or _env("HUGGINGFACE_TOKEN"))

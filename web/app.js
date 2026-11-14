@@ -155,6 +155,7 @@ async function renderFamily(account) {
   const box = $("#family-box");
   const owner = !account || account.owner !== false;
   box.classList.toggle("hidden", !owner);
+  $("#diag-box").classList.toggle("hidden", !owner);
   $("#s-account").textContent = owner ? "Compte principal (propriétaire de ce Syrius)."
     : account.guest ? `Compte de test — accès jusqu'à ${hourText(account.expires)}, puis tout est effacé.`
     : `Compte de ${account.name} — tes discussions, ta mémoire et tes réglages sont privés.`;
@@ -193,6 +194,31 @@ async function renderFamily(account) {
   } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
 }
 
+$("#diag-run").addEventListener("click", async () => {
+  const btn = $("#diag-run"), list = $("#diag-list");
+  btn.disabled = true;
+  list.textContent = "";
+  const wait = document.createElement("li");
+  wait.className = "muted small"; wait.textContent = "Test en cours…";
+  list.append(wait);
+  try {
+    const r = await api("/api/diagnostic", { method: "POST" });
+    list.textContent = "";
+    for (const c of r.checks) {
+      const li = document.createElement("li");
+      li.className = "diag " + (c.ok ? "ok" : "ko");
+      const t = document.createElement("strong");
+      t.textContent = (c.ok ? "✅ " : "❌ ") + c.name;
+      const d = document.createElement("span");
+      d.className = "small muted";
+      d.textContent = `${c.detail} (${c.s} s)`;
+      li.append(t, d);
+      list.append(li);
+    }
+  } catch (err) { wait.textContent = "⚠ " + err.message; }
+  finally { btn.disabled = false; }
+});
+
 function hourText(ts) {
   if (!ts) return "";
   return new Date(ts * 1000).toLocaleString("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" });
@@ -208,7 +234,7 @@ async function shareText(text, done) {
 $("#family-test").addEventListener("click", async () => {
   try {
     const r = await api("/api/family/test-link", { method: "POST" });
-    const url = `${location.origin}/?test=${encodeURIComponent(r.link)}`;
+    const url = `${location.origin}/essai/${encodeURIComponent(r.link)}`;
     await shareText(`Essaie mon assistant Syrius pendant ${r.hours} h (aucun compte à créer) : ${url}`,
       "Lien de test copié (valable 24 h).");
     const s = await api("/api/settings");
@@ -225,7 +251,7 @@ $("#family-renew").addEventListener("click", async () => {
 });
 $("#family-share").addEventListener("click", async () => {
   const code = $("#family-code").textContent;
-  const url = `${location.origin}/?rejoindre=${encodeURIComponent(code)}`;
+  const url = `${location.origin}/rejoindre/${encodeURIComponent(code)}`;
   await shareText(`Rejoins mon assistant Syrius : ouvre ce lien et crée ton compte ${url} (code : ${code})`,
     "Invitation copiée.");
 });
@@ -1219,7 +1245,8 @@ function refreshWakeBox() {
   }
   $("#wake-on").disabled = !w.ready;
   const canOpen = typeof Native.canOpenApps === "function" && Native.canOpenApps();
-  Icons.set($("#wake-overlay"), canOpen ? "ok" : "music", canOpen ? "Musique app fermée autorisée" : "Lancer la musique app fermée (autoriser)");
+  $("#wake-overlay").classList.add("hidden");  // plus nécessaire : la musique s'ouvre via une notification
+  void canOpen;
   $("#wake-on").checked = !!w.enabled;
   $("#wake-status").textContent = w.error ? "⚠ " + w.error
     : w.installing ? "🔒 Vérification et installation…"
@@ -1493,8 +1520,10 @@ if ("serviceWorker" in navigator) {
 (async () => {
   // Liens reçus : invitation famille (?rejoindre=CODE) ou essai de 24 h (?test=...)
   const params = new URLSearchParams(location.search);
-  const joinCode = params.get("rejoindre"), testLink = params.get("test");
-  if (joinCode || testLink) history.replaceState(null, "", "/");
+  const m = location.pathname.match(/^\/(rejoindre|essai)\/([A-Za-z0-9_-]{4,80})\/?$/);
+  const joinCode = m && m[1] === "rejoindre" ? m[2] : params.get("rejoindre");
+  const testLink = m && m[1] === "essai" ? m[2] : params.get("test");
+  if (joinCode || testLink || location.pathname !== "/") history.replaceState(null, "", "/");
   if (testLink) {
     try {
       await api("/api/family/test", { method: "POST", body: JSON.stringify({ link: testLink.slice(0, 80) }) });

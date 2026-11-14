@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, family
+from . import auth, diagnostic, family
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -38,6 +38,8 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
        "frame-ancestors 'none'; form-action 'self'; manifest-src 'self'; worker-src 'self'")
 
 MAX_MESSAGE_CHARS = 20000
+# Empreintes (publiques) des clés qui signent l'application Android : clé de la CI et clé Google Play.
+ANDROID_CERTS: list[str] = []
 
 
 class LoginBody(BaseModel):
@@ -136,6 +138,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     db = db or open_database(cfg)
     if not isinstance(db, family.ScopedDB):  # chaque membre de la famille a son espace privé
         db = family.ScopedDB(db, family.space_factory(db, cfg.data_dir))
+    imagegen.configure(cfg)  # services d'images (clés facultatives)
     agent = agent or Agent(cfg, db)
     if agent.db is not db:
         agent.db = db
@@ -204,6 +207,22 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/")
     async def index():
         return FileResponse(WEB_DIR / "index.html", media_type="text/html")
+
+    @app.get("/rejoindre/{code}")
+    @app.get("/essai/{link}")
+    async def shared_link():
+        """Liens d'invitation : ouvrent l'application Android si elle est installée, sinon le site."""
+        return FileResponse(WEB_DIR / "index.html", media_type="text/html")
+
+    @app.get("/.well-known/assetlinks.json")
+    async def asset_links():
+        """Prouve à Android que les liens de ce site appartiennent à l'application Syrius (App Links)."""
+        certs = [c.strip().upper() for c in (ANDROID_CERTS + cfg.android_certs) if c.strip()]
+        certs = [c for c in dict.fromkeys(certs) if re.fullmatch(r"([0-9A-F]{2}:){31}[0-9A-F]{2}", c)]
+        return JSONResponse([{"relation": ["delegate_permission/common.handle_all_urls"],
+                              "target": {"namespace": "android_app", "package_name": "fr.syrius.app",
+                                         "sha256_cert_fingerprints": certs}}],
+                            headers={"Cache-Control": "public, max-age=3600"})
 
     @app.get("/static/{name}")
     async def static(name: str):
@@ -287,6 +306,11 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         family.quota_use(db.base, "m3d", uid)
         await asyncio.to_thread(family.cache_put, db.base, key, data)
         return Response(data, media_type=GLB_TYPE, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/diagnostic", dependencies=[Depends(require_auth), Depends(require_owner)])
+    def run_diagnostic():
+        """Teste en direct les services d'images, de photos et de 3D (propriétaire uniquement)."""
+        return {"checks": diagnostic.run(cfg, agent.llm.providers)}
 
     @app.post("/api/image", dependencies=[Depends(require_auth)])
     def create_image(body: ImageBody):

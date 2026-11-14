@@ -5,19 +5,24 @@ plugins {
 // Signature : si les secrets GitHub SYRIUS_KEYSTORE_* existent, l'APK est signé avec ta clé
 // (les mises à jour s'installent par-dessus). Sinon, clé de test (désinstaller avant mise à jour).
 def ks = System.getenv("SYRIUS_KEYSTORE_FILE")
+// Adresse de ton Syrius : ses liens (invitations, essais) ouvrent directement l'application.
+def syriusUrl = System.getenv("SYRIUS_URL") ?: ""
+def linkHost = syriusUrl.replaceFirst(/^https?:\/\//, "").replaceFirst(/[\/:?#].*$/, "")
+if (!(linkHost ==~ /[A-Za-z0-9.-]+/)) linkHost = "syrius.invalid"
 
 android {
     namespace "fr.syrius.app"
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "fr.syrius.app"
         minSdk 26
-        targetSdk 34
+        targetSdk 36  // exigence Google Play (Android 16)
         versionCode Integer.parseInt(System.getenv("SYRIUS_VERSION_CODE") ?: "1")
         versionName "1.0." + (System.getenv("SYRIUS_VERSION_CODE") ?: "1")
         // Adresse de ton Syrius, pré-remplie au premier lancement (variable GitHub SYRIUS_URL).
-        buildConfigField "String", "DEFAULT_URL", "\"" + (System.getenv("SYRIUS_URL") ?: "") + "\""
+        buildConfigField "String", "DEFAULT_URL", "\"" + syriusUrl + "\""
+        manifestPlaceholders = [linkHost: linkHost]
         // Téléphones Android 64 bits (ARM) uniquement : application plus légère.
         ndk {
             abiFilters "arm64-v8a"

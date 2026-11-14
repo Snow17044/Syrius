@@ -49,16 +49,47 @@ jobs:
           SYRIUS_VERSION_CODE: ${{ github.run_number }}
           SYRIUS_KEYSTORE_PASSWORD: ${{ secrets.SYRIUS_KEYSTORE_PASSWORD }}
           SYRIUS_KEY_ALIAS: ${{ secrets.SYRIUS_KEY_ALIAS }}
-        run: gradle --no-daemon assembleRelease
+        run: gradle --no-daemon assembleRelease bundleRelease
 
       - name: Renommer
-        run: cp android/app/build/outputs/apk/release/app-release.apk Syrius.apk && sha256sum Syrius.apk | tee Syrius.apk.sha256
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk Syrius.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab Syrius.aab
+          sha256sum Syrius.apk Syrius.aab | tee Syrius.apk.sha256
+
+      - name: Empreinte de la clé de signature (publique, pour les liens qui ouvrent l'app)
+        env:
+          SYRIUS_KEYSTORE_PASSWORD: ${{ secrets.SYRIUS_KEYSTORE_PASSWORD }}
+          SYRIUS_KEY_ALIAS: ${{ secrets.SYRIUS_KEY_ALIAS }}
+        run: |
+          if [ -n "${SYRIUS_KEYSTORE_FILE:-}" ]; then
+            echo "Clé de signature : la tienne (secrets GitHub)."
+            keytool -list -v -keystore "$SYRIUS_KEYSTORE_FILE" -storepass "$SYRIUS_KEYSTORE_PASSWORD" -alias "$SYRIUS_KEY_ALIAS" | grep -E "SHA256:" | sed 's/^ */EMPREINTE /'
+          else
+            echo "::warning::Aucune clé de signature : APK de test (refusé par Google Play)."
+          fi
+
+      - name: Compatibilité Google Play (pages mémoire 16 Ko, Android 15+)
+        run: |
+          mkdir -p "$RUNNER_TEMP/so" && unzip -q -o Syrius.apk 'lib/*' -d "$RUNNER_TEMP/so"
+          bad=0
+          for f in $(find "$RUNNER_TEMP/so" -name '*.so' | sort); do
+            align=$(readelf -lW "$f" | awk '$1=="LOAD"{print $NF}' | sort -u | tr '\n' ' ')
+            ok=yes
+            for a in $align; do [ $((a)) -ge 16384 ] || ok=no; done
+            echo "$ok  $(basename "$f")  $align"
+            [ "$ok" = yes ] || bad=1
+          done
+          ZA=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)zipalign
+          "$ZA" -c -P 16 4 Syrius.apk && echo "zipalign 16 Ko : OK" || bad=1
+          if [ "$bad" = 1 ]; then echo "::error::Bibliothèque non compatible 16 Ko (Google Play la refusera)"; exit 1; fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Syrius-apk
           path: |
             Syrius.apk
+            Syrius.aab
             Syrius.apk.sha256
 
   publish:
@@ -80,4 +111,4 @@ jobs:
           gh release view android-latest >/dev/null 2>&1 || \
             gh release create android-latest --target "$GITHUB_SHA" --title "Application Android Syrius" \
               --notes "Télécharge **Syrius.apk** depuis ton téléphone Android et ouvre-le pour l'installer."
-          gh release upload android-latest Syrius.apk Syrius.apk.sha256 --clobber
+          gh release upload android-latest Syrius.apk Syrius.aab Syrius.apk.sha256 --clobber

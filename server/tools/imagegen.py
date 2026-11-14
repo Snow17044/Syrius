@@ -8,6 +8,7 @@ L'adresse du téléphone n'est jamais transmise au service (c'est le serveur qui
 from __future__ import annotations
 
 import http.client
+import json
 import random
 import re
 import ssl
@@ -59,26 +60,85 @@ def check_image(ctype: str, body: bytes) -> str:
     return ctype
 
 
-def generate(prompt: str, seed: int | None = None) -> tuple[str, bytes]:
-    """Renvoie (type, octets de l'image)."""
-    path = build_path(prompt, random.randrange(2**31) if seed is None else seed)
+KEYS = {"pollinations": "", "hf": ""}  # renseignées au démarrage (variables Vercel), jamais envoyées ailleurs
+HF_HOST = "router.huggingface.co"
+HF_PATH = "/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+GEN_HOST = "gen.pollinations.ai"
+
+
+def configure(cfg) -> None:
+    KEYS["pollinations"] = getattr(cfg, "pollinations_api_key", "") or ""
+    KEYS["hf"] = getattr(cfg, "hf_token", "") or ""
+
+
+def _fetch(host: str, method: str, path: str, headers: dict, body: bytes | None = None) -> tuple[int, str, bytes]:
     try:
-        ip = web.resolve_public(HOST, 443)
+        ip = web.resolve_public(host, 443)
     except web.WebError as e:
         raise ImageGenError(str(e)) from None
-    conn = web._PinnedHTTPS(HOST, ip, 443, TIMEOUT)
+    conn = web._PinnedHTTPS(host, ip, 443, TIMEOUT)
     try:
-        conn.request("GET", path, headers=HEADERS)
+        conn.request(method, path, body=body, headers=headers)
         resp = conn.getresponse()
-        ctype = resp.getheader("content-type", "")
-        body = resp.read(MAX_BYTES + 1)
-        status = resp.status
+        return resp.status, resp.getheader("content-type", ""), resp.read(MAX_BYTES + 1)
     except (OSError, http.client.HTTPException, ssl.SSLError):
         raise ImageGenError("le service d'images n'a pas répondu") from None
     finally:
         conn.close()
+
+
+def _status_error(name: str, status: int) -> ImageGenError:
     if status == 429:
-        raise ImageGenError("service d'images saturé, réessaie dans une minute")
+        return ImageGenError(f"{name} : service saturé, réessaie dans une minute")
+    if status in (401, 402, 403):
+        return ImageGenError(f"{name} : accès refusé ({status})")
+    return ImageGenError(f"{name} : service indisponible ({status})")
+
+
+def _pollinations(prompt: str, seed: int) -> tuple[str, bytes]:
+    status, ctype, body = _fetch(HOST, "GET", build_path(prompt, seed), HEADERS)
     if status != 200:
-        raise ImageGenError(f"service d'images indisponible ({status})")
+        raise _status_error("Pollinations", status)
     return check_image(ctype, body), body
+
+
+def _pollinations_key(prompt: str, seed: int) -> tuple[str, bytes]:
+    path = build_path(prompt, seed).replace("/prompt/", "/image/", 1)
+    status, ctype, body = _fetch(GEN_HOST, "GET", path, {**HEADERS, "Authorization": f"Bearer {KEYS['pollinations']}"})
+    if status != 200:
+        raise _status_error("Pollinations (clé)", status)
+    return check_image(ctype, body), body
+
+
+def _huggingface(prompt: str, seed: int) -> tuple[str, bytes]:
+    payload = json.dumps({"inputs": clean_prompt(prompt),
+                          "parameters": {"width": SIZE, "height": SIZE, "num_inference_steps": 4, "seed": seed}})
+    status, ctype, body = _fetch(HF_HOST, "POST", HF_PATH, {
+        **HEADERS, "Accept": "image/jpeg", "Content-Type": "application/json",
+        "Authorization": f"Bearer {KEYS['hf']}"}, payload.encode())
+    if status != 200:
+        raise _status_error("Hugging Face", status)
+    return check_image(ctype, body), body
+
+
+def sources() -> list:
+    out = []
+    if KEYS["pollinations"]:
+        out.append(_pollinations_key)
+    out.append(_pollinations)
+    if KEYS["hf"]:
+        out.append(_huggingface)
+    return out
+
+
+def generate(prompt: str, seed: int | None = None) -> tuple[str, bytes]:
+    """Renvoie (type, octets de l'image). Plusieurs services gratuits essayés tour à tour."""
+    seed = random.randrange(2**31) if seed is None else seed
+    clean_prompt(prompt)
+    errors = []
+    for src in sources():
+        try:
+            return src(prompt, seed)
+        except ImageGenError as e:
+            errors.append(str(e))
+    raise ImageGenError(" ; ".join(errors) or "aucun service d'images disponible")

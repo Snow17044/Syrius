@@ -99,7 +99,30 @@ final class DeviceActions {
         Reminders.add(activity, p.getString("id"), clip(p.getString("text"), 200), p.getLong("at"),
                 p.optString("repeat", "none"));
         askNotifications(activity);
+        askExactAlarms();
         toast("Rappel programmé : " + clip(p.optString("label", ""), 60));
+    }
+
+    /** Android 12+ : « Alarmes et rappels » pour sonner à l'heure exacte (proposé une seule fois). */
+    private void askExactAlarms() {
+        if (android.os.Build.VERSION.SDK_INT < 31) return;
+        android.app.AlarmManager am = activity.getSystemService(android.app.AlarmManager.class);
+        android.content.SharedPreferences prefs = activity.getSharedPreferences("syrius", Context.MODE_PRIVATE);
+        if (am == null || am.canScheduleExactAlarms() || prefs.getBoolean("asked_exact", false)) return;
+        prefs.edit().putBoolean("asked_exact", true).apply();
+        activity.runOnUiThread(() -> new android.app.AlertDialog.Builder(activity)
+                .setTitle("Rappels à l'heure exacte")
+                .setMessage("Pour que tes rappels sonnent pile à l'heure, autorise « Alarmes et rappels » pour Syrius. "
+                        + "Sinon, ils peuvent arriver avec quelques minutes de retard.")
+                .setPositiveButton("Autoriser", (d, w) -> {
+                    try {
+                        activity.startActivity(new Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                Uri.parse("package:" + activity.getPackageName())));
+                    } catch (Exception ignored) {
+                    }
+                })
+                .setNegativeButton("Plus tard", null)
+                .show());
     }
 
     /** Android 13+ : les notifications doivent être autorisées une fois. */
@@ -147,7 +170,16 @@ final class DeviceActions {
         boolean isNumber = p.optBoolean("is_number");
         if (!isNumber && activity.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
             pending = req;
-            activity.requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS);
+            // Information claire AVANT la demande d'Android (règle Google Play sur les données sensibles).
+            activity.runOnUiThread(() -> new android.app.AlertDialog.Builder(activity)
+                    .setTitle("Accès à tes contacts")
+                    .setMessage("Pour appeler ou écrire à « " + clip(contact, 40) + " », Syrius cherche son numéro "
+                            + "dans tes contacts. Tes contacts restent sur ton téléphone : ils ne sont jamais envoyés "
+                            + "sur Internet ni à une IA.")
+                    .setPositiveButton("Continuer", (d, w) -> activity.requestPermissions(
+                            new String[]{Manifest.permission.READ_CONTACTS}, REQ_CONTACTS))
+                    .setNegativeButton("Non merci", (d, w) -> pending = null)
+                    .show());
             return;
         }
         String number = Calls.number(activity, contact, isNumber);

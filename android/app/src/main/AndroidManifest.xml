@@ -15,14 +15,11 @@
     <!-- Rappels et briefing : notifications à l'heure voulue, reprogrammées au redémarrage -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Rappels à l'heure exacte : autorisation « Alarmes et rappels » donnée par l'utilisateur -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- « Hey Syrius » : écoute permanente via un service visible (notification permanente) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <!-- « Hey Syrius », app fermée : ouvrir l'app de musique (donnée par l'utilisateur dans les réglages) -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <queries>
         <intent>
@@ -92,6 +89,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Liens d'invitation et d'essai : ouverts directement dans l'application (App Links vérifiés) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${linkHost}" android:pathPrefix="/rejoindre/" />
+                <data android:scheme="https" android:host="${linkHost}" android:pathPrefix="/essai/" />
             </intent-filter>
         </activity>
 
