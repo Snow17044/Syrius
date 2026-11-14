@@ -24,12 +24,12 @@ jobs:
         run: docker build -t syrius-discord --build-arg SYRIUS_REF="${GITHUB_REF_NAME}" discord-bot
       - name: Essai de la voix française
         run: |
-          docker run -d --name v --entrypoint /opt/piper/bin/python syrius-discord \
+          docker run -d --name syrius-voix --entrypoint /opt/piper/bin/python syrius-discord \
             -m piper.http_server -m fr_FR-siwis-medium --data-dir /opt/voices --host 0.0.0.0 --port 5000
           for i in $(seq 1 30); do
-            docker exec v wget -q -O /tmp/t.wav --post-data='{"text":"Bonjour, je suis Syrius."}' \
+            docker exec syrius-voix wget -q -O /tmp/t.wav --post-data='{"text":"Bonjour, je suis Syrius."}' \
               --header='Content-Type: application/json' http://127.0.0.1:5000 && break
             sleep 2
           done
-          docker exec v sh -c 'ls -l /tmp/t.wav && head -c 4 /tmp/t.wav' | tee /dev/stderr | grep -q RIFF
+          docker exec syrius-voix sh -c 'ls -l /tmp/t.wav && head -c 4 /tmp/t.wav' | tee /dev/stderr | grep -q RIFF
           echo "Voix française : OK"
