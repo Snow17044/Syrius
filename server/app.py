@@ -40,7 +40,9 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
 
 MAX_MESSAGE_CHARS = 20000
 # Empreintes (publiques) des clés qui signent l'application Android : clé de la CI et clé Google Play.
-ANDROID_CERTS: list[str] = []
+ANDROID_CERTS: list[str] = [
+    "E4:30:06:4D:B0:68:BA:81:FB:B5:B3:61:F8:61:87:8F:9A:B8:7F:DD:D4:FD:C2:78:14:D7:82:95:2B:60:24:CD",  # clé Syrius
+]
 
 
 class LoginBody(BaseModel):
