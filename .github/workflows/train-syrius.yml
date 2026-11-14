@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # identité officielle GitHub pour parler à ton Syrius (aucun secret à configurer)
 
 jobs:
   train:
@@ -25,26 +26,19 @@ jobs:
       SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
       SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN || secrets.SYRIUS_TRAINING_KEY || vars.SYRIUS_TRAINING_TOKEN || vars.SYRIUS_TRAINING_KEY }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Faut-il entraîner cette nuit ?
         id: check
         run: |
-          [ -n "$SYRIUS_TRAINING_TOKEN" ] && echo "::add-mask::$SYRIUS_TRAINING_TOKEN"
           go=true
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            go=false
-            if [ -n "$SYRIUS_TRAINING_TOKEN" ]; then
-              r=$(curl -sS -m 30 -H "Authorization: Bearer $SYRIUS_TRAINING_TOKEN" "$SYRIUS_URL/api/training/worker/should-train" || true)
-              echo "Réponse : $r"
-              case "$r" in *'"train":true'*) go=true ;; esac
-            fi
+            go=$(python3 training/syrius_auth.py should-train)
           fi
           echo "go=$go" >> "$GITHUB_OUTPUT"
           echo "Entraînement : $go"
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.check.outputs.go == 'true'
-        with:
-          persist-credentials: false
 
       - name: Outils (versions figées)
         if: steps.check.outputs.go == 'true'

@@ -266,27 +266,15 @@
       <ul id="t-history" class="family-list"></ul>
 
       <details class="train-setup">
-        <summary>Brancher le suivi en direct (une seule fois)</summary>
-        <ol class="small">
-          <li>Touche « Copier la clé » ci-dessous.</li>
-          <li>Sur GitHub : ton dépôt Syrius → <strong>Settings → Secrets and variables → Actions → New repository
-            secret</strong>.</li>
-          <li>Nom : <code>SYRIUS_TRAINING_KEY</code>, valeur : colle la clé, puis « Add secret ».</li>
-        </ol>
-        <div class="local-actions">
-          <button type="button" id="t-copy" class="ghost" data-icon="link"><span>Copier la clé</span></button>
-          <button type="button" id="t-renew" class="ghost subtle" data-icon="refresh"><span>Nouvelle clé</span></button>
-        </div>
-        <p class="small muted">Cette clé permet seulement d'envoyer la progression et de lire tes exemples
-          d'entraînement, jamais tes discussions. Pour lancer un entraînement tout de suite : GitHub → Actions →
-          « Entraîner l'IA Syrius » → Run workflow.</p>
+        <summary>Comment Syrius reconnaît GitHub</summary>
+        <p class="small muted">Rien à configurer : les automatisations de ton dépôt GitHub (entraînement chaque nuit,
+          « Améliorer Syrius ») prouvent leur identité avec la signature officielle de GitHub. Ton Syrius vérifie
+          qu'elles viennent bien de ton dépôt, sur la branche principale. Elles ne peuvent que suivre l'entraînement,
+          lire tes phrases d'entraînement et tes demandes de changement, jamais tes discussions.</p>
+        <p class="small"><strong>Pour « Améliorer Syrius »</strong> : secret GitHub <code>OPENROUTER_API_KEY</code>, et
+          « Allow GitHub Actions to create and approve pull requests » coché (Settings → Actions → General).</p>
         <p id="t-setup-msg" class="small"></p>
-        <p class="small"><strong>Pour « Améliorer Syrius »</strong>, en plus :</p>
-        <ol class="small">
-          <li>Secret GitHub <code>OPENROUTER_API_KEY</code> : ta clé OpenRouter (la même que dans Vercel).</li>
-          <li>GitHub → ton dépôt → <strong>Settings → Actions → General</strong> → tout en bas, coche
-            « Allow GitHub Actions to create and approve pull requests » → Save.</li>
-        </ol>
+        <button type="button" id="t-copy" class="hidden"></button><button type="button" id="t-renew" class="hidden"></button>
       </details>
     </form>
   </dialog>

@@ -608,7 +608,13 @@ def build(seed: int = 7) -> list[dict]:
 
 def owner_examples(rng: random.Random) -> list[dict]:
     """Exemples donnés par le propriétaire dans le tableau de bord (chacun appris 3 fois)."""
-    url, tok = os.environ.get("SYRIUS_URL", "").rstrip("/"), os.environ.get("SYRIUS_TRAINING_TOKEN", "")
+    import syrius_auth
+    url = os.environ.get("SYRIUS_URL", "").rstrip("/")
+    try:
+        tok = syrius_auth.token() if url else ""
+    except Exception as e:  # noqa: BLE001
+        print(f"Identité GitHub indisponible : {e}")
+        tok = ""
     if not url or not tok:
         return []
     try:

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, diagnostic, family, safety, selfcode, training, voicebot
+from . import auth, diagnostic, family, github_oidc, safety, selfcode, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -521,11 +521,15 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return {"ok": True, "deleted": "data"}
 
     # ------------------------------------------------------------------ entraînement de l'IA Syrius
-    def require_trainer(request: Request) -> None:
+    async def require_trainer(request: Request) -> None:
         auth_h = request.headers.get("authorization", "")
         given = auth_h[7:] if auth_h.lower().startswith("bearer ") else ""
-        if not training.check_token(db.base, given):
-            raise HTTPException(401, "Clé d'entraînement invalide")
+        if training.check_token(db.base, given):
+            return
+        # Automatisation de TON dépôt GitHub, prouvée par la signature officielle de GitHub (aucun secret).
+        if given.count(".") == 2 and await asyncio.to_thread(github_oidc.verify, given, cfg.github_repo):
+            return
+        raise HTTPException(401, "Clé d'entraînement invalide")
 
     @app.get("/api/training", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_state():

@@ -22,6 +22,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write  # identité officielle GitHub pour parler à ton Syrius (aucun secret à configurer)
     env:
       SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
     steps:
@@ -36,8 +37,7 @@ jobs:
           SYRIUS_TRAINING_TOKEN: ${{ secrets.SYRIUS_TRAINING_TOKEN || secrets.SYRIUS_TRAINING_KEY || vars.SYRIUS_TRAINING_TOKEN || vars.SYRIUS_TRAINING_KEY }}
         run: |
           [ -n "$SYRIUS_TRAINING_TOKEN" ] && echo "::add-mask::$SYRIUS_TRAINING_TOKEN"
-          if [ -z "$SYRIUS_TRAINING_TOKEN" ]; then echo "Clé d'entraînement absente."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          python3 selfcode/agent.py next
+          python3 selfcode/agent.py next || { echo "Ton Syrius ne répond pas (identité refusée ?)"; echo "go=false" >> "$GITHUB_OUTPUT"; }
 
       - name: Préparer les outils (versions figées)
         if: steps.next.outputs.go == 'true'
