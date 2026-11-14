@@ -67,8 +67,8 @@ class Config:
     # IA gratuites qui « voient », utilisées seulement pour les photos (relais si les autres échouent).
     openrouter_vision_models: list = field(default_factory=lambda: [
         m.strip() for m in _env("SYRIUS_OPENROUTER_VISION_MODELS",
-                                "nvidia/nemotron-3.5-super-vl:free,thinkingmachines/inkling-2-small:free,"
-                                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,google/gemma-4-26b-a4b-it:free").split(",")
+                                "nvidia/nemotron-3.5-super-vl:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,"
+                                "google/gemma-4-26b-a4b-it:free").split(",")
         if m.strip()][:4])
     # Empreintes SHA-256 supplémentaires de l'application Android (liens qui ouvrent l'app), séparées par des virgules.
     android_certs: list = field(default_factory=lambda: [

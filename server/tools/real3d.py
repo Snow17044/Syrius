@@ -74,10 +74,14 @@ def poly_search(api_key: str, query: str, limit: int = 6) -> list[dict]:
         raise Real3DError("bibliothèque 3D non configurée (clé POLYPIZZA_API_KEY absente)")
     q = clean_query(query, 80)
     head = {"x-auth-token": api_key, "Accept": "application/json"}
-    status, _, body = _request(POLY_API, "GET", f"/v1.1/search/{quote(q, safe='')}?Limit={limit}", head)
-    if status >= 500:  # panne passagère ou paramètre refusé : un second essai, plus simple
-        time.sleep(0.5)
-        status, _, body = _request(POLY_API, "GET", f"/v1.1/search/{quote(q, safe='')}", head)
+    enc = quote(q, safe="")
+    # Plusieurs formes d'adresse essayées : le service renvoie parfois une erreur 500 sur l'une d'elles.
+    for path in (f"/v1.1/search/{enc}?Limit={limit}", f"/v1.1/search/{enc}", f"/v1.1/search?q={enc}&Limit={limit}",
+                 f"/v1/search/{enc}?Limit={limit}"):
+        status, _, body = _request(POLY_API, "GET", path, head)
+        if status < 500 and status != 404:
+            break
+        time.sleep(0.3)
     if status in (401, 403):
         raise Real3DError("clé Poly Pizza refusée")
     if status != 200:
