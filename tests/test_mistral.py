@@ -46,7 +46,7 @@ def test_plusieurs_modeles_groq(monkeypatch):
     monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
     monkeypatch.setenv("GROQ_API_KEY", "cle-groq")
     ps = providers_from_config(Config())
-    assert [p.name for p in ps][:3] == ["groq", "groq2", "groq3"] and len(ps) == 5
+    assert [p.name for p in ps][:3] == ["groq", "groq2", "groq3"] and len(ps) == 4
     assert ps[0].model == "openai/gpt-oss-120b" and ps[0].reasoning
     assert ps[1].model == "llama-3.3-70b-versatile" and not ps[1].reasoning and ps[1].label == "Groq · Llama 3.3"
     assert all(p.api_key == "cle-groq" for p in ps)

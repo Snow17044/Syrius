@@ -1,4 +1,6 @@
 """Création d'images en ligne : relais sécurisé (un seul hôte, vraies images uniquement)."""
+import json
+
 import pytest
 
 from server.tools import imagegen
@@ -36,12 +38,14 @@ def test_un_seul_hote_et_ip_publique(monkeypatch):
     seen = {}
 
     def fake_resolve(host, port):
-        seen["host"] = host
+        seen.setdefault("hosts", []).append(host)
         raise imagegen.web.WebError("adresse privée refusée")
     monkeypatch.setattr(imagegen.web, "resolve_public", fake_resolve)
+    monkeypatch.setitem(imagegen.KEYS, "pollinations", "")
+    monkeypatch.setitem(imagegen.KEYS, "hf", "")
     with pytest.raises(ImageGenError):
         imagegen.generate("a red apple", seed=1)
-    assert seen["host"] == "image.pollinations.ai"
+    assert seen["hosts"] == ["image.pollinations.ai", "aihorde.net"]
 
 
 def test_route_protegee_et_relayee(make_client, monkeypatch):
@@ -67,13 +71,15 @@ def test_route_protegee_et_relayee(make_client, monkeypatch):
 
 
 def test_plusieurs_services_essayes_tour_a_tour(monkeypatch):
+    import base64
     calls = []
     jpeg = b"\xff\xd8\xff\xe0" + b"0" * 2000
+    data_url = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
 
     def fake_fetch(host, method, path, headers, body=None):
         calls.append((host, headers.get("Authorization", "")))
         if host == "router.huggingface.co":
-            return 200, "image/jpeg", jpeg
+            return 200, "application/json", json.dumps({"images": [{"url": data_url}]}).encode()
         return (429 if host == "image.pollinations.ai" else 401), "application/json", b"{}"
     monkeypatch.setattr(imagegen, "_fetch", fake_fetch)
     monkeypatch.setitem(imagegen.KEYS, "pollinations", "pk_test")
@@ -81,7 +87,36 @@ def test_plusieurs_services_essayes_tour_a_tour(monkeypatch):
     assert imagegen.generate("a red apple", seed=3) == ("image/jpeg", jpeg)
     assert [h for h, _ in calls] == ["gen.pollinations.ai", "image.pollinations.ai", "router.huggingface.co"]
     assert calls[0][1] == "Bearer pk_test" and calls[1][1] == "" and calls[2][1] == "Bearer hf_test"
+
+
+def test_ai_horde_gratuit_en_dernier(monkeypatch):
+    webp = b"RIFF1234WEBP" + b"0" * 2000
+    seen = []
+
+    def fake_fetch(host, method, path, headers, body=None):
+        seen.append((host, method, path))
+        if host == "aihorde.net" and path == "/api/v2/generate/async":
+            assert headers["apikey"] == "0000000000"
+            return 202, "application/json", b'{"id": "0a1b2c3d-1111-2222-3333-444455556666"}'
+        if host == "aihorde.net" and "/check/" in path:
+            return 200, "application/json", b'{"done": true}'
+        if host == "aihorde.net" and "/status/" in path:
+            return 200, "application/json", json.dumps({"generations": [
+                {"img": "https://abc.r2.cloudflarestorage.com/x.webp?sig=1", "censored": False}]}).encode()
+        if host == "abc.r2.cloudflarestorage.com":
+            return 200, "image/webp", webp
+        return 503, "text/html", b""
+    monkeypatch.setattr(imagegen, "_fetch", fake_fetch)
+    monkeypatch.setattr(imagegen.time, "sleep", lambda s: None)
+    monkeypatch.setitem(imagegen.KEYS, "pollinations", "")
     monkeypatch.setitem(imagegen.KEYS, "hf", "")
+    assert imagegen.generate("a red apple", seed=3) == ("image/webp", webp)
+    # une adresse d'image venant d'un autre hôte est refusée
+    def evil(host, method, path, headers, body=None):
+        if "/status/" in path:
+            return 200, "application/json", b'{"generations": [{"img": "https://evil.example.com/x.webp"}]}'
+        return fake_fetch(host, method, path, headers, body)
+    monkeypatch.setattr(imagegen, "_fetch", evil)
     with pytest.raises(ImageGenError) as e:
         imagegen.generate("a red apple", seed=3)
-    assert "saturé" in str(e.value)
+    assert "inattendue" in str(e.value)

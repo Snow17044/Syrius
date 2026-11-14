@@ -7,12 +7,14 @@ L'adresse du téléphone n'est jamais transmise au service (c'est le serveur qui
 """
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import random
 import re
 import ssl
-from urllib.parse import quote
+import time
+from urllib.parse import quote, urlsplit
 
 from . import web
 
@@ -62,8 +64,11 @@ def check_image(ctype: str, body: bytes) -> str:
 
 KEYS = {"pollinations": "", "hf": ""}  # renseignées au démarrage (variables Vercel), jamais envoyées ailleurs
 HF_HOST = "router.huggingface.co"
-HF_PATH = "/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+HF_PATH = "/fal-ai/fal-ai/flux/schnell"  # FLUX.1 schnell via Hugging Face (fournisseur fal-ai)
 GEN_HOST = "gen.pollinations.ai"
+HORDE_HOST = "aihorde.net"  # AI Horde : réseau collaboratif gratuit, sans compte
+HORDE_WAIT = 100  # secondes au plus dans la file d'attente
+_DATA_IMG = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$")
 
 
 def configure(cfg) -> None:
@@ -110,15 +115,83 @@ def _pollinations_key(prompt: str, seed: int) -> tuple[str, bytes]:
     return check_image(ctype, body), body
 
 
-def _huggingface(prompt: str, seed: int) -> tuple[str, bytes]:
-    payload = json.dumps({"inputs": clean_prompt(prompt),
-                          "parameters": {"width": SIZE, "height": SIZE, "num_inference_steps": 4, "seed": seed}})
-    status, ctype, body = _fetch(HF_HOST, "POST", HF_PATH, {
-        **HEADERS, "Accept": "image/jpeg", "Content-Type": "application/json",
-        "Authorization": f"Bearer {KEYS['hf']}"}, payload.encode())
+def _download(url: str, allowed: tuple, name: str) -> tuple[str, bytes]:
+    """Télécharge l'image finale (https, hôte attendu uniquement)."""
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    if parts.scheme != "https" or not any(host == h or host.endswith("." + h) for h in allowed):
+        raise ImageGenError(f"{name} : adresse d'image inattendue")
+    status, ctype, body = _fetch(host, "GET", (parts.path or "/") + (f"?{parts.query}" if parts.query else ""),
+                                 {**HEADERS, "Accept": "image/*"})
     if status != 200:
-        raise _status_error("Hugging Face", status)
-    return check_image(ctype, body), body
+        raise _status_error(name, status)
+    return check_image(ctype or "image/webp", body), body
+
+
+def _json(name: str, status: int, body: bytes) -> dict:
+    if status not in (200, 201, 202):
+        raise _status_error(name, status)
+    try:
+        data = json.loads(body)
+    except ValueError:
+        raise ImageGenError(f"{name} : réponse illisible") from None
+    if not isinstance(data, dict):
+        raise ImageGenError(f"{name} : réponse illisible")
+    return data
+
+
+def _huggingface(prompt: str, seed: int) -> tuple[str, bytes]:
+    payload = json.dumps({"prompt": clean_prompt(prompt), "image_size": {"width": SIZE, "height": SIZE},
+                          "num_inference_steps": 4, "seed": seed, "sync_mode": True, "enable_safety_checker": True})
+    status, _, body = _fetch(HF_HOST, "POST", HF_PATH, {
+        **HEADERS, "Accept": "application/json", "Content-Type": "application/json",
+        "Authorization": f"Bearer {KEYS['hf']}"}, payload.encode())
+    data = _json("Hugging Face", status, body)
+    images = data.get("images") or []
+    url = images[0].get("url", "") if images and isinstance(images[0], dict) else ""
+    m = _DATA_IMG.match(url or "")
+    if m:
+        raw = base64.b64decode(m.group(2))
+        return check_image(m.group(1), raw), raw
+    return _download(url, ("fal.media", "fal.run"), "Hugging Face")
+
+
+def _horde(prompt: str, seed: int) -> tuple[str, bytes]:
+    head = {**HEADERS, "Accept": "application/json", "Content-Type": "application/json",
+            "apikey": "0000000000", "Client-Agent": "Syrius:1.0:anonymous"}
+    payload = {"prompt": clean_prompt(prompt) + " ### blurry, deformed, text, watermark",
+               "params": {"width": 512, "height": 512, "steps": 20, "n": 1, "seed": str(seed),
+                          "sampler_name": "k_euler_a", "cfg_scale": 7},
+               "models": ["AbsoluteReality", "Deliberate", "stable_diffusion"],
+               "nsfw": False, "censor_nsfw": True, "r2": True, "shared": False, "trusted_workers": False}
+    status, _, body = _fetch(HORDE_HOST, "POST", "/api/v2/generate/async", head, json.dumps(payload).encode())
+    job = str(_json("AI Horde", status, body).get("id") or "")
+    if not re.fullmatch(r"[0-9a-f-]{8,64}", job):
+        raise ImageGenError("AI Horde : demande refusée")
+    end = time.time() + HORDE_WAIT
+    while True:
+        time.sleep(2)
+        status, _, body = _fetch(HORDE_HOST, "GET", f"/api/v2/generate/check/{job}", head)
+        check = _json("AI Horde", status, body)
+        if check.get("done"):
+            break
+        if check.get("faulted") or not check.get("is_possible", True):
+            raise ImageGenError("AI Horde : création impossible")
+        if time.time() > end:
+            _fetch(HORDE_HOST, "DELETE", f"/api/v2/generate/status/{job}", head)
+            raise ImageGenError("AI Horde : file d'attente trop longue")
+    status, _, body = _fetch(HORDE_HOST, "GET", f"/api/v2/generate/status/{job}", head)
+    gens = _json("AI Horde", status, body).get("generations") or []
+    if not gens or not isinstance(gens[0], dict) or gens[0].get("censored"):
+        raise ImageGenError("AI Horde : image refusée")
+    img = str(gens[0].get("img") or "")
+    if not img.startswith("https://"):
+        try:
+            raw = base64.b64decode(img, validate=True)
+        except ValueError:
+            raise ImageGenError("AI Horde : image illisible") from None
+        return check_image("image/webp", raw), raw
+    return _download(img, ("r2.cloudflarestorage.com", "aihorde.net"), "AI Horde")
 
 
 def sources() -> list:
@@ -128,6 +201,7 @@ def sources() -> list:
     out.append(_pollinations)
     if KEYS["hf"]:
         out.append(_huggingface)
+    out.append(_horde)  # gratuit et sans clé, un peu plus lent (file d'attente)
     return out
 
 

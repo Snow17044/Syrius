@@ -43,7 +43,7 @@ def _timed(name: str, fn) -> dict:
 
 def _vision(provider) -> str:
     img = "data:image/png;base64," + base64.b64encode(_png()).decode()
-    body = {"model": provider.model, "max_tokens": 30, "messages": [{"role": "user", "content": [
+    body = {"model": provider.model, "max_tokens": 600, "messages": [{"role": "user", "content": [
         {"type": "text", "text": "Quelle est la couleur de cette image ? Un seul mot."},
         {"type": "image_url", "image_url": {"url": img}}]}]}
     req = urllib.request.Request(provider.base_url + "/chat/completions", data=json.dumps(body).encode(), headers={
@@ -54,7 +54,8 @@ def _vision(provider) -> str:
             data = json.loads(r.read(200_000))
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code} {e.read(300).decode('utf-8', 'replace')}") from None
-    text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    msg = (data.get("choices") or [{}])[0].get("message") or {}
+    text = (msg.get("content") or "").strip() or ("(a réfléchi) " if msg.get("reasoning") else "")
     if not text:
         raise RuntimeError("réponse vide")
     return "répond : " + text[:40]
@@ -79,7 +80,8 @@ def _hf_whoami(token: str) -> str:
 def run(cfg, providers) -> list[dict]:
     checks = []
     names = {imagegen._pollinations_key: "Images · Pollinations (clé)", imagegen._pollinations: "Images · Pollinations",
-             imagegen._huggingface: "Images · Hugging Face FLUX"}
+             imagegen._huggingface: "Images · Hugging Face FLUX",
+             imagegen._horde: "Images · AI Horde (gratuit)"}
     for src in imagegen.sources():
         checks.append((names.get(src, "Images"), lambda s=src: _image_source(s)))
     for p in providers:
