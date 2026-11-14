@@ -1,0 +1,41 @@
+# Crée UNE FOIS la clé qui signe l'application Syrius (clé d'« importation » Google Play).
+# Le fichier est chiffré par ton mot de passe (secret GitHub SYRIUS_KEYSTORE_PASSWORD, 16 caractères min.) :
+# sans ce mot de passe, il est inutilisable. Si la clé était perdue, Google Play permet de la remplacer.
+name: Créer la clé de signature Android
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  key:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Créer la clé (si elle n'existe pas encore)
+        env:
+          PW: ${{ secrets.SYRIUS_KEYSTORE_PASSWORD }}
+        run: |
+          f=android/keystore/syrius-upload.p12
+          if [ -f "$f" ]; then echo "::error::La clé existe déjà : rien à faire."; exit 1; fi
+          if [ "${#PW}" -lt 16 ]; then
+            echo "::error::Ajoute d'abord le secret SYRIUS_KEYSTORE_PASSWORD (16 caractères minimum)."; exit 1
+          fi
+          mkdir -p android/keystore
+          keytool -genkeypair -storetype PKCS12 -keystore "$f" -storepass "$PW" -keypass "$PW" \
+            -alias syrius -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Syrius, O=Syrius, C=FR" -noprompt
+          keytool -list -v -keystore "$f" -storepass "$PW" -alias syrius | grep -E "SHA256:" | sed 's/^ */EMPREINTE /'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$f"
+          git commit -m "Clé de signature Android (chiffrée par le mot de passe secret)"
+          git push

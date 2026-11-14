@@ -28,13 +28,20 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Clé de signature (optionnelle)
+      - name: Clé de signature
         env:
           KEYSTORE_B64: ${{ secrets.SYRIUS_KEYSTORE_BASE64 }}
+          KEYSTORE_PW: ${{ secrets.SYRIUS_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SYRIUS_KEY_ALIAS }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/syrius.jks"
             echo "SYRIUS_KEYSTORE_FILE=$RUNNER_TEMP/syrius.jks" >> "$GITHUB_ENV"
+            echo "SYRIUS_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          elif [ -f android/keystore/syrius-upload.p12 ] && [ -n "$KEYSTORE_PW" ]; then
+            # Clé créée par « Créer la clé de signature Android », chiffrée par le mot de passe secret.
+            echo "SYRIUS_KEYSTORE_FILE=$GITHUB_WORKSPACE/android/keystore/syrius-upload.p12" >> "$GITHUB_ENV"
+            echo "SYRIUS_KEY_ALIAS=syrius" >> "$GITHUB_ENV"
           fi
 
       - name: Moteur d'images hors ligne (MNN compilé depuis ses sources épinglées)
@@ -48,7 +55,6 @@ jobs:
           SYRIUS_URL: ${{ vars.SYRIUS_URL }}
           SYRIUS_VERSION_CODE: ${{ github.run_number }}
           SYRIUS_KEYSTORE_PASSWORD: ${{ secrets.SYRIUS_KEYSTORE_PASSWORD }}
-          SYRIUS_KEY_ALIAS: ${{ secrets.SYRIUS_KEY_ALIAS }}
         run: gradle --no-daemon assembleRelease bundleRelease
 
       - name: Renommer
@@ -60,7 +66,6 @@ jobs:
       - name: Empreinte de la clé de signature (publique, pour les liens qui ouvrent l'app)
         env:
           SYRIUS_KEYSTORE_PASSWORD: ${{ secrets.SYRIUS_KEYSTORE_PASSWORD }}
-          SYRIUS_KEY_ALIAS: ${{ secrets.SYRIUS_KEY_ALIAS }}
         run: |
           if [ -n "${SYRIUS_KEYSTORE_FILE:-}" ]; then
             echo "Clé de signature : la tienne (secrets GitHub)."
