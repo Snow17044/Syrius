@@ -34,6 +34,10 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           df -h / | tail -1
+          # Mémoire de secours (la conversion d'un modèle de 1,5 milliard de paramètres dépasse les 16 Go)
+          sudo swapoff -a || true
+          sudo fallocate -l 28G /swapfile2 && sudo chmod 600 /swapfile2 && sudo mkswap /swapfile2 >/dev/null && sudo swapon /swapfile2
+          free -h
 
       - name: Modèle Syrius entraîné
         if: inputs.run_id != ''
