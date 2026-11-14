@@ -41,17 +41,23 @@ class Reporter:
 
     def __init__(self):
         self.url = os.environ.get("SYRIUS_URL", "").rstrip("/")
-        self.tok = os.environ.get("SYRIUS_TRAINING_TOKEN", "")
+        import syrius_auth
+        self.auth = syrius_auth
+        try:
+            self.tok = syrius_auth.token() if self.url else ""
+        except Exception as e:  # noqa: BLE001 — sans identité, l'entraînement continue sans suivi
+            print(f"Identité GitHub indisponible : {e}")
+            self.tok = ""
         self.run = os.environ.get("GITHUB_RUN_ID", str(int(time.time())))
         self.ok = bool(self.url and self.tok)
-        print("Suivi en direct :", "activé" if self.ok else "désactivé (clé SYRIUS_TRAINING_TOKEN absente)")
+        print("Suivi en direct :", "activé" if self.ok else "désactivé (identité GitHub indisponible)")
 
     def send(self, kind: str, **data) -> None:
         if not self.ok:
             return
         body = json.dumps({"run": self.run, "type": kind, **data}, ensure_ascii=False).encode()
         req = urllib.request.Request(self.url + "/api/training/worker/report", data=body, method="POST", headers={
-            "Authorization": f"Bearer {self.tok}", "Content-Type": "application/json", "X-Syrius": "1",
+            "Authorization": f"Bearer {self.auth.token()}", "Content-Type": "application/json", "X-Syrius": "1",
             "User-Agent": "SyriusTraining/1.0"})
         try:
             urllib.request.urlopen(req, timeout=20).read(1000)  # nosec B310

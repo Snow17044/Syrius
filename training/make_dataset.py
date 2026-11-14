@@ -608,7 +608,13 @@ def build(seed: int = 7) -> list[dict]:
 
 def owner_examples(rng: random.Random) -> list[dict]:
     """Exemples donnés par le propriétaire dans le tableau de bord (chacun appris 3 fois)."""
-    url, tok = os.environ.get("SYRIUS_URL", "").rstrip("/"), os.environ.get("SYRIUS_TRAINING_TOKEN", "")
+    import syrius_auth
+    url = os.environ.get("SYRIUS_URL", "").rstrip("/")
+    try:
+        tok = syrius_auth.token() if url else ""
+    except Exception as e:  # noqa: BLE001
+        print(f"Identité GitHub indisponible : {e}")
+        tok = ""
     if not url or not tok:
         return []
     try:
@@ -622,9 +628,9 @@ def owner_examples(rng: random.Random) -> list[dict]:
     out = []
     for it in items if isinstance(items, list) else []:
         q, a = str(it.get("q", ""))[:500], str(it.get("a", ""))[:2000]
-        if q and a:
-            out += [conv(rng, q, a) for _ in range(3)]
-    print(f"{len(out) // 3} exemples personnels ajoutés")
+        if q and a:  # tes phrases : apprises 3 fois ; celles créées par Syrius : 1 fois
+            out += [conv(rng, q, a) for _ in range(1 if it.get("auto") else 3)]
+    print(f"{len(out)} exemples venant de ton Syrius ajoutés (tes phrases et celles qu'il a créées)")
     return out
 
 

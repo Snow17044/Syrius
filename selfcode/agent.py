@@ -19,6 +19,9 @@ import sys
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import syrius_auth  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 WORK = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "selfcode"
 MODELS = [m.strip() for m in os.environ.get(
@@ -44,7 +47,7 @@ Demande du propriétaire :
 def api(path: str, body: dict | None = None) -> dict:
     url = os.environ["SYRIUS_URL"].rstrip("/") + path
     req = urllib.request.Request(url, data=json.dumps(body or {}).encode(), method="POST", headers={
-        "Authorization": f"Bearer {os.environ['SYRIUS_TRAINING_TOKEN']}", "Content-Type": "application/json",
+        "Authorization": f"Bearer {syrius_auth.token()}", "Content-Type": "application/json",
         "X-Syrius": "1", "User-Agent": "SyriusSelfCode/1.0"})
     with urllib.request.urlopen(req, timeout=30) as r:  # nosec B310 (adresse de ton Syrius)
         return json.loads(r.read(200_000) or b"{}")

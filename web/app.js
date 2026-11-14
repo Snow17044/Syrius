@@ -1880,6 +1880,26 @@ function renderTraining(d) {
     list.append(li);
   }
 
+  const autoBox = $("#t-auto");
+  autoBox.textContent = "";
+  const au = d.auto || { total: 0, recent: [] };
+  $("#t-auto-count").textContent = au.total
+    ? `${au.total} exemples créés par Syrius (les plus récents ci-dessous).`
+    : "Aucun pour l'instant : les premiers seront créés au prochain entraînement de la nuit.";
+  for (const e of au.recent) {
+    const li = node("li", "diag");
+    li.append(node("strong", "", "« " + e.q + " »"), node("span", "small muted tt-text", "→ " + visibleText(e.a)
+      + (/<tool_call>/.test(e.a) ? "  [+ action]" : "")));
+    const del = node("button", "ghost subtle", "Retirer");
+    del.type = "button";
+    del.addEventListener("click", async () => {
+      try { await api(`/api/training/auto/${e.i}`, { method: "DELETE" }); refreshTraining(); }
+      catch (err) { setMsg($("#t-msg"), "⚠ " + err.message); }
+    });
+    li.append(del);
+    autoBox.append(li);
+  }
+
   const tests = $("#t-tests");
   tests.textContent = "";
   const qs = [...new Set((run?.tests || []).map((t) => t.q))];
