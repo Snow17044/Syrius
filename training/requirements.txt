@@ -1,0 +1,9 @@
+# Versions figées pour l'entraînement de Syrius (processeur seulement).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+transformers==4.46.3
+peft==0.13.2
+accelerate==1.1.1
+huggingface_hub==0.26.2
+safetensors==0.4.5
+sentencepiece==0.2.0

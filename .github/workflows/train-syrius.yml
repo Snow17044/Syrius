@@ -1,0 +1,50 @@
+# Entraîne « Syrius », notre IA : affinage LoRA d'une IA libre sur nos exemples (training/).
+# Tourne gratuitement sur un serveur GitHub (processeur), puis publie le modèle pour les étapes suivantes.
+name: Entraîner l'IA Syrius
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "IA libre de départ"
+        default: "Qwen/Qwen2.5-1.5B-Instruct"
+      minutes:
+        description: "Budget de temps d'entraînement (minutes)"
+        default: "290"
+  push:
+    branches: ["claude/**"]
+    paths: ["training/**", ".github/workflows/train-syrius.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Outils (versions figées)
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet -r training/requirements.txt
+          .venv/bin/python -c "import torch; print('torch', torch.__version__, 'threads', torch.get_num_threads())"
+
+      - name: Exemples d'entraînement
+        run: .venv/bin/python training/make_dataset.py
+
+      - name: Entraînement
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          .venv/bin/python training/train.py --model "${{ inputs.model || 'Qwen/Qwen2.5-1.5B-Instruct' }}" \
+            --minutes "${{ inputs.minutes || '290' }}" --out build/syrius
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: syrius-modele
+          path: build/syrius
+          retention-days: 14
