@@ -161,9 +161,10 @@ def _call(token: str, session: str, api: str, data: list, timeout: float = 240):
         msg = payload.lower()
         if "quota" in msg:
             raise Real3DError("quota gratuit du jour atteint pour la création 3D (réessaie demain)")
-        raise Real3DError("la création 3D a échoué")
+        detail = re.sub(r"[^\w\s.,:;()'%/-]", " ", payload)[:160].strip()
+        raise Real3DError(f"la création 3D a échoué ({api}{' : ' + detail if detail else ''})")
     if kind != "complete":
-        raise Real3DError("la création 3D n'a pas répondu à temps")
+        raise Real3DError(f"la création 3D n'a pas répondu à temps ({api}, {status}, {text[:120]!r})")
     try:
         return json.loads(payload)
     except ValueError:
