@@ -43,7 +43,7 @@ def _timed(name: str, fn) -> dict:
 
 def _vision(provider) -> str:
     img = "data:image/png;base64," + base64.b64encode(_png()).decode()
-    body = {"model": provider.model, "max_tokens": 30, "messages": [{"role": "user", "content": [
+    body = {"model": provider.model, "max_tokens": 600, "messages": [{"role": "user", "content": [
         {"type": "text", "text": "Quelle est la couleur de cette image ? Un seul mot."},
         {"type": "image_url", "image_url": {"url": img}}]}]}
     req = urllib.request.Request(provider.base_url + "/chat/completions", data=json.dumps(body).encode(), headers={
@@ -54,7 +54,8 @@ def _vision(provider) -> str:
             data = json.loads(r.read(200_000))
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code} {e.read(300).decode('utf-8', 'replace')}") from None
-    text = (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    msg = (data.get("choices") or [{}])[0].get("message") or {}
+    text = (msg.get("content") or "").strip() or ("(a réfléchi) " if msg.get("reasoning") else "")
     if not text:
         raise RuntimeError("réponse vide")
     return "répond : " + text[:40]

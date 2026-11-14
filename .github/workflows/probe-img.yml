@@ -21,7 +21,7 @@ jobs:
           for k,v in items: print('  ', k, v.get('providerId'), v.get('status'), v.get('task'))
           " || true
           done
-      - name: Routes (sans clé : 401 = existe, 404 = n'existe pas)
+      - name: "Routes sans clé (401 = existe, 404 = absente)"
         run: |
           for u in hf-inference/models/black-forest-labs/FLUX.1-schnell nebius/v1/images/generations together/v1/images/generations fal-ai/fal-ai/flux/schnell replicate/v1/models/black-forest-labs/flux-schnell/predictions nscale/v1/images/generations wavespeed/api/v3/wavespeed-ai/flux-schnell; do
             curl -sS -m 20 -o /tmp/o -w "$u -> %{http_code} " -X POST -H 'Content-Type: application/json' -d '{}' "https://router.huggingface.co/$u"; head -c 120 /tmp/o; echo

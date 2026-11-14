@@ -159,6 +159,10 @@ def openrouter_label(model: str) -> str:
         return "Google Gemma 4"
     if "nemotron-3.5-super-vl" in name:
         return "NVIDIA Nemotron Vision"
+    if "nemotron-3-nano-omni" in name:
+        return "NVIDIA Nemotron Omni"
+    if "inkling" in name:
+        return "Inkling 2"
     return "OpenRouter · " + name[:24]
 
 

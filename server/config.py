@@ -45,7 +45,7 @@ class Config:
     groq_model: str = field(default_factory=lambda: _env("SYRIUS_GROQ_MODEL", "openai/gpt-oss-120b"))
     groq_backup_models: list = field(default_factory=lambda: [
         m.strip() for m in _env("SYRIUS_GROQ_MODELS", "llama-3.3-70b-versatile,qwen/qwen3-32b,"
-                                "meta-llama/llama-4-scout-17b-16e-instruct,openai/gpt-oss-20b").split(",")
+                                "openai/gpt-oss-20b").split(",")
         if m.strip()][:6])
     # Mistral (modèles open source, offre gratuite « Experiment ») : cerveau principal s'il est configuré.
     mistral_api_key: str = field(default_factory=lambda: _env("MISTRAL_API_KEY") or _env("MISTRAL_KEY")
@@ -67,7 +67,8 @@ class Config:
     # IA gratuites qui « voient », utilisées seulement pour les photos (relais si les autres échouent).
     openrouter_vision_models: list = field(default_factory=lambda: [
         m.strip() for m in _env("SYRIUS_OPENROUTER_VISION_MODELS",
-                                "nvidia/nemotron-3.5-super-vl:free,google/gemma-4-26b-a4b-it:free").split(",")
+                                "nvidia/nemotron-3.5-super-vl:free,thinkingmachines/inkling-2-small:free,"
+                                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,google/gemma-4-26b-a4b-it:free").split(",")
         if m.strip()][:4])
     # Empreintes SHA-256 supplémentaires de l'application Android (liens qui ouvrent l'app), séparées par des virgules.
     android_certs: list = field(default_factory=lambda: [

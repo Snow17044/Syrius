@@ -68,6 +68,7 @@ def test_vision_des_cerveaux(monkeypatch):
     from server.config import Config
     from server.llm import providers_from_config
     monkeypatch.setenv("GROQ_API_KEY", "k")
+    monkeypatch.setenv("SYRIUS_GROQ_MODELS", "meta-llama/llama-4-scout-17b-16e-instruct")
     ps = {p.model: p.vision for p in providers_from_config(Config())}
     assert ps["meta-llama/llama-4-scout-17b-16e-instruct"] and not ps["openai/gpt-oss-120b"]
 
