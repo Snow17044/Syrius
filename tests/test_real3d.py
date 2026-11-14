@@ -113,3 +113,16 @@ def test_routes_protegees(make_client, monkeypatch):
     r = client.post("/api/model3d/generate", json={"prompt": "a red car"}, headers=h)
     assert r.status_code == 503  # pas de clé HF_TOKEN dans les tests
     assert client.post("/api/model3d/search", json={"query": "car"}).status_code in (400, 403)  # anti-CSRF
+
+
+def test_bibliotheque_ecarte_les_modeles_sans_rapport(monkeypatch):
+    def fake(host, method, path, headers, body=None, timeout=30, limit=0):
+        return 200, {}, json.dumps({"results": [
+            {"ID": "house01", "Title": "Small House", "Download": "https://static.poly.pizza/house01.glb"},
+            {"ID": "road001", "Title": "Road Straight", "Tags": ["street"], "Download": "https://static.poly.pizza/road001.glb"},
+            {"ID": "road002", "Title": "Country Road Corner", "Download": "https://static.poly.pizza/road002.glb"},
+        ]}).encode()
+    monkeypatch.setattr(real3d, "_request", fake)
+    res = real3d.poly_search("k", "country roads")
+    assert [r["id"] for r in res] == ["road002", "road001"]  # la maison est écartée, le plus proche d'abord
+    assert real3d.poly_search("k", "bridge") == []  # rien de pertinent : création sur mesure à la place

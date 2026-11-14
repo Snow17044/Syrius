@@ -62,11 +62,11 @@ BASE_TOOLS = [
           ["title", "nodes"]),
     _tool("show_model",
           "Affiche une MAQUETTE 3D. Syrius va chercher un VRAI modèle 3D (bibliothèque d'artistes) ou le crée "
-          "texturé sur mesure : donne TOUJOURS search_en (2 à 4 mots anglais de l'objet, ex. « eiffel tower ») et "
+          "texturé sur mesure : donne TOUJOURS search_en (2 à 4 mots anglais de l'objet EXACT demandé, ex. « eiffel tower ») et "
           "prompt_en (description visuelle anglaise de l'objet seul : forme, matières, couleurs). En attendant, une "
-          "version simplifiée s'affiche : template si l'objet est dans la liste (tour Eiffel, pyramide, fusée, "
+          "version simplifiée s'affiche : template SEULEMENT si l'objet demandé est exactement dans la liste (tour Eiffel, pyramide, fusée, "
           "voiture, maison, avion, arbre, atome, système solaire, molécule d'eau, ADN, phare), sinon parts "
-          "facultatif (8 à 20 pièces, silhouettes lathe / extrude / tube conseillées).",
+          "facultatif (8 à 20 pièces, silhouettes lathe / extrude / tube conseillées). Interdit : contenu sexuel ou violent.",
           {"title": {"type": "string"},
            "search_en": {"type": "string", "description": "2 à 4 mots ANGLAIS pour chercher l'objet, ex. « red sports car »"},
            "prompt_en": {"type": "string", "description": "Description visuelle ANGLAISE de l'objet seul, 10 à 40 mots"},

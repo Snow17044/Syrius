@@ -11,6 +11,8 @@ import re
 
 from .diagram import find_json_object
 
+from .. import safety
+
 SHAPES = ("box", "cylinder", "cone", "sphere", "torus", "pyramid", "capsule", "lathe", "extrude", "tube")
 # Maquettes soignées dessinées dans l'app (bien plus réussies qu'un assemblage improvisé).
 TEMPLATES = ("tour_eiffel", "pyramide", "fusee", "voiture", "maison", "avion", "arbre", "atome",
@@ -124,6 +126,8 @@ def _points(v, dims: int) -> list[list[float]]:
 
 
 def validate(args) -> dict:
+    if safety.blocked(args):  # pas de contenu sexuel ni violent, quoi que dise l'IA
+        raise ModelError(safety.MESSAGE)
     if not isinstance(args, dict):
         raise ModelError("entrée non valide")
     title = _text(args.get("title"), 80)

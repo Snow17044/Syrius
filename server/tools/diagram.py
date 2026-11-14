@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import re
 
+from .. import safety
+
 STYLES = ("carte", "etapes", "arbre")
 KINDS = ("objectif", "phase", "etape", "action", "outil", "budget", "delai", "risque", "idee", "ressource", "personne")
 MAX_NODES = 30
@@ -34,6 +36,8 @@ def _text(value, limit: int, what: str, required: bool = True) -> str:
 
 
 def validate(args) -> dict:
+    if safety.blocked(args):  # pas de contenu sexuel ni violent, quoi que dise l'IA
+        raise DiagramError(safety.MESSAGE)
     if not isinstance(args, dict):
         raise DiagramError("entrée non valide")
     unknown = set(args) - {"title", "style", "nodes", "links"}

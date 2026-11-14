@@ -69,6 +69,19 @@ def clean_query(text, limit: int = 300) -> str:
 
 
 # ------------------------------------------------------------------ Poly Pizza
+_STOP = {"a", "an", "the", "of", "with", "and", "for", "on", "in", "low", "poly", "model", "3d", "simple"}
+
+
+def _words(text: str) -> set[str]:
+    """Mots significatifs, au singulier (« roads » → « road »)."""
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", str(text).lower()):
+        if len(w) < 3 or w in _STOP:
+            continue
+        out.add(w[:-1] if w.endswith("s") and len(w) > 3 else w)
+    return out
+
+
 def poly_search(api_key: str, query: str, limit: int = 6) -> list[dict]:
     if not api_key:
         raise Real3DError("bibliothèque 3D non configurée (clé POLYPIZZA_API_KEY absente)")
@@ -91,6 +104,7 @@ def poly_search(api_key: str, query: str, limit: int = 6) -> list[dict]:
     except ValueError:
         raise Real3DError("réponse illisible de la bibliothèque 3D") from None
     items = (data.get("results") or data.get("Results") or []) if isinstance(data, dict) else []
+    want = _words(q)
     out = []
     for it in items if isinstance(items, list) else []:
         if not isinstance(it, dict):
@@ -103,13 +117,21 @@ def poly_search(api_key: str, query: str, limit: int = 6) -> list[dict]:
         tris = g("Tri Count", "TriCount", "triCount")
         if isinstance(tris, (int, float)) and tris > 150_000:
             continue
+        tags = g("Tags", "tags") or []
+        about = _words(" ".join([str(g("Title", "title") or ""), str(g("Category", "category") or "")]
+                                + [str(t) for t in tags if isinstance(t, str)][:20]))
+        score = len(want & about)
+        if want and not score:
+            continue  # sans rapport avec la demande (ex. une maison pour « road ») : écarté
         creator = g("Creator", "creator") or {}
         out.append({
+            "_score": score,
             "id": mid, "title": str(g("Title", "title") or "Modèle 3D")[:80],
             "creator": str(creator.get("Username", "") if isinstance(creator, dict) else creator)[:60],
             "licence": str(g("Licence", "License", "licence") or "")[:40],
             "path": parts.path,
         })
+    out.sort(key=lambda r: -r.pop("_score"))  # le plus pertinent d'abord
     return out
 
 
