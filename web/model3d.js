@@ -346,7 +346,8 @@
     const model = gltfRoot ? buildFromGltf(gltfRoot) : buildModel(ev);
     model.k = model.holder.scale.x;
     scene.add(model.holder);
-    const home = Math.max(16, model.height * 1.7, model.radius * 3.2);
+    const home = gltfRoot ? Math.max(20, model.height * 2.2, model.radius * 3.8)
+      : Math.max(16, model.height * 1.7, model.radius * 3.2);
     st = { renderer, scene, camera, canvas, stage, model, mode: "color", auto: true, t0: performance.now(),
       cam: { theta: 0.7, phi: 1.15, dist: home, home }, w: 0, h: 0, raf: 0 };
     if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) { st.auto = false; st.t0 -= 1400; }
