@@ -187,7 +187,10 @@ def trellis_generate(token: str, prompt: str) -> bytes:
     session = secrets.token_hex(8)
     up = _upload(token, image, "objet.jpg", "image/jpeg")
     filedata = {"path": up, "meta": {"_type": "gradio.FileData"}}
-    _call(token, session, "start_session", [], timeout=60)
+    try:  # facultatif (prépare un dossier de session côté service)
+        _call(token, session, "start_session", [], timeout=60)
+    except Real3DError:
+        pass
     pre = _call(token, session, "preprocess_image", [filedata], timeout=90)
     pre_path = _file_path(pre)
     _call(token, session, "image_to_3d", [{"path": pre_path, "meta": {"_type": "gradio.FileData"}}, 0, "512",
