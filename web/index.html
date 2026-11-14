@@ -36,8 +36,18 @@
       <h1 class="wordmark">Syrius</h1>
       <p class="muted">Ton assistant personnel. Identifie-toi pour continuer.</p>
       <form id="login-form" autocomplete="on">
+        <label class="field" data-icon="user"><input id="login-name" type="text" autocomplete="username" maxlength="30" placeholder="Prénom (vide si c'est ton Syrius)"></label>
         <label class="field" data-icon="lock"><input id="login-password" type="password" autocomplete="current-password" placeholder="Mot de passe" required></label>
         <button type="submit" class="primary">Se connecter</button>
+        <button type="button" id="join-open" class="ghost subtle">Rejoindre la famille avec un code</button>
+      </form>
+      <form id="join-form" class="hidden" autocomplete="off">
+        <p class="small muted">Demande le code d'invitation à la personne qui t'a invité, puis choisis ton prénom et ton mot de passe.</p>
+        <label class="field" data-icon="link"><input id="join-code" type="text" maxlength="20" placeholder="Code d'invitation" required autocapitalize="characters"></label>
+        <label class="field" data-icon="user"><input id="join-name" type="text" maxlength="30" placeholder="Ton prénom" required autocomplete="given-name"></label>
+        <label class="field" data-icon="lock"><input id="join-password" type="password" minlength="10" placeholder="Mot de passe (10 caractères +)" required autocomplete="new-password"></label>
+        <button type="submit" class="primary">Créer mon compte</button>
+        <button type="button" id="join-back" class="ghost subtle">J'ai déjà un compte</button>
       </form>
       <form id="setup-form" class="hidden" autocomplete="off">
         <p class="small">Premier lancement : entre le <b>code de configuration</b> choisi dans Vercel, puis ton futur mot de passe.</p>
@@ -201,6 +211,7 @@
       <header class="sheet-head"><h3>Réglages</h3><button class="icon-btn" value="close" aria-label="Fermer" data-icon="close"></button></header>
 
       <h4 data-icon="user"><span>Profil</span></h4>
+      <p id="s-account" class="small muted"></p>
       <label>Ton prénom<input id="s-name" type="text" maxlength="60" autocomplete="given-name"></label>
       <label>Ce que Syrius doit savoir / comment il doit répondre
         <textarea id="s-custom" rows="3" maxlength="2000" placeholder="Ex. : Je suis étudiant(e), réponds-moi en bref, vouvoie-moi…"></textarea></label>
@@ -287,6 +298,22 @@
           </div>
         </div>
         </div>
+      </div>
+
+      <div id="family-box" class="hidden">
+        <h4 data-icon="user"><span>Famille</span></h4>
+        <p class="muted small">Jusqu'à 10 proches peuvent utiliser ton Syrius, chacun avec ses discussions privées.
+          Partage-leur ce code : ils touchent « Rejoindre la famille » à l'écran de connexion et créent leur compte.
+          Tu n'as rien d'autre à faire.</p>
+        <div class="invite">
+          <div id="family-code" class="invite-code">—</div>
+          <div class="local-actions">
+            <button type="button" id="family-share" class="ghost" data-icon="link"><span>Partager</span></button>
+            <button type="button" id="family-renew" class="ghost" data-icon="refresh"><span>Nouveau code</span></button>
+          </div>
+        </div>
+        <ul id="family-list" class="family-list"></ul>
+        <p id="family-msg" class="small"></p>
       </div>
 
       <h4 data-icon="mail"><span>Emails</span></h4>

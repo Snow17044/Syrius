@@ -67,10 +67,11 @@ def _http(method: str, url: str, data: dict | None = None, token: str | None = N
 # ---------------------------------------------------------------------------
 # Connexion (OAuth)
 # ---------------------------------------------------------------------------
-def start_url(cfg: Config, db: Database, redirect_uri: str) -> str:
+def start_url(cfg: Config, db: Database, redirect_uri: str, owner_prefix: str = "") -> str:
     if not (cfg.google_client_id and cfg.google_client_secret):
         raise EmailError("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET manquants dans Vercel (voir le guide).")
-    state = secrets.token_urlsafe(24)
+    # Préfixe = compte famille concerné (pour retrouver son espace au retour de Google).
+    state = owner_prefix + secrets.token_urlsafe(24)
     db.set_secret(STATE_KEY, json.dumps({"state": state, "exp": time.time() + STATE_TTL}))
     return AUTH_URL + "?" + urllib.parse.urlencode({
         "client_id": cfg.google_client_id, "redirect_uri": redirect_uri, "response_type": "code",

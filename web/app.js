@@ -28,7 +28,7 @@ function watchMsg(el) {
 }
 document.addEventListener("DOMContentLoaded", () => {
   ["#local-status", "#wake-status", "#wake-learn-msg", "#briefing-msg", "#google-msg", "#outlook-msg",
-    "#settings-msg", "#pw-msg"].forEach((q) => watchMsg($(q)));
+    "#settings-msg", "#pw-msg", "#family-msg"].forEach((q) => watchMsg($(q)));
   document.querySelectorAll(".pack-status").forEach(watchMsg);
 });
 
@@ -98,6 +98,7 @@ const store = {
 function showLogin() {
   $("#app").classList.add("hidden");
   $("#login").classList.remove("hidden");
+  if (!$("#login-name").value) $("#login-name").value = store.get("syrius:loginName") || "";
   $("#login-password").focus();
 }
 
@@ -117,10 +118,90 @@ $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#login-error").textContent = "";
   try {
-    await api("/api/login", { method: "POST", body: JSON.stringify({ password: $("#login-password").value }) });
+    const name = $("#login-name").value.trim();
+    await api("/api/login", { method: "POST", body: JSON.stringify(
+      name ? { name, password: $("#login-password").value } : { password: $("#login-password").value }) });
     $("#login-password").value = "";
+    store.set("syrius:loginName", name);
     await showApp();
   } catch (err) { $("#login-error").textContent = err.message; }
+});
+
+// ------------------------------------------------------------------ famille
+function showJoin(on) {
+  $("#login-form").classList.toggle("hidden", on);
+  $("#join-form").classList.toggle("hidden", !on);
+  $("#login-error").textContent = "";
+  (on ? $("#join-code") : $("#login-password")).focus();
+}
+$("#join-open").addEventListener("click", () => showJoin(true));
+$("#join-back").addEventListener("click", () => showJoin(false));
+$("#join-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#login-error").textContent = "";
+  try {
+    const name = $("#join-name").value.trim();
+    await api("/api/family/join", { method: "POST", body: JSON.stringify({
+      code: $("#join-code").value.trim(), name, password: $("#join-password").value }) });
+    $("#join-password").value = ""; $("#join-code").value = "";
+    store.set("syrius:loginName", name);
+    $("#login-name").value = name;
+    showJoin(false);
+    await showApp();
+  } catch (err) { $("#login-error").textContent = err.message; }
+});
+
+async function renderFamily(account) {
+  const box = $("#family-box");
+  const owner = !account || account.owner !== false;
+  box.classList.toggle("hidden", !owner);
+  $("#s-account").textContent = owner ? "Compte principal (propriétaire de ce Syrius)."
+    : `Compte de ${account.name} — tes discussions, ta mémoire et tes réglages sont privés.`;
+  if (!owner) return;
+  $("#family-msg").textContent = "";
+  try {
+    const f = await api("/api/family");
+    $("#family-code").textContent = f.code;
+    const list = $("#family-list");
+    list.textContent = "";
+    if (!f.members.length) {
+      const li = document.createElement("li");
+      li.className = "muted small";
+      li.textContent = "Personne n'a encore rejoint ta famille.";
+      list.append(li);
+    }
+    for (const m of f.members) {
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      name.textContent = m.name;
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "ghost subtle";
+      del.textContent = "Retirer";
+      del.addEventListener("click", async () => {
+        if (!confirm(`Retirer le compte de ${m.name} ? Ses discussions ne seront plus accessibles.`)) return;
+        try { await api(`/api/family/${encodeURIComponent(m.id)}`, { method: "DELETE" }); await renderFamily(account); }
+        catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
+      });
+      li.append(name, del);
+      list.append(li);
+    }
+  } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
+}
+
+$("#family-renew").addEventListener("click", async () => {
+  if (!confirm("Créer un nouveau code ? L'ancien ne fonctionnera plus (les comptes déjà créés restent).")) return;
+  try {
+    $("#family-code").textContent = (await api("/api/family/code", { method: "POST" })).code;
+    $("#family-msg").textContent = "Nouveau code créé.";
+  } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
+});
+$("#family-share").addEventListener("click", async () => {
+  const code = $("#family-code").textContent;
+  const text = `Rejoins mon assistant Syrius : ouvre ${location.origin}, touche « Rejoindre la famille avec un code » et entre le code ${code}`;
+  try {
+    if (navigator.share) await navigator.share({ title: "Syrius", text });
+    else { await navigator.clipboard.writeText(text); $("#family-msg").textContent = "Invitation copiée."; }
+  } catch (_) { /* partage annulé */ }
 });
 
 $("#setup-form").addEventListener("submit", async (e) => {
@@ -917,7 +998,7 @@ function realModel(view, ev) {
     if (!ev.prompt_en) throw new Error(libErr || "pas de description pour la création");
     sub.textContent = "Création sur mesure en cours (1 à 2 min)…";
     status.textContent = "L'IA dessine l'objet puis le transforme en maquette 3D texturée.";
-    const buf = await (await fetchGlb("/api/model3d/generate", { prompt: ev.prompt_en })).arrayBuffer();
+    const buf = await (await fetchGlb("/api/model3d/generate", { prompt: ev.prompt_en, key: (ev.search_en || ev.prompt_en || "").slice(0, 80) })).arrayBuffer();
     display(buf, "");
   })().catch((e) => {
     bar.remove();
@@ -1265,6 +1346,7 @@ $("#open-settings").addEventListener("click", async () => {
     ? "✅ Boîte mail connectée (lecture seule ; chaque envoi demande ta confirmation)."
     : "Non configurés. Voir le guide d'installation (README, section Emails).";
   $("#settings-msg").textContent = "";
+  await renderFamily(s.account);
   await renderMemories();
   closeDrawer();
   refreshLocalBox();
