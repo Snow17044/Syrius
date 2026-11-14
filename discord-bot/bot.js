@@ -57,7 +57,7 @@ async function refreshAllowed() {
 
 /** Texte → voix (Piper, sur ce serveur) → son au format Discord. */
 async function synthesize(text) {
-  const res = await fetch(PIPER_URL, {
+  const res = await fetch(PIPER_URL + "/synthesize", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: text.slice(0, 1200) }), signal: AbortSignal.timeout(60_000),
   });
