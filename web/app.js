@@ -710,6 +710,11 @@ async function sendLocal(text) {
   const view = addMessage("assistant", "");
   scrollDown(true);
   const l = L();
+  if (l && l.wantsImage(text) && unsafeContent(text)) {
+    view.text = UNSAFE_MSG;
+    renderText(view, "assistant");
+    return;
+  }
   if (l && l.wantsImage(text) && l.imageReady()) {
     setTools(view, ["Image créée sur ton téléphone (hors ligne)"]);
     setStreaming(true);
@@ -784,7 +789,26 @@ async function onlineImage(prompt) {
   }
 }
 
+// Garde-fou (le même que sur le serveur) : pas d'image à caractère sexuel ou violent, même hors ligne.
+const UNSAFE_WORDS = new Set(["ak47", "arme", "armes", "attentat", "attentats", "bdsm", "bomb", "bombe", "bombes", "bombs", "boobs", "cadavre", "cadavres", "corpse", "corpses", "fellation", "fetiche", "fetish", "genocide", "gore", "gun", "guns", "kill", "killer", "killing", "lingerie", "massacre", "meurtre", "meurtres", "murder", "naked", "nsfw", "nu", "nude", "nudes", "nudite", "nudity", "nue", "nues", "nus", "penis", "pistol", "pistols", "porn", "porno", "rape", "seins", "sex", "sexe", "sexes", "sexual", "sexuel", "sexuelle", "sexuelles", "sexuels", "sexy", "suicide", "terrorism", "terrorisme", "terrorist", "terroriste", "tits", "torture", "tuer", "vagin", "vagina", "viol", "violence", "violent", "violente", "viols", "vulva", "vulve", "weapon", "weapons", "xxx"]);
+const UNSAFE_PREFIXES = ["pornog", "erotiq", "erotic", "hentai", "masturb", "orgasm", "genital", "prostitu", "striptease", "decapit", "behead", "tortur", "mutil", "demembr", "dismember", "kalach", "mitraill", "sanglant", "bloody", "explosif", "explosive", "pistolet", "revolver", "fusil", "rifle", "sniper", "munition", "ammunition", "grenade launcher", "lance roquette", "rocket launcher", "gunshot", "stabbing", "poignard"];
+function unsafeContent(text) {
+  const t = " " + String(text || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ") + " ";
+  return t.split(" ").some((w) => UNSAFE_WORDS.has(w)) || UNSAFE_PREFIXES.some((p) => t.includes(" " + p));
+}
+const UNSAFE_MSG = "Contenu refusé : Syrius ne crée pas d'image à caractère sexuel ou violent.";
+
 function imageCard(view, params) {
+  if (unsafeContent(`${params.prompt || ""} ${params.caption || ""}`)) {
+    const card = node("div", "action-card image-card tone-rose");
+    card.append(cardHead("alert", "Image refusée", "Création d'image"));
+    const st = node("p", "small");
+    card.append(st);
+    placeCard(view, card);
+    setMsg(st, "⚠ " + UNSAFE_MSG);
+    return;
+  }
   const card = node("div", "action-card image-card tone-rose");
   card.append(cardHead("sparkle", params.caption || "Image", "Création d'image"));
   const bar = document.createElement("progress");
