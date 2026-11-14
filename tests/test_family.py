@@ -250,3 +250,18 @@ def test_retrait_efface_les_donnees(make_client):
     owner.delete(f"/api/family/{uid}", headers=H)
     db = family.ScopedDB(owner.db, family.space_factory(owner.db, owner.agent.cfg.data_dir))
     assert db.for_user(uid).get_conversation(cid) is None
+
+
+def test_seul_le_proprietaire_cree_des_liens(make_client):
+    owner = make_client()
+    login(owner)
+    lea = member_client(owner)
+    link = owner.post("/api/family/test-link", headers=H).json()["link"]
+    tester = TestClient(owner.app, base_url="https://testserver")
+    tester.post("/api/family/test", json={"link": link}, headers=H)
+    anon = TestClient(owner.app, base_url="https://testserver")
+    for c in (lea, tester, anon):
+        assert c.post("/api/family/test-link", headers=H).status_code in (401, 403)
+        assert c.post("/api/family/code", headers=H).status_code in (401, 403)
+        assert c.get("/api/family").status_code in (401, 403)
+        assert "code" not in c.get("/api/settings").json()
