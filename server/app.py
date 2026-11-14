@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, diagnostic, family, safety, training
+from . import auth, diagnostic, family, safety, selfcode, training
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -92,6 +92,10 @@ class SetupBody(BaseModel):
 
 class AccountDelete(BaseModel):
     password: str = Field(default="", max_length=256)
+
+
+class SelfCodeBody(BaseModel):
+    text: str = Field(min_length=10, max_length=1500)
 
 
 class ExampleBody(BaseModel):
@@ -540,6 +544,36 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def training_worker_examples():
         """Pour le serveur d'entraînement : les exemples à apprendre (rien d'autre)."""
         return [{"q": e["q"], "a": e["a"]} for e in training.examples(db.base)]
+
+    # « Améliorer Syrius » : demandes de changement traitées par une IA programmeuse (proposition seulement)
+    @app.get("/api/selfcode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_list():
+        return selfcode.items(db.base)
+
+    @app.post("/api/selfcode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_add(body: SelfCodeBody):
+        try:
+            return selfcode.add(db.base, body.text)
+        except selfcode.SelfCodeError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.delete("/api/selfcode/{iid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_cancel(iid: str):
+        if not selfcode.cancel(db.base, iid[:20]):
+            raise HTTPException(404, "Demande introuvable ou déjà prise en charge")
+        return {"ok": True}
+
+    @app.post("/api/training/worker/code-next", dependencies=[Depends(require_trainer)])
+    async def selfcode_next():
+        return {"request": selfcode.take_next(db.base)}
+
+    @app.post("/api/training/worker/code-report", dependencies=[Depends(require_trainer)])
+    async def selfcode_report(request: Request):
+        try:
+            selfcode.report(db.base, await request.json())
+        except (ValueError, selfcode.SelfCodeError) as e:
+            raise HTTPException(400, str(e)[:200]) from None
+        return {"ok": True}
 
     @app.get("/api/training/worker/should-train", dependencies=[Depends(require_trainer)])
     async def training_worker_should():

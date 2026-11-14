@@ -1741,7 +1741,52 @@ function renderTraining(d) {
 
 async function refreshTraining() {
   try { renderTraining(await api("/api/training")); } catch (err) { setMsg($("#t-phase"), "⚠ " + err.message); }
+  try { renderSelfCode(await api("/api/selfcode")); } catch (_) { /* ignore */ }
 }
+
+// « Améliorer Syrius » : demandes de changement préparées par une IA programmeuse (proposées, jamais publiées seules)
+function renderSelfCode(items) {
+  const list = $("#sc-list");
+  list.textContent = "";
+  if (!items.length) list.append(node("li", "muted small", "Aucune demande pour l'instant."));
+  const labels = { pending: "En attente (démarre sous 15 min)", running: "L'IA programme…", proposed: "Proposition prête",
+    failed: "Échec", refused: "Annulée" };
+  for (const it of items) {
+    const li = node("li", "diag");
+    li.append(node("strong", "", "« " + it.text + " »"));
+    const st = node("span", "t-badge " + ({ running: "running", proposed: "done", failed: "error" }[it.status] || "none"),
+      labels[it.status] || it.status);
+    li.append(st);
+    if (it.summary) li.append(node("span", "small muted tt-text", it.summary));
+    if (it.tests) li.append(node("span", "small muted", "Tests : " + it.tests));
+    if (it.pr) {
+      const a = node("a", "ghost btn-link", "Voir la proposition sur GitHub");
+      a.href = it.pr; a.target = "_blank"; a.rel = "noopener";
+      li.append(a, node("span", "small muted", "Pour publier : ouvre-la puis « Merge pull request », ou demande à Claude."));
+    }
+    if (it.status === "pending") {
+      const c = node("button", "ghost subtle", "Annuler");
+      c.type = "button";
+      c.addEventListener("click", async () => {
+        try { await api(`/api/selfcode/${encodeURIComponent(it.id)}`, { method: "DELETE" }); refreshTraining(); }
+        catch (err) { setMsg($("#sc-msg"), "⚠ " + err.message); }
+      });
+      li.append(c);
+    }
+    list.append(li);
+  }
+}
+
+$("#sc-add").addEventListener("click", async () => {
+  const text = $("#sc-text").value.trim();
+  if (text.length < 10) { setMsg($("#sc-msg"), "⚠ Décris le changement en une phrase ou deux."); return; }
+  try {
+    await api("/api/selfcode", { method: "POST", body: JSON.stringify({ text }) });
+    $("#sc-text").value = "";
+    setMsg($("#sc-msg"), "✅ Demande envoyée : l'IA programmeuse s'en occupe d'ici 15 minutes.");
+    refreshTraining();
+  } catch (err) { setMsg($("#sc-msg"), "⚠ " + err.message); }
+});
 
 $("#open-training").addEventListener("click", async () => {
   closeDrawer();

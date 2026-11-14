@@ -239,6 +239,15 @@
       <p id="t-msg" class="small"></p>
       <ul id="t-examples" class="family-list"></ul>
 
+      <h4 data-icon="code"><span>Améliorer Syrius</span></h4>
+      <p class="muted small">Demande un changement : une IA programmeuse gratuite le prépare, tous les tests le
+        vérifient, puis tu décides de le publier ou non. Idéal pour de petits changements (un texte, une couleur,
+        un bouton…). Les parties sécurité, comptes et filtres sont protégées.</p>
+      <label>Ce que Syrius doit changer<textarea id="sc-text" rows="3" maxlength="1500" placeholder="Ex. : Ajoute un bouton pour copier une réponse de Syrius."></textarea></label>
+      <button type="button" id="sc-add" class="primary wide" data-icon="send"><span>Envoyer la demande</span></button>
+      <p id="sc-msg" class="small"></p>
+      <ul id="sc-list" class="family-list"></ul>
+
       <h4 data-icon="eye"><span>Réponses de test</span></h4>
       <p class="muted small">Les mêmes questions, posées avant et après l'entraînement.</p>
       <div id="t-tests" class="train-tests"></div>
@@ -262,6 +271,12 @@
           d'entraînement, jamais tes discussions. Pour lancer un entraînement tout de suite : GitHub → Actions →
           « Entraîner l'IA Syrius » → Run workflow.</p>
         <p id="t-setup-msg" class="small"></p>
+        <p class="small"><strong>Pour « Améliorer Syrius »</strong>, en plus :</p>
+        <ol class="small">
+          <li>Secret GitHub <code>OPENROUTER_API_KEY</code> : ta clé OpenRouter (la même que dans Vercel).</li>
+          <li>GitHub → ton dépôt → <strong>Settings → Actions → General</strong> → tout en bas, coche
+            « Allow GitHub Actions to create and approve pull requests » → Save.</li>
+        </ol>
       </details>
     </form>
   </dialog>

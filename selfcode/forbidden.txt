@@ -1,0 +1,26 @@
+# Parties de Syrius que l'IA programmeuse n'a PAS le droit de modifier (sécurité, comptes, garde-fous).
+server/auth.py
+server/family.py
+server/safety.py
+server/training.py
+server/selfcode.py
+server/diagnostic.py
+server/store_redis.py
+server/db.py
+server/config.py
+selfcode/
+.github/
+android/keystore/
+android/app/build.gradle
+android/build.gradle
+android/app/src/main/AndroidManifest.xml
+android/native/
+training/
+deploy/
+requirements.txt
+requirements-dev.txt
+Dockerfile
+docker-compose.yml
+vercel.json
+app.py
+.gitignore
