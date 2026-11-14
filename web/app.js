@@ -156,12 +156,17 @@ async function renderFamily(account) {
   const owner = !account || account.owner !== false;
   box.classList.toggle("hidden", !owner);
   $("#s-account").textContent = owner ? "Compte principal (propriétaire de ce Syrius)."
+    : account.guest ? `Compte de test — accès jusqu'à ${hourText(account.expires)}, puis tout est effacé.`
     : `Compte de ${account.name} — tes discussions, ta mémoire et tes réglages sont privés.`;
+  $("#pw-box")?.classList.toggle("hidden", !!(account && account.guest));
   if (!owner) return;
   $("#family-msg").textContent = "";
   try {
     const f = await api("/api/family");
-    $("#family-code").textContent = f.code;
+    $("#family-code").textContent = f.code || "—";
+    $("#family-full").classList.toggle("hidden", !f.full);
+    $("#family-invite").classList.toggle("hidden", !!f.full);
+    $("#family-testbox").classList.toggle("hidden", !!f.full);
     const list = $("#family-list");
     list.textContent = "";
     if (!f.members.length) {
@@ -173,7 +178,7 @@ async function renderFamily(account) {
     for (const m of f.members) {
       const li = document.createElement("li");
       const name = document.createElement("span");
-      name.textContent = m.name;
+      name.textContent = m.guest ? `${m.name} · test jusqu'à ${hourText(m.expires)}` : m.name;
       const del = document.createElement("button");
       del.type = "button"; del.className = "ghost subtle";
       del.textContent = "Retirer";
@@ -188,6 +193,29 @@ async function renderFamily(account) {
   } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
 }
 
+function hourText(ts) {
+  if (!ts) return "";
+  return new Date(ts * 1000).toLocaleString("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" });
+}
+
+async function shareText(text, done) {
+  try {
+    if (navigator.share) await navigator.share({ title: "Syrius", text });
+    else { await navigator.clipboard.writeText(text); $("#family-msg").textContent = done; }
+  } catch (_) { /* partage annulé */ }
+}
+
+$("#family-test").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/family/test-link", { method: "POST" });
+    const url = `${location.origin}/?test=${encodeURIComponent(r.link)}`;
+    await shareText(`Essaie mon assistant Syrius pendant ${r.hours} h (aucun compte à créer) : ${url}`,
+      "Lien de test copié (valable 24 h).");
+    const s = await api("/api/settings");
+    await renderFamily(s.account);
+  } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
+});
+
 $("#family-renew").addEventListener("click", async () => {
   if (!confirm("Créer un nouveau code ? L'ancien ne fonctionnera plus (les comptes déjà créés restent).")) return;
   try {
@@ -197,11 +225,9 @@ $("#family-renew").addEventListener("click", async () => {
 });
 $("#family-share").addEventListener("click", async () => {
   const code = $("#family-code").textContent;
-  const text = `Rejoins mon assistant Syrius : ouvre ${location.origin}, touche « Rejoindre la famille avec un code » et entre le code ${code}`;
-  try {
-    if (navigator.share) await navigator.share({ title: "Syrius", text });
-    else { await navigator.clipboard.writeText(text); $("#family-msg").textContent = "Invitation copiée."; }
-  } catch (_) { /* partage annulé */ }
+  const url = `${location.origin}/?rejoindre=${encodeURIComponent(code)}`;
+  await shareText(`Rejoins mon assistant Syrius : ouvre ce lien et crée ton compte ${url} (code : ${code})`,
+    "Invitation copiée.");
 });
 
 $("#setup-form").addEventListener("submit", async (e) => {
@@ -1465,8 +1491,28 @@ if ("serviceWorker" in navigator) {
 }
 
 (async () => {
+  // Liens reçus : invitation famille (?rejoindre=CODE) ou essai de 24 h (?test=...)
+  const params = new URLSearchParams(location.search);
+  const joinCode = params.get("rejoindre"), testLink = params.get("test");
+  if (joinCode || testLink) history.replaceState(null, "", "/");
+  if (testLink) {
+    try {
+      await api("/api/family/test", { method: "POST", body: JSON.stringify({ link: testLink.slice(0, 80) }) });
+    } catch (err) {
+      showLogin();
+      $("#login-error").textContent = err.message;
+      return;
+    }
+  }
   try {
     const s = await (await fetch("/api/session", { credentials: "same-origin" })).json();
+    if (joinCode && !s.authenticated) {
+      showLogin();
+      showJoin(true);
+      $("#join-code").value = joinCode.slice(0, 20);
+      $("#join-name").focus();
+      return;
+    }
     if (s.authenticated) await showApp();
     else {
       showLogin();

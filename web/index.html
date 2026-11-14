@@ -302,15 +302,21 @@
 
       <div id="family-box" class="hidden">
         <h4 data-icon="user"><span>Famille</span></h4>
-        <p class="muted small">Jusqu'à 10 proches peuvent utiliser ton Syrius, chacun avec ses discussions privées.
-          Partage-leur ce code : ils touchent « Rejoindre la famille » à l'écran de connexion et créent leur compte.
-          Tu n'as rien d'autre à faire.</p>
-        <div class="invite">
+        <p class="muted small">Jusqu'à 10 comptes en tout (famille + tests), chacun avec ses discussions privées.
+          Envoie le lien d'invitation : la personne l'ouvre et crée son compte. Tu n'as rien d'autre à faire.</p>
+        <p id="family-full" class="small hidden">Famille complète (10 comptes) : plus aucun lien ne peut être créé.
+          Retire un compte pour libérer une place.</p>
+        <div id="family-invite" class="invite">
           <div id="family-code" class="invite-code">—</div>
           <div class="local-actions">
             <button type="button" id="family-share" class="ghost" data-icon="link"><span>Partager</span></button>
             <button type="button" id="family-renew" class="ghost" data-icon="refresh"><span>Nouveau code</span></button>
           </div>
+        </div>
+        <div id="family-testbox">
+          <p class="muted small">Lien de test : la personne essaie Syrius sans créer de compte. Après 24 h, le lien
+            ne marche plus et ses données sont effacées.</p>
+          <button type="button" id="family-test" class="ghost" data-icon="clock"><span>Créer un lien de test (24 h)</span></button>
         </div>
         <ul id="family-list" class="family-list"></ul>
         <p id="family-msg" class="small"></p>
@@ -332,7 +338,7 @@
       <ul id="memory-list"></ul>
 
       <h4 data-icon="shield"><span>Sécurité</span></h4>
-      <details>
+      <details id="pw-box">
         <summary>Changer le mot de passe</summary>
         <input id="pw-current" type="password" autocomplete="current-password" placeholder="Mot de passe actuel">
         <input id="pw-new" type="password" autocomplete="new-password" placeholder="Nouveau (10 caractères min.)">
