@@ -313,3 +313,4 @@ def test_pages_publiques_play_store(make_client):
     assert c.get("/essai/abcdefabcdef-xyz").status_code == 200
     links = c.get("/.well-known/assetlinks.json").json()
     assert links[0]["target"]["package_name"] == "fr.syrius.app"
+    assert links[0]["target"]["sha256_cert_fingerprints"][0].startswith("E4:30:06")
