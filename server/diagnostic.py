@@ -80,7 +80,8 @@ def _hf_whoami(token: str) -> str:
 def run(cfg, providers) -> list[dict]:
     checks = []
     names = {imagegen._pollinations_key: "Images · Pollinations (clé)", imagegen._pollinations: "Images · Pollinations",
-             imagegen._huggingface: "Images · Hugging Face FLUX"}
+             imagegen._huggingface: "Images · Hugging Face FLUX",
+             imagegen._horde: "Images · AI Horde (gratuit)"}
     for src in imagegen.sources():
         checks.append((names.get(src, "Images"), lambda s=src: _image_source(s)))
     for p in providers:
