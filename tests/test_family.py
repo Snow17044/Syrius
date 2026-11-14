@@ -36,7 +36,7 @@ def test_invitation_et_espaces_prives(make_client):
     lea.put("/api/settings", json={"user_name": "Léa"}, headers=H)
     assert owner.get("/api/settings").json().get("user_name", "") != "Léa"
     s = lea.get("/api/settings").json()
-    assert s["user_name"] == "Léa" and s["account"] == {"owner": False, "name": "Léa"}
+    assert s["user_name"] == "Léa" and s["account"] == {"owner": False, "name": "Léa", "guest": False}
     assert owner.get("/api/settings").json()["account"]["owner"] is True
 
 
@@ -189,3 +189,79 @@ def test_boite_mail_du_proprietaire_reservee(make_client):
     finally:
         family.CURRENT.set("")
     assert lea.post("/api/email/outlook/start", headers=H).status_code == 403
+
+
+def test_lien_de_test_24h(make_client, monkeypatch):
+    owner = make_client(responses=[reply("Bienvenue")])
+    login(owner)
+    link = owner.post("/api/family/test-link", headers=H).json()["link"]
+    tester = TestClient(owner.app, base_url="https://testserver")
+    assert tester.post("/api/family/test", json={"link": link}, headers=H).status_code == 200
+    acc = tester.get("/api/settings").json()["account"]
+    assert acc["guest"] is True and acc["name"] == "Testeur 1" and acc["expires"] > 0
+    cid = tester.post("/api/conversations", headers=H).json()["id"]
+    assert tester.get(f"/api/conversations/{cid}").status_code == 200
+    assert owner.get("/api/conversations").json() == []  # espace séparé
+    assert tester.get("/api/family").status_code == 403
+    assert tester.post("/api/email/google/start", headers=H).status_code == 403
+    # mauvais lien refusé
+    other = TestClient(owner.app, base_url="https://testserver")
+    uid = link.split("-")[0]
+    assert other.post("/api/family/test", json={"link": uid + "-" + "x" * 32}, headers=H).status_code == 400
+    # 24 h plus tard : plus d'accès, compte et données effacés
+    real = family.time.time
+    monkeypatch.setattr(family.time, "time", lambda: real() + family.TEST_SECONDS + 5)
+    assert tester.get("/api/conversations").status_code == 401
+    assert other.post("/api/family/test", json={"link": link}, headers=H).status_code == 400
+    assert owner.get("/api/family").json()["members"] == []
+    assert family.ScopedDB(owner.db, family.space_factory(owner.db, owner.agent.cfg.data_dir)) \
+        .for_user(uid).list_conversations() == []
+
+
+def test_dix_comptes_en_tout_plus_de_lien(make_client):
+    owner = make_client()
+    login(owner)
+    code = owner.get("/api/family").json()["code"]
+    for _ in range(3):
+        assert owner.post("/api/family/test-link", headers=H).status_code == 200
+    for i in range(family.MAX_MEMBERS - 3):
+        c = TestClient(owner.app, base_url="https://testserver")
+        assert c.post("/api/family/join", json={"code": code, "name": f"Membre {i}", "password": "x" * 12},
+                      headers=H).status_code == 200
+    f = owner.get("/api/family").json()
+    assert f["full"] is True and f["code"] is None and len(f["members"]) == family.MAX_MEMBERS
+    assert owner.post("/api/family/code", headers=H).status_code == 409
+    assert owner.post("/api/family/test-link", headers=H).status_code == 409
+    c = TestClient(owner.app, base_url="https://testserver")
+    assert c.post("/api/family/join", json={"code": code, "name": "En trop", "password": "x" * 12},
+                  headers=H).status_code == 400
+    # un compte retiré libère une place : un nouveau code est créé
+    owner.delete(f"/api/family/{f['members'][0]['id']}", headers=H)
+    f = owner.get("/api/family").json()
+    assert f["full"] is False and f["code"] and f["code"] != code
+
+
+def test_retrait_efface_les_donnees(make_client):
+    owner = make_client(responses=[reply("ok")])
+    login(owner)
+    lea = member_client(owner)
+    cid = lea.post("/api/conversations", headers=H).json()["id"]
+    uid = owner.get("/api/family").json()["members"][0]["id"]
+    owner.delete(f"/api/family/{uid}", headers=H)
+    db = family.ScopedDB(owner.db, family.space_factory(owner.db, owner.agent.cfg.data_dir))
+    assert db.for_user(uid).get_conversation(cid) is None
+
+
+def test_seul_le_proprietaire_cree_des_liens(make_client):
+    owner = make_client()
+    login(owner)
+    lea = member_client(owner)
+    link = owner.post("/api/family/test-link", headers=H).json()["link"]
+    tester = TestClient(owner.app, base_url="https://testserver")
+    tester.post("/api/family/test", json={"link": link}, headers=H)
+    anon = TestClient(owner.app, base_url="https://testserver")
+    for c in (lea, tester, anon):
+        assert c.post("/api/family/test-link", headers=H).status_code in (401, 403)
+        assert c.post("/api/family/code", headers=H).status_code in (401, 403)
+        assert c.get("/api/family").status_code in (401, 403)
+        assert "code" not in c.get("/api/settings").json()

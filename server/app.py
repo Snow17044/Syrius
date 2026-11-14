@@ -45,6 +45,10 @@ class LoginBody(BaseModel):
     name: str = Field(default="", max_length=40)  # vide = propriétaire ; prénom = membre de la famille
 
 
+class TestLinkBody(BaseModel):
+    link: str = Field(min_length=10, max_length=80)
+
+
 class JoinBody(BaseModel):
     code: str = Field(min_length=4, max_length=40)
     name: str = Field(min_length=1, max_length=40)
@@ -185,14 +189,15 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if uid is None:
             raise HTTPException(status_code=401, detail="Non connecté")
         family.CURRENT.set(uid)  # toutes les données de la requête vont dans l'espace de cette personne
+        family.GUEST.set(family.is_guest(db.base, uid))
         request.state.uid = uid
 
     def require_owner(request: Request) -> None:
         if getattr(request.state, "uid", None) != family.OWNER:
             raise HTTPException(403, "Réservé au propriétaire de Syrius.")
 
-    def set_session_cookie(resp, token: str) -> None:
-        resp.set_cookie(auth.COOKIE_NAME, token, max_age=cfg.session_days * 86400, httponly=True,
+    def set_session_cookie(resp, token: str, max_age: int | None = None) -> None:
+        resp.set_cookie(auth.COOKIE_NAME, token, max_age=max_age or cfg.session_days * 86400, httponly=True,
                         secure=cfg.cookie_secure, samesite="strict", path="/")
 
     # ------------------------------------------------------------------ pages
@@ -361,6 +366,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if auth.is_locked_out(db, ip):
             raise HTTPException(429, "Trop d'essais. Réessaie dans 15 minutes.")
         try:
+            family.purge_expired(db.base, db.wipe)
             uid = await asyncio.to_thread(family.join, db.base, body.code, body.name, body.password)
         except family.FamilyError as e:
             if "invitation" in str(e):
@@ -371,19 +377,48 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         set_session_cookie(resp, auth.new_session(db, uid, cfg.session_days))
         return resp
 
+    @app.post("/api/family/test")
+    async def family_test_claim(body: TestLinkBody, request: Request):
+        """Lien de test : accès temporaire (24 h à partir de la création du lien), sans mot de passe."""
+        ip = client_ip(request)
+        if auth.is_locked_out(db, ip):
+            raise HTTPException(429, "Trop d'essais. Réessaie dans 15 minutes.")
+        found = family.claim_test(db.base, body.link)
+        if not found:
+            db.record_failed_login(ip)
+            await asyncio.sleep(1)
+            raise HTTPException(400, "Ce lien de test n'est plus valable (24 h dépassées ou lien retiré).")
+        uid, left = found
+        resp = JSONResponse({"ok": True})
+        set_session_cookie(resp, auth.new_session(db, uid, left / 86400), max_age=max(60, int(left)))
+        return resp
+
     @app.get("/api/family", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def family_info():
-        return {"code": family.invite_code(db.base), "members": family.members(db.base),
-                "max": family.MAX_MEMBERS}
+        family.purge_expired(db.base, db.wipe)
+        return {"code": family.invite_code(db.base) or None, "members": family.members(db.base),
+                "max": family.MAX_MEMBERS, "full": family.is_full(db.base)}
 
     @app.post("/api/family/code", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def family_new_code():
-        return {"code": family.invite_code(db.base, renew=True)}
+        try:
+            return {"code": family.invite_code(db.base, renew=True)}
+        except family.FamilyError as e:
+            raise HTTPException(409, str(e)) from None
+
+    @app.post("/api/family/test-link", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def family_new_test():
+        family.purge_expired(db.base, db.wipe)
+        try:
+            return {"link": family.create_test(db.base), "hours": family.TEST_SECONDS // 3600}
+        except family.FamilyError as e:
+            raise HTTPException(409, str(e)) from None
 
     @app.delete("/api/family/{uid}", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def family_remove(uid: str):
         if not family.remove_member(db.base, uid[:20]):
             raise HTTPException(404, "Compte introuvable")
+        db.wipe(uid[:20])  # ses discussions, sa mémoire et ses réglages sont effacés
         return {"ok": True}
 
     @app.post("/api/logout")
@@ -504,7 +539,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def get_settings(request: Request):
         uid = request.state.uid
         return {**db.get_settings(), "email_enabled": family.email_allowed(cfg),
-                "account": {"owner": uid == family.OWNER, "name": family.member_name(db.base, uid)},
+                "account": family.account(db.base, uid),
                 "outlook": cfg.email_mode == "outlook" and bool(cfg.ms_client_id) and uid == family.OWNER,
                 "google": cfg.email_mode == "google",
                 "google_connected": cfg.email_mode == "google" and gmail.is_connected(db),
@@ -520,6 +555,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
     @app.post("/api/email/google/start", dependencies=[Depends(require_auth)])
     async def google_start(request: Request):
+        if family.GUEST.get():
+            raise HTTPException(403, "Les comptes de test n'ont pas accès aux emails.")
         try:
             prefix = request.state.uid + "." if request.state.uid else ""
             return {"url": await asyncio.to_thread(gmail.start_url, cfg, db, google_redirect_uri(request), prefix)}
