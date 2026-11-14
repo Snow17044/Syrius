@@ -131,8 +131,12 @@ def validate(args) -> dict:
         raise ModelError("title manquant")
     template = args.get("template") if args.get("template") in TEMPLATES else ""
     raw = args.get("parts") or []
-    if not isinstance(raw, list) or (not raw and not template):
-        raise ModelError("parts : au moins une forme (ou un template)")
+    search_en = _text(args.get("search_en"), 60)
+    search_en = search_en if re.fullmatch(r"[A-Za-z0-9 '\-]{2,60}", search_en or "") else ""
+    prompt_en = _text(args.get("prompt_en"), 300)
+    real = bool(search_en or prompt_en)
+    if not isinstance(raw, list) or (not raw and not template and not real):
+        raise ModelError("parts : au moins une forme (ou un template, ou search_en / prompt_en)")
     parts = []
     for p in raw[:MAX_PARTS]:
         if isinstance(p, str):
@@ -173,7 +177,7 @@ def validate(args) -> dict:
         if len(parts) >= MAX_PARTS:
             break
     parts = parts[:MAX_PARTS]
-    if not parts and not template:
+    if not parts and not template and not real:
         raise ModelError("aucune forme valide (" + ", ".join(SHAPES) + ")")
     facts = [f for f in (_text(x, 80) for x in (args.get("facts") or [])[:MAX_FACTS]
                          if isinstance(args.get("facts"), list)) if f]
@@ -181,6 +185,10 @@ def validate(args) -> dict:
            "parts": parts, "facts": facts}
     if template:
         out["template"] = template
+    if search_en:
+        out["search_en"] = search_en  # recherche d'un vrai modèle dans la bibliothèque 3D
+    if prompt_en:
+        out["prompt_en"] = prompt_en  # description pour créer une maquette texturée sur mesure
     return out
 
 

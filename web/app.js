@@ -727,7 +727,11 @@ async function sendMessage(text) {
         else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
         else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
         else if (ev.type === "weather") { addWeatherCard(view, ev); scrollDown(); }
-        else if (ev.type === "model") { addDiagramCard(view, ev); if (window.SyriusModel) window.SyriusModel.show(ev); }
+        else if (ev.type === "model") {
+          addDiagramCard(view, ev);
+          if (window.SyriusModel) window.SyriusModel.show(ev);
+          realModel(view, ev);
+        }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
         else if (ev.type === "error") { gotError = true; showError(view, ev.message); }
@@ -841,10 +845,85 @@ function addDiagramCard(view, ev) {
     isModel ? "Maquette 3D · toucher pour ouvrir" : "Schéma · toucher pour ouvrir"));
   card.firstChild.append(Icons.svg("right", "go"));
   card.addEventListener("click", () => {
-    if (isModel) { if (window.SyriusModel) window.SyriusModel.show(ev); }
-    else if (window.SyriusHolo) window.SyriusHolo.show(ev);
+    if (isModel) {
+      if (ev._glb && window.SyriusModel) window.SyriusModel.showGlb(ev._glb.slice(0), ev._info).catch(() => window.SyriusModel.show(ev));
+      else if (window.SyriusModel) window.SyriusModel.show(ev);
+    } else if (window.SyriusHolo) window.SyriusHolo.show(ev);
   });
   placeCard(view, card);
+}
+
+// ------------------------------------------------------------------ vraie maquette 3D (fichier GLB texturé)
+// 1) bibliothèque Poly Pizza (modèles d'artistes, instantané) ; 2) sinon création sur mesure (TRELLIS.2, 1 à 2 min).
+// La version simplifiée reste affichée en attendant, puis est remplacée automatiquement.
+async function fetchGlb(url, body) {
+  const res = await fetch(url, {
+    method: body ? "POST" : "GET", credentials: "same-origin",
+    headers: { "X-Syrius": "1", ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { showLogin(); throw new Error("Connexion expirée."); }
+  if (!res.ok) {
+    let msg = `Erreur ${res.status}`;
+    try { msg = (await res.json()).detail || msg; } catch (_) { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res;
+}
+
+function realModel(view, ev) {
+  if (!ev || !(ev.search_en || ev.prompt_en) || !window.SyriusModel || !window.SyriusModel.showGlb) return;
+  const card = node("div", "action-card image-card tone-sky");
+  const head = cardHead("cube", "Maquette réaliste", "Recherche d'un vrai modèle 3D…");
+  const sub = head.querySelector(".card-sub");
+  const bar = document.createElement("progress");
+  const status = node("p", "small");
+  card.append(head, bar, status);
+  placeCard(view, card);
+  const started = Date.now();
+  const display = (buf, credit) => {
+    ev._glb = buf;
+    ev._info = { title: ev.title, description: ev.description, facts: [...(ev.facts || []), ...(credit ? [credit] : [])] };
+    const panelOpen = !document.getElementById("m3d").classList.contains("hidden");
+    const open = () => window.SyriusModel.showGlb(buf.slice(0), ev._info);
+    bar.remove();
+    sub.textContent = credit || "Maquette texturée créée sur mesure";
+    setMsg(status, `✅ Prête en ${Math.max(1, Math.round((Date.now() - started) / 1000))} s.`);
+    const row = node("div", "action-buttons");
+    const btn = node("button", "primary");
+    Icons.set(btn, "cube", "Voir la maquette réaliste");
+    btn.addEventListener("click", () => open().catch((e) => setMsg(status, "⚠ " + e.message)));
+    row.append(btn);
+    card.append(row);
+    if (panelOpen) open().catch((e) => setMsg(status, "⚠ " + e.message));
+    scrollDown();
+  };
+  (async () => {
+    let libErr = "";
+    if (ev.search_en) {
+      try {
+        const r = await (await fetchGlb("/api/model3d/search", { query: ev.search_en })).json();
+        const best = (r.results || [])[0];
+        if (best) {
+          sub.textContent = `Modèle trouvé : ${best.title}`;
+          const buf = await (await fetchGlb("/api/model3d/poly?path=" + encodeURIComponent(best.path))).arrayBuffer();
+          const credit = `Modèle « ${best.title} »${best.creator ? " par " + best.creator : ""}${best.licence ? " · " + best.licence : ""} (Poly Pizza)`;
+          display(buf, credit);
+          return;
+        }
+        libErr = "aucun modèle correspondant dans la bibliothèque";
+      } catch (e) { libErr = e.message; }
+    }
+    if (!ev.prompt_en) throw new Error(libErr || "pas de description pour la création");
+    sub.textContent = "Création sur mesure en cours (1 à 2 min)…";
+    status.textContent = "L'IA dessine l'objet puis le transforme en maquette 3D texturée.";
+    const buf = await (await fetchGlb("/api/model3d/generate", { prompt: ev.prompt_en })).arrayBuffer();
+    display(buf, "");
+  })().catch((e) => {
+    bar.remove();
+    sub.textContent = "Version simplifiée affichée";
+    setMsg(status, "⚠ " + (e.message || "Maquette réaliste indisponible."));
+  });
 }
 
 // ------------------------------------------------------------------ actions sur le téléphone

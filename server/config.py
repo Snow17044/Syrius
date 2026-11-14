@@ -56,9 +56,17 @@ class Config:
     github_models: list = field(default_factory=lambda: [
         m.strip() for m in _env("SYRIUS_GITHUB_MODELS", "openai/gpt-4.1-mini,meta/Llama-3.3-70B-Instruct").split(",")
         if m.strip()][:4])
-    # OpenRouter (modèles « :free », ~50 messages/jour) : dernier relais en ligne.
+    # OpenRouter (modèles « :free », ~50 messages/jour) : les IA gratuites les plus puissantes, essayées en
+    # premier ; quand la limite du jour est atteinte, Syrius passe tout seul sur Groq.
     openrouter_api_key: str = field(default_factory=lambda: _env("OPENROUTER_API_KEY") or _env("openrouter"))
-    openrouter_model: str = field(default_factory=lambda: _env("SYRIUS_OPENROUTER_MODEL", "openrouter/free"))
+    openrouter_models: list = field(default_factory=lambda: [
+        m.strip() for m in _env("SYRIUS_OPENROUTER_MODELS",
+                                _env("SYRIUS_OPENROUTER_MODEL") or
+                                "nvidia/nemotron-3-ultra-550b-a55b:free,google/gemma-4-31b-it:free").split(",")
+        if m.strip()][:4])
+    # Vraies maquettes 3D : bibliothèque Poly Pizza + création TRELLIS.2 (Hugging Face).
+    polypizza_api_key: str = field(default_factory=lambda: _env("POLYPIZZA_API_KEY") or _env("POLY_PIZZA_API_KEY"))
+    hf_token: str = field(default_factory=lambda: _env("HF_TOKEN") or _env("HUGGINGFACE_TOKEN"))
     gemini_api_key: str = field(default_factory=lambda: _env("GEMINI_API_KEY") or _env("gemini") or _env("GEMINI"))
     gemini_model: str = field(default_factory=lambda: _env("SYRIUS_GEMINI_MODEL", "gemini-flash-latest"))
     ollama_url: str = field(default_factory=lambda: _env("SYRIUS_OLLAMA_URL"))

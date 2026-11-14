@@ -86,15 +86,18 @@ def test_limite_atteinte_bascule_sur_le_modele_suivant(cfg, make_db):
 
 
 def test_relais_github_et_openrouter(monkeypatch):
-    for k in ("MISTRAL_API_KEY", "GEMINI_API_KEY"):
+    for k in ("MISTRAL_API_KEY", "GEMINI_API_KEY", "SYRIUS_OPENROUTER_MODELS", "SYRIUS_OPENROUTER_MODEL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("GROQ_API_KEY", "g")
     monkeypatch.setenv("GITHUB_MODELS_TOKEN", "gh")
     monkeypatch.setenv("OPENROUTER_API_KEY", "or")
     ps = providers_from_config(Config())
     names = [p.name for p in ps]
-    assert names[0] == "groq" and names[-3:] == ["github", "github2", "openrouter"]
-    gh = ps[-3]
+    # Les IA gratuites les plus puissantes (OpenRouter) d'abord, puis Groq, puis GitHub en relais.
+    assert names[:3] == ["openrouter", "openrouter2", "groq"] and names[-2:] == ["github", "github2"]
+    assert ps[0].base_url == "https://openrouter.ai/api/v1" and ps[0].model == "nvidia/nemotron-3-ultra-550b-a55b:free"
+    assert ps[0].label == "NVIDIA Nemotron 3 Ultra" and not ps[0].vision
+    assert ps[1].model == "google/gemma-4-31b-it:free" and ps[1].vision
+    gh = ps[-2]
     assert gh.base_url == "https://models.github.ai/inference" and gh.model == "openai/gpt-4.1-mini" and gh.api_key == "gh"
-    assert ps[-1].base_url == "https://openrouter.ai/api/v1" and ps[-1].model == "openrouter/free"
-    assert not any(p.reasoning for p in ps[-3:])
+    assert not any(p.reasoning for p in ps[:2] + ps[-2:])

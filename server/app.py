@@ -16,7 +16,7 @@ from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
 from .store_redis import RedisDatabase, RedisError, UpstashREST
-from .tools import gmail, imagegen, tiles
+from .tools import gmail, imagegen, real3d, tiles
 from .tools.places import round_location
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
 
@@ -28,7 +28,7 @@ STATIC_FILES = {
     "maplibre-gl.js": "text/javascript", "maplibre-gl-worker.js": "text/javascript",
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
-    "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript",
+    "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -53,6 +53,14 @@ class MessageBody(BaseModel):
 
 class ImageBody(BaseModel):
     prompt: str = Field(min_length=3, max_length=600)
+
+
+class Model3DSearch(BaseModel):
+    query: str = Field(min_length=2, max_length=80)
+
+
+class Model3DCreate(BaseModel):
+    prompt: str = Field(min_length=3, max_length=300)
 
 
 class ConversationPatch(BaseModel):
@@ -212,6 +220,37 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         except transcribe.TranscribeError as e:
             raise HTTPException(502 if "service" in str(e) else 400, str(e)) from None
         return {"text": text}
+
+    # ------------------------------------------------------------------ vraies maquettes 3D (GLB)
+    GLB_TYPE = "model/gltf-binary"
+
+    @app.post("/api/model3d/search", dependencies=[Depends(require_auth)])
+    async def model3d_search(body: Model3DSearch):
+        """Cherche de vrais modèles 3D dans la bibliothèque Poly Pizza (artistes, licences CC0 / CC-BY)."""
+        try:
+            results = await asyncio.to_thread(real3d.poly_search, cfg.polypizza_api_key, body.query)
+        except real3d.Real3DError as e:
+            raise HTTPException(502, str(e)) from None
+        return {"results": results}
+
+    @app.get("/api/model3d/poly", dependencies=[Depends(require_auth)])
+    async def model3d_poly(path: str):
+        try:
+            data = await asyncio.to_thread(real3d.poly_glb, path)
+        except real3d.Real3DError as e:
+            raise HTTPException(502, str(e)) from None
+        return Response(data, media_type=GLB_TYPE, headers={"Cache-Control": "private, max-age=86400"})
+
+    @app.post("/api/model3d/generate", dependencies=[Depends(require_auth)])
+    async def model3d_generate(body: Model3DCreate):
+        """Crée une maquette texturée sur mesure (image → TRELLIS.2). Environ 1 à 2 minutes."""
+        if not cfg.hf_token:
+            raise HTTPException(503, "création 3D non configurée (clé HF_TOKEN absente)")
+        try:
+            data = await asyncio.to_thread(real3d.trellis_generate, cfg.hf_token, body.prompt)
+        except (real3d.Real3DError, imagegen.ImageGenError) as e:
+            raise HTTPException(502, str(e)) from None
+        return Response(data, media_type=GLB_TYPE, headers={"Cache-Control": "no-store"})
 
     @app.post("/api/image", dependencies=[Depends(require_auth)])
     def create_image(body: ImageBody):
