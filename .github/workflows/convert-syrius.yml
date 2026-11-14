@@ -61,7 +61,7 @@ jobs:
             src="$(.cvenv/bin/python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen2.5-1.5B-Instruct', allow_patterns=['*.json','*.safetensors','merges.txt','vocab.json']))")"
           fi
           .cvenv/bin/python -m litert_torch.generative.export_hf --model "$src" --output_dir out \
-            --quantization_recipe "$QUANT" --prefill_lengths 256 --cache_length 1280 \
+            --quantization_recipe "$QUANT" --prefill_lengths 256 --cache_length 1280 --model_dtype bfloat16 \
             --bundle_litert_lm True
           ls -la out
           f=$(ls out/*.litertlm | head -1)
