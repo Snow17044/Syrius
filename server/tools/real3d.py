@@ -135,40 +135,62 @@ def _upload(token: str, data: bytes, name: str, ctype: str) -> str:
     return paths[0]
 
 
+_FN: dict = {}
+
+
+def _fn_index(token: str, api: str) -> int:
+    """Numéro de la fonction dans l'espace Gradio (lu une fois dans sa configuration publique)."""
+    if not _FN:
+        status, _, out = _request(TRELLIS, "GET", "/config", _gradio_headers(token), timeout=30)
+        try:
+            deps = json.loads(out).get("dependencies") or []
+        except (ValueError, AttributeError):
+            deps = []
+        for i, d in enumerate(deps):
+            if isinstance(d, dict) and isinstance(d.get("api_name"), str):
+                _FN[d["api_name"]] = int(d.get("id", i)) if isinstance(d.get("id", i), int) else i
+        if status != 200 or not _FN:
+            raise Real3DError(f"service 3D indisponible ({status})")
+    if api not in _FN:
+        raise Real3DError(f"fonction 3D inconnue ({api})")
+    return _FN[api]
+
+
 def _call(token: str, session: str, api: str, data: list, timeout: float = 240):
-    """Appelle une fonction de l'espace Gradio et attend le résultat (flux d'événements)."""
-    status, _, out = _request(TRELLIS, "POST", f"/gradio_api/call/{api}", {
-        **_gradio_headers(token), "Content-Type": "application/json"},
-        json.dumps({"data": data, "session_hash": session}).encode(), timeout=60)
+    """Appelle une fonction de l'espace Gradio (file d'attente, protocole sse_v3) et renvoie son résultat."""
+    body = {"data": data, "event_data": None, "fn_index": _fn_index(token, api), "trigger_id": None,
+            "session_hash": session}
+    status, _, out = _request(TRELLIS, "POST", "/gradio_api/queue/join", {
+        **_gradio_headers(token), "Content-Type": "application/json"}, json.dumps(body).encode(), timeout=60)
     try:
         event = json.loads(out).get("event_id")
     except (ValueError, AttributeError):
         event = None
     if status != 200 or not event or not _ID.match(str(event)):
-        raise Real3DError(f"service 3D indisponible ({status})")
-    status, _, out = _request(TRELLIS, "GET", f"/gradio_api/call/{api}/{event}",
-                              {**_gradio_headers(token), "Accept": "text/event-stream"}, timeout=timeout)
-    text = out.decode("utf-8", "replace")
-    kind, payload = "", ""
-    for line in text.splitlines():
-        if line.startswith("event:"):
-            kind = line[6:].strip()
-        elif line.startswith("data:"):
-            payload = line[5:].strip()
-            if kind in ("complete", "error"):
-                break
-    if kind == "error":
-        msg = payload.lower()
-        if "quota" in msg:
+        raise Real3DError(f"service 3D indisponible ({api}, {status})")
+    status, _, out = _request(TRELLIS, "GET", f"/gradio_api/queue/data?session_hash={session}",
+                              {**_gradio_headers(token), "Accept": "text/event-stream"}, timeout=timeout,
+                              limit=4_000_000)
+    for line in out.decode("utf-8", "replace").splitlines():
+        if not line.startswith("data:"):
+            continue
+        try:
+            msg = json.loads(line[5:].strip())
+        except ValueError:
+            continue
+        if not isinstance(msg, dict) or msg.get("event_id") not in (None, event):
+            continue
+        if msg.get("msg") != "process_completed":
+            continue
+        output = msg.get("output") or {}
+        if msg.get("success") and isinstance(output, dict) and "data" in output:
+            return output["data"]
+        err = str(output.get("error") or msg.get("title") or "") if isinstance(output, dict) else ""
+        if "quota" in err.lower():
             raise Real3DError("quota gratuit du jour atteint pour la création 3D (réessaie demain)")
-        detail = re.sub(r"[^\w\s.,:;()'%/-]", " ", payload)[:160].strip()
+        detail = re.sub(r"[^\w\s.,:;()'%/-]", " ", err)[:160].strip()
         raise Real3DError(f"la création 3D a échoué ({api}{' : ' + detail if detail else ''})")
-    if kind != "complete":
-        raise Real3DError(f"la création 3D n'a pas répondu à temps ({api}, {status}, {text[:120]!r})")
-    try:
-        return json.loads(payload)
-    except ValueError:
-        raise Real3DError("réponse illisible du service 3D") from None
+    raise Real3DError(f"la création 3D n'a pas répondu à temps ({api}, {status})")
 
 
 def _file_path(value) -> str:

@@ -60,24 +60,25 @@ BASE_TOOLS = [
                          "label": {"type": "string"}}}}},
           ["title", "nodes"]),
     _tool("show_model",
-          "Affiche une MAQUETTE 3D holographique. Si l'objet est dans la liste des templates (tour Eiffel, "
-          "pyramide, fusée, voiture, maison, avion, arbre, atome, système solaire, molécule d'eau, ADN, phare), "
-          "donne SEULEMENT template + title + facts (rendu soigné). Sinon construis l'objet avec parts, de "
-          "préférence avec des silhouettes : lathe (profil tourné : tours, vases, bouteilles, fusées), extrude "
-          "(contour épaissi : bâtiments, profils de véhicules), tube (câbles, arches, ponts), et des formes "
-          "simples pour les détails. Axe Y vers le haut, sol à y = 0, 8 à 40 pièces, proportions réelles.",
+          "Affiche une MAQUETTE 3D. Syrius va chercher un VRAI modèle 3D (bibliothèque d'artistes) ou le crée "
+          "texturé sur mesure : donne TOUJOURS search_en (2 à 4 mots anglais de l'objet, ex. « eiffel tower ») et "
+          "prompt_en (description visuelle anglaise de l'objet seul : forme, matières, couleurs). En attendant, une "
+          "version simplifiée s'affiche : template si l'objet est dans la liste (tour Eiffel, pyramide, fusée, "
+          "voiture, maison, avion, arbre, atome, système solaire, molécule d'eau, ADN, phare), sinon parts "
+          "facultatif (8 à 20 pièces, silhouettes lathe / extrude / tube conseillées).",
           {"title": {"type": "string"},
+           "search_en": {"type": "string", "description": "2 à 4 mots ANGLAIS pour chercher l'objet, ex. « red sports car »"},
+           "prompt_en": {"type": "string", "description": "Description visuelle ANGLAISE de l'objet seul, 10 à 40 mots"},
            "template": {"type": "string", "description": "tour_eiffel, pyramide, fusee, voiture, maison, avion, "
                                                          "arbre, atome, systeme_solaire, molecule_eau, adn, phare"},
            "description": {"type": "string", "description": "Une phrase sur l'objet"},
            "facts": {"type": "array", "items": {"type": "string"}, "description": "3 à 5 infos clés courtes"},
            "parts": {"type": "array", "description":
-                     "Pièces. Ligne compacte « forme x,y,z taille [rotX,rotY,rotZ] #couleur [sym:x|z|xz] nom » "
+                     "Facultatif. Lignes compactes « forme x,y,z taille [rotX,rotY,rotZ] #couleur [sym:x|z|xz] nom » "
                      "(box l,h,p · cylinder rHaut,h,rBas · cone r,h · sphere r · torus r,épaisseur · pyramid l,h,p) "
-                     "ou objet pour les silhouettes : {\"shape\":\"lathe\",\"points\":[[rayon,hauteur],…],"
-                     "\"segments\":32,\"pos\":[x,y,z],\"color\":\"#…\"} ; {\"shape\":\"extrude\","
-                     "\"points\":[[x,z],…],\"size\":[1,hauteur,1]} ; {\"shape\":\"tube\",\"points\":"
-                     "[[x,y,z],…],\"size\":[rayon]}. \"wire\": true = structure en fil de fer (métal, treillis)."}},
+                     "ou objets silhouettes : {\"shape\":\"lathe\",\"points\":[[rayon,hauteur],…]} ; "
+                     "{\"shape\":\"extrude\",\"points\":[[x,z],…],\"size\":[1,hauteur,1]} ; "
+                     "{\"shape\":\"tube\",\"points\":[[x,y,z],…],\"size\":[rayon]}."}},
           ["title"]),
 ]
 

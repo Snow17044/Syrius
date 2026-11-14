@@ -149,8 +149,22 @@ def groq_label(model: str) -> str:
     return f"Groq · {name[:30]}"
 
 
+def openrouter_label(model: str) -> str:
+    name = model.split("/")[-1].replace(":free", "")
+    if "nemotron-3-ultra" in name:
+        return "NVIDIA Nemotron 3 Ultra"
+    if name.startswith("gemma-4"):
+        return "Google Gemma 4"
+    return "OpenRouter · " + name[:24]
+
+
 def providers_from_config(cfg) -> list[Provider]:
     out = []
+    if cfg.openrouter_api_key:  # IA gratuites les plus puissantes d'abord (limite ~50 messages/jour)
+        for i, model in enumerate(cfg.openrouter_models):
+            out.append(Provider("openrouter" if i == 0 else f"openrouter{i + 1}", openrouter_label(model),
+                                "https://openrouter.ai/api/v1", model, cfg.openrouter_api_key, reasoning=False,
+                                vision=any(k in model for k in ("gemma-4", "-vl", "omni", "vision"))))
     if cfg.mistral_api_key:  # en premier : limites gratuites bien plus larges que Groq
         out.append(Provider("mistral", "Mistral", "https://api.mistral.ai/v1", cfg.mistral_model,
                             cfg.mistral_api_key, reasoning=False, vision="small" in cfg.mistral_model))
@@ -168,9 +182,6 @@ def providers_from_config(cfg) -> list[Provider]:
             out.append(Provider("github" if i == 0 else f"github{i + 1}", f"GitHub · {model.split('/')[-1][:24]}",
                                 "https://models.github.ai/inference", model, cfg.github_models_token,
                                 reasoning=False, vision="gpt-4" in model))
-    if cfg.openrouter_api_key:
-        out.append(Provider("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", cfg.openrouter_model,
-                            cfg.openrouter_api_key, reasoning=False))
     if cfg.gemini_api_key:
         out.append(Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
                             cfg.gemini_model, cfg.gemini_api_key, vision=True))
