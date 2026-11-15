@@ -3,5 +3,5 @@
 torch==2.14.1+cpu
 torchao==0.18.0
 litert-torch==0.10.0
-tensorflow-cpu==2.21.0
+tf-nightly==2.23.0.dev20261031  # requis par le convertisseur V2 (peu de mémoire)
 litert-lm-builder==0.18.1
