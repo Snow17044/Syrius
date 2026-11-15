@@ -27,7 +27,7 @@ const SILENCE_MS = 900;     // fin de phrase après ce silence
 
 if (!process.env.DISCORD_TOKEN || !BOT_KEY || !/^https:\/\//.test(SYRIUS_URL)) {
   console.error("Configuration incomplète : DISCORD_TOKEN, SYRIUS_BOT_KEY et SYRIUS_URL (https) sont nécessaires.");
-  process.exit(1);
+  process.exit(2);  // 2 = clés à corriger : pas de redémarrage en boucle
 }
 
 let allowed = new Set();
