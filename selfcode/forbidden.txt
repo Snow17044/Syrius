@@ -26,3 +26,4 @@ app.py
 .gitignore
 server/voicebot.py
 discord-bot/
+server/hfspace.py
