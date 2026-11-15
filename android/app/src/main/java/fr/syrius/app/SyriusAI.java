@@ -27,7 +27,12 @@ import java.util.concurrent.Executors;
 class SyriusAI {
     static final String RELEASE = "https://github.com/" + BuildConfig.SYRIUS_REPO + "/releases/download/syrius-ia/";
     /** Version publiée de notre IA (mise à jour après chaque entraînement validé). Vide = pas encore disponible. */
-    static final ModelPack.Part[] PARTS = {};
+    static final ModelPack.Part[] PARTS = {
+            // Entraînement du 14/11/2026 (524 exemples), converti par la CI ; empreinte vérifiée au téléchargement.
+            new ModelPack.Part(RELEASE + "syrius-1.5b-43633673424-dynamic_wi8_afp32.litertlm",
+                    "syrius-1.5b-43633673424-dynamic_wi8_afp32.litertlm",
+                    "06bf04fbfbaeee4dc867e8eb1c53cc8b7d4628f2f73cb86a9af177e6bab6d942", 1_567_653_904L),
+    };
     static final String FILE = PARTS.length > 0 ? PARTS[0].file : "";
 
     final ModelPack pack;
