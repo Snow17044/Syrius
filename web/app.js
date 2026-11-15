@@ -4,6 +4,20 @@ const $ = (s) => document.querySelector(s);
 const emptyNode = document.getElementById("empty");
 const Icons = window.SyriusIcons;
 
+// Copie dans le presse-papiers : l'API moderne, sinon l'ancienne méthode (certaines WebView Android la refusent).
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (_) { /* méthode de secours */ }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.append(ta);
+  ta.select(); ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+  ta.remove();
+  if (!ok) throw new Error("Copie automatique impossible : sélectionne le texte affiché et copie-le.");
+  return true;
+}
+
 // Messages d'état : « ✅ … », « ⚠ … », « 🔒 … » deviennent une icône dessinée + le texte (jamais d'emoji affiché).
 const MARKS = { "✅": ["ok", "ok"], "⚠": ["warn", "alert"], "🔒": ["info", "lock"], "🎙": ["info", "mic"] };
 function setMsg(el, text) {
@@ -293,17 +307,23 @@ $("#dc-space").addEventListener("click", async () => {
 });
 
 $("#dc-key").addEventListener("click", async () => {
+  let key = "";
   try {
-    const { key } = await api("/api/voicebot/key");
-    await navigator.clipboard.writeText(key);
-    setMsg($("#dc-msg"), "✅ Clé du bot copiée : colle-la quand le serveur la demande.");
-  } catch (err) { setMsg($("#dc-msg"), "⚠ " + (err.message || "Copie impossible")); }
+    key = (await api("/api/voicebot/key")).key;
+    const box = $("#dc-key-show");  // toujours affichée : sélectionnable à la main si la copie échoue
+    box.value = key; box.classList.remove("hidden");
+    await copyText(key);
+    setMsg($("#dc-msg"), "✅ Clé du bot copiée (elle est aussi affichée ci-dessus) : colle-la dans Termux.");
+  } catch (err) {
+    setMsg($("#dc-msg"), "⚠ " + (key ? "Copie automatique impossible : appui long sur la clé affichée → Tout sélectionner → Copier."
+      : (err.message || "Clé indisponible")));
+  }
 });
 $("#dc-renew").addEventListener("click", async () => {
   if (!confirm("Créer une nouvelle clé ? L'ancienne ne marchera plus : il faudra la changer sur le serveur.")) return;
   try {
     const { key } = await api("/api/voicebot/key", { method: "POST" });
-    await navigator.clipboard.writeText(key).catch(() => {});
+    await copyText(key).catch(() => {});
     setMsg($("#dc-msg"), "✅ Nouvelle clé copiée.");
   } catch (err) { setMsg($("#dc-msg"), "⚠ " + err.message); }
 });
@@ -341,7 +361,7 @@ function hourText(ts) {
 async function shareText(text, done) {
   try {
     if (navigator.share) await navigator.share({ title: "Syrius", text });
-    else { await navigator.clipboard.writeText(text); $("#family-msg").textContent = done; }
+    else { await copyText(text); $("#family-msg").textContent = done; }
   } catch (_) { /* partage annulé */ }
 }
 
@@ -2094,7 +2114,7 @@ $("#t-add").addEventListener("click", async () => {
 $("#t-copy").addEventListener("click", async () => {
   try {
     const { token } = await api("/api/training/token");
-    await navigator.clipboard.writeText(token);
+    await copyText(token);
     setMsg($("#t-setup-msg"), "✅ Clé copiée. Colle-la dans le secret GitHub SYRIUS_TRAINING_TOKEN.");
   } catch (err) { setMsg($("#t-setup-msg"), "⚠ " + (err.message || "Copie impossible")); }
 });
@@ -2103,7 +2123,7 @@ $("#t-renew").addEventListener("click", async () => {
   if (!confirm("Créer une nouvelle clé ? L'ancienne ne marchera plus : il faudra mettre la nouvelle sur GitHub.")) return;
   try {
     const { token } = await api("/api/training/token", { method: "POST" });
-    await navigator.clipboard.writeText(token).catch(() => {});
+    await copyText(token).catch(() => {});
     setMsg($("#t-setup-msg"), "✅ Nouvelle clé copiée : remplace-la dans le secret GitHub.");
   } catch (err) { setMsg($("#t-setup-msg"), "⚠ " + err.message); }
 });
