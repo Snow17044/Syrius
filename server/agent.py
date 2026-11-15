@@ -136,13 +136,18 @@ def display_messages(stored: list[dict]) -> list[dict]:
 # Les offres gratuites limitent les jetons PAR MINUTE (demande + réponse réservée) : on reste sobre.
 MAX_TOKENS = 3000
 SMALL_TOKENS = 1600
-_THINK_TAGS = re.compile(r"<think>.*?</think>\s*", re.S)
+_THINK_TAGS = re.compile(r"<think>.*?</think>", re.S)
 # Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
 _WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme", re.I)
 _WANTS_MODEL = re.compile(r"\b3 ?d\b|maquette|mod[èe]le 3|en relief|hologramme", re.I)
 _WANTS_IMAGE = re.compile(
     r"\bdessine|\b(?:cr[ée]e|g[ée]n[èe]re|fais|fabrique|imagine|invente|peins)\b[^.?!]{0,30}?"
     r"\b(?:image|dessin|illustration|logo|affiche|fond d'[ée]cran|portrait|tableau|peinture)s?\b", re.I)
+# Demande de programmation : on utilise le cerveau spécialisé code (Mistral Code / Codestral).
+_WANTS_CODE = re.compile(
+    r"\bcode\b|coder|programme|programmation|script|fonction|classe|bug|débogu|d[ée]bug|"
+    r"python|javascript|typescript|\bhtml\b|\bcss\b|\bsql\b|regex|algorithme|refactor|"
+    r"API |application|app \b", re.I)
 
 
 class Agent:
@@ -203,7 +208,10 @@ class Agent:
         user_content.append({"type": "text", "text": (user_text + "\n\n[📷 photo jointe]").strip() if image else user_text})
         history = trim_history(stored) + [{"role": "user", "content": user_content}]
         to_save = [history[-1]]
-        providers = self.llm.ordered(settings.get("brain", ""), photo=bool(image))
+        preferred = settings.get("brain", "")
+        if not preferred and not image and _WANTS_CODE.search(user_text):
+            preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation
+        providers = self.llm.ordered(preferred, photo=bool(image))
         if image:  # seules les IA qui « voient » peuvent répondre
             providers = [p for p in providers if p.vision]
             if not providers:
