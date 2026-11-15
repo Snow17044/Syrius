@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
       - name: Tests du son
         working-directory: discord-bot
-        run: npm ci --ignore-scripts --no-audit --no-fund && npm test && npm audit --omit=dev
+        run: sudo apt-get install -y -qq espeak-ng >/dev/null && npm ci --ignore-scripts --no-audit --no-fund && npm test && npm audit --omit=dev
       - name: Construction du conteneur (comme sur Hugging Face)
         run: docker build -t syrius-discord --build-arg SYRIUS_REF="${GITHUB_REF_NAME}" discord-bot
       - name: Essai de la voix française
