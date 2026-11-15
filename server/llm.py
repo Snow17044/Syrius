@@ -35,6 +35,7 @@ class Provider:
     reasoning: bool = True  # accepte le paramètre reasoning_effort
     vision: bool = False     # sait regarder une photo
     photos_only: bool = False  # cerveau de relais réservé aux photos
+    coding_only: bool = False  # cerveau spécialisé code, utilisé seulement pour programmer
 
     def __post_init__(self):
         p = urlparse(self.base_url)
@@ -88,9 +89,11 @@ class ChatClient:
 
     def ordered(self, preferred: str = "", photo: bool = False) -> list[Provider]:
         pool = [p for p in self.providers if photo or not p.photos_only]
-        if not preferred:
-            return pool
-        return sorted(pool, key=lambda p: p.name != preferred)
+        special = [p for p in pool if p.coding_only]
+        pool = [p for p in pool if not p.coding_only]
+        if preferred and any(p.name == preferred for p in special):
+            return special + pool  # cerveau spécialisé demandé en premier, les autres en secours
+        return pool
 
     async def stream_chat(self, provider: Provider, body: dict) -> AsyncIterator[dict]:
         """Requête /chat/completions en streaming ; renvoie chaque morceau JSON."""
@@ -176,6 +179,9 @@ def providers_from_config(cfg) -> list[Provider]:
     if cfg.mistral_api_key:  # en premier : limites gratuites bien plus larges que Groq
         out.append(Provider("mistral", "Mistral", "https://api.mistral.ai/v1", cfg.mistral_model,
                             cfg.mistral_api_key, reasoning=False, vision="small" in cfg.mistral_model))
+        # Mistral Code (Codestral) : le modèle spécialisé programmation, réservé aux demandes de code.
+        out.append(Provider("codestral", "Mistral · Codestral", "https://api.mistral.ai/v1",
+                            cfg.mistral_code_model, cfg.mistral_api_key, reasoning=False, coding_only=True))
     if cfg.groq_api_key:
         # Plusieurs modèles open source sur Groq : chacun a sa propre limite gratuite.
         # Quand l'un est à court, Syrius passe automatiquement au suivant.
