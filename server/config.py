@@ -103,7 +103,7 @@ class Config:
     imap_host: str = field(default_factory=lambda: _env("SYRIUS_IMAP_HOST"))
     imap_port: int = field(default_factory=lambda: int(_env("SYRIUS_IMAP_PORT", "993")))
     smtp_host: str = field(default_factory=lambda: _env("SYRIUS_SMTP_HOST"))
-    smtp_port: int = field(default_factory=lambda: _env("SYRIUS_SMTP_PORT", "587"))
+    smtp_port: int = field(default_factory=lambda: int(_env("SYRIUS_SMTP_PORT", "587")))
     email_user: str = field(default_factory=lambda: _env("SYRIUS_EMAIL_USER"))
     email_password: str = field(default_factory=lambda: _env("SYRIUS_EMAIL_PASSWORD"))
     # "password" (mot de passe d'application, ex. Gmail) ou "outlook" (OAuth2 Microsoft)
