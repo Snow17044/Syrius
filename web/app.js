@@ -700,6 +700,7 @@ function refreshPacks() {
       prog.querySelector("span").textContent = `${i.progress || 0} %`;
     }
     const noEngine = el.dataset.pack === "sd15" && i.engine === false;
+    if (el.dataset.pack === "syrius") anyBusy = refreshSyriusUpdate(el, i) || anyBusy;
     el.querySelector(".pack-status").textContent = i.error ? "⚠ " + i.error
       : noEngine ? "⚠ Moteur d'images absent de cette version de l'application."
       : i.verifying ? "🔒 Vérification des empreintes des fichiers…"
@@ -708,6 +709,55 @@ function refreshPacks() {
   });
   return anyBusy;
 }
+// Nouvelle version de NOTRE IA (annoncée par ton Syrius après l'entraînement de la nuit) : bouton « Mettre à jour ».
+let modelManifest = null;
+let manifestAt = 0;
+function loadManifest() {
+  if (Date.now() - manifestAt < 10 * 60_000 || !navigator.onLine) return;
+  manifestAt = Date.now();
+  api("/api/model/manifest").then((m) => {
+    modelManifest = m && m.file ? m : null;
+    if ($("#settings").open) refreshPacks();
+  }).catch(() => { /* hors ligne : on réessaiera */ });
+}
+function refreshSyriusUpdate(el, i) {
+  loadManifest();
+  const box = el.querySelector(".syrius-update");
+  const u = i.update || null;
+  const offer = !!(i.installed && modelManifest && modelManifest.file !== i.version);
+  box.classList.toggle("hidden", !(u || offer));
+  if (!u && !offer) return false;
+  const busy = !!(u && (u.downloading || u.verifying || u.switching));
+  el.querySelector(".syrius-up").classList.toggle("hidden", busy);
+  el.querySelector(".syrius-up-cancel").classList.toggle("hidden", !(u && u.downloading));
+  const prog = el.querySelector(".syrius-up-progress");
+  prog.classList.toggle("hidden", !(u && u.downloading));
+  if (u && u.downloading) {
+    prog.querySelector("progress").value = u.progress || 0;
+    prog.querySelector("span").textContent = `${u.progress || 0} %`;
+  }
+  el.querySelector(".syrius-up-status").textContent = !u ? ""
+    : u.error ? "⚠ " + u.error
+    : u.switching ? "Installation de la nouvelle version…"
+    : u.verifying ? "🔒 Vérification de l'empreinte du fichier…"
+    : u.downloading ? "Téléchargement en cours (Syrius reste utilisable)…" : "";
+  return busy;
+}
+document.querySelector('#packs .pack[data-pack="syrius"] .syrius-up').addEventListener("click", () => {
+  if (!modelManifest || typeof window.SyriusAndroid.syriusUpdate !== "function") {
+    alert("Mets à jour l'application Syrius pour profiter des nouvelles versions de notre IA.");
+    return;
+  }
+  if (!confirm("Télécharger la nouvelle version de Syrius (1,6 Go) ? Utilise de préférence le Wi-Fi.")) return;
+  const r = window.SyriusAndroid.syriusUpdate(JSON.stringify(modelManifest));
+  if (r !== "ok") alert(r);
+  setTimeout(refreshLocalBox, 500);
+});
+document.querySelector('#packs .pack[data-pack="syrius"] .syrius-up-cancel').addEventListener("click", () => {
+  window.SyriusAndroid.syriusUpdateCancel();
+  setTimeout(refreshLocalBox, 300);
+});
+
 document.querySelectorAll("#packs .pack").forEach((el) => {
   const id = el.dataset.pack;
   el.querySelector(".pack-dl").addEventListener("click", () => {

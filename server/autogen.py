@@ -81,36 +81,79 @@ def delete(base, index_from_end: int) -> bool:
     return True
 
 
-def check(q: str, a: str) -> bool:
-    """Un exemple n'est gardé que s'il est propre et que ses actions passent les contrôles du serveur."""
-    if not (3 <= len(q) <= 300 and 2 <= len(a) <= 1500):
-        return False
+_NODE_KEYS = {"id", "label", "parent", "note", "kind"}
+_DIAGRAM_KEYS = {"title", "style", "nodes", "links"}
+_MODEL_KEYS = {"title", "search_en", "prompt_en", "template", "description", "facts", "parts"}
+
+
+def _device_keys(name: str) -> set:
+    from .tools.device import DEVICE_TOOLS
+    for t in DEVICE_TOOLS:
+        if t["function"]["name"] == name:
+            return set(t["function"]["parameters"]["properties"])
+    return set()
+
+
+def _clean_args(name: str, args: dict) -> dict:
+    """Retire les champs inventés (fréquents chez les IA) au lieu de jeter tout l'exemple."""
+    if name == "show_diagram":
+        out = {k: v for k, v in args.items() if k in _DIAGRAM_KEYS}
+        if isinstance(out.get("nodes"), list):
+            out["nodes"] = [{k: v for k, v in n.items() if k in _NODE_KEYS} for n in out["nodes"] if isinstance(n, dict)]
+        if out.get("style") not in ("carte", "etapes", "arbre"):
+            out.pop("style", None)
+        return out
+    if name == "show_model":
+        return {k: v for k, v in args.items() if k in _MODEL_KEYS}
+    if name == "remember":
+        return {"fact": args.get("fact")}
+    keys = _device_keys(name)
+    return {k: v for k, v in args.items() if k in keys} if keys else args
+
+
+def review(q: str, a: str) -> tuple[str | None, str]:
+    """Renvoie (réponse nettoyée ou None, raison du refus). Les actions passent les contrôles du serveur."""
+    if not 3 <= len(q) <= 400:
+        return None, "question trop courte ou trop longue"
+    if not 2 <= len(a) <= 2500:
+        return None, "réponse trop courte ou trop longue"
     calls = _CALL.findall(a)
     if a.count("<tool_call>") != len(calls) or len(calls) > 1:
-        return False
-    refusal = any(w in a.lower() for w in ("je ne crée pas", "je ne fais pas", "je préfère ne pas", "interdit"))
+        return None, "action mal écrite"
+    refusal = any(w in a.lower() for w in ("je ne crée pas", "je ne fais pas", "je préfère ne pas", "interdit",
+                                            "je ne peux pas"))
     if safety.blocked(q) and not (refusal and not calls):
-        return False  # demande interdite : seul un refus poli sans action est accepté
+        return None, "demande interdite sans refus"  # seul un refus poli, sans action, est accepté
     if safety.blocked(a) and not refusal:
-        return False
+        return None, "contenu interdit"
     for raw in calls:
         try:
             c = json.loads(raw)
-            name, args = c.get("name"), c.get("arguments")
-            if name not in TOOLS or not isinstance(args, dict):
-                return False
+        except ValueError:
+            return None, "action illisible"
+        name, args = c.get("name"), c.get("arguments")
+        if name not in TOOLS or not isinstance(args, dict):
+            return None, "outil inconnu"
+        args = _clean_args(name, args)
+        try:
             if name == "show_diagram":
                 diagram.validate(args)
             elif name == "show_model":
                 model3d.validate(args)
             elif name == "remember":
                 if not isinstance(args.get("fact"), str) or not args["fact"].strip():
-                    return False
+                    return None, "souvenir vide"
             elif name not in ("phone_reminder", "phone_calendar"):  # dates : vérifiées sur l'appareil
                 build_action(name, args)
-        except (ValueError, TypeError, DeviceInputError, diagram.DiagramError, model3d.ModelError):
-            return False
-    return True
+        except (ValueError, TypeError, DeviceInputError, diagram.DiagramError, model3d.ModelError) as e:
+            return None, f"{name} : {str(e)[:60]}"
+        fixed = "<tool_call>\n" + json.dumps({"name": name, "arguments": args}, ensure_ascii=False) + "\n</tool_call>"
+        a = a.replace(f"<tool_call>{a.split('<tool_call>', 1)[1].split('</tool_call>', 1)[0]}</tool_call>", fixed)
+    return a, ""
+
+
+def check(q: str, a: str) -> bool:
+    return review(q, a)[0] is not None
 
 
 def _prompt(theme: str, tool: str | None, n: int) -> str:
@@ -154,12 +197,14 @@ def _parse(text: str) -> list[dict]:
     return out
 
 
-def generate(providers: list, n: int = 8, seed: int | None = None) -> dict:
-    """Un lot d'exemples sur un thème tiré au sort. Renvoie {theme, kept, rejected, provider}."""
+def generate(providers: list, n: int = 10, seed: int | None = None, theme_index: int | None = None) -> dict:
+    """Un lot d'exemples sur un thème (choisi, ou tiré au sort). Renvoie {theme, kept, rejected, reasons, provider}."""
     rng = random.Random(seed)
-    theme, tool = rng.choice(THEMES)
+    theme, tool = THEMES[theme_index % len(THEMES)] if theme_index is not None else rng.choice(THEMES)
     last = ""
-    for p in [p for p in providers if not getattr(p, "photos_only", False)]:
+    pool = [p for p in providers if not getattr(p, "photos_only", False)]
+    k = rng.randrange(len(pool)) if pool else 0
+    for p in pool[k:] + pool[:k]:
         try:
             items = _parse(_ask(p, _prompt(theme, tool, n)))
         except (urllib.error.URLError, OSError, ValueError) as e:
@@ -168,6 +213,13 @@ def generate(providers: list, n: int = 8, seed: int | None = None) -> dict:
         if not items:
             last = "réponse illisible"
             continue
-        kept = [it for it in items[:n * 2] if check(it["q"], it["a"])]
-        return {"theme": theme, "kept": kept, "rejected": len(items) - len(kept), "provider": p.label}
+        kept, reasons = [], {}
+        for it in items[:n * 2]:
+            fixed, why = review(it["q"], it["a"])
+            if fixed is None:
+                reasons[why] = reasons.get(why, 0) + 1
+            else:
+                kept.append({"q": it["q"], "a": fixed})
+        return {"theme": theme, "kept": kept, "rejected": len(items) - len(kept), "reasons": reasons,
+                "provider": p.label}
     return {"theme": theme, "kept": [], "rejected": 0, "provider": "", "error": last or "aucune IA disponible"}

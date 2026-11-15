@@ -678,8 +678,7 @@ public class MainActivity extends Activity {
                 JSONObject o = new JSONObject();
                 o.put("vision", vision.pack.info());
                 o.put("sd15", imageGen.pack.info().put("engine", ImageGen.nativeAvailable()).put("busy", imageGen.busy()));
-                o.put("syrius", syrius.available() ? syrius.pack.info().put("available", true)
-                        : new JSONObject().put("available", false).put("installed", false));
+                o.put("syrius", syrius.info());
                 return o.toString();
             } catch (Exception e) {
                 return "{}";
@@ -757,6 +756,18 @@ public class MainActivity extends Activity {
                             + JSONObject.quote(text == null ? "" : text) + ", " + done + ", "
                             + (error == null ? "null" : JSONObject.quote(error)) + ")"));
             return "ok";
+        }
+
+        /** « Mettre à jour » notre IA : version annoncée par ton Syrius (contrôlée, empreinte vérifiée). */
+        @JavascriptInterface
+        public String syriusUpdate(String manifest) {
+            if (manifest == null || manifest.length() > 2000 || !trusted()) return "Refusé";
+            return syrius.startUpdate(manifest);
+        }
+
+        @JavascriptInterface
+        public void syriusUpdateCancel() {
+            if (trusted()) syrius.cancelUpdate();
         }
 
         @JavascriptInterface

@@ -20,7 +20,7 @@ import urllib.request
 ISSUER = "https://token.actions.githubusercontent.com"
 JWKS_URL = ISSUER + "/.well-known/jwks"
 AUDIENCE = "syrius"
-WORKFLOWS = ("train-syrius.yml", "selfcode.yml")
+WORKFLOWS = ("train-syrius.yml", "selfcode.yml", "convert-syrius.yml")
 _SHA256_PREFIX = bytes.fromhex("3031300d060960864801650304020105000420")
 _cache: dict = {"keys": {}, "at": 0.0}
 

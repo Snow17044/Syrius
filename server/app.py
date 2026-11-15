@@ -2,8 +2,10 @@
 import asyncio
 import hmac
 import html
+import json
 import logging
 import re
+import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -43,6 +45,16 @@ MAX_MESSAGE_CHARS = 20000
 ANDROID_CERTS: list[str] = [
     "E1:20:AC:BB:05:F8:5B:DD:E9:3B:04:91:09:2A:E2:5C:A5:C2:BA:C1:70:B7:1E:89:1E:22:23:B8:1D:86:BA:9F",  # clé Syrius
 ]
+
+
+MODEL_MANIFEST_KEY = "syrius_model_manifest_v1"
+
+
+class ModelManifestBody(BaseModel):
+    file: str = Field(pattern=r"^syrius-1\.5b-[0-9]{6,15}-dynamic_wi[48]_afp32\.litertlm$", max_length=80)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    size: int = Field(ge=300_000_000, le=2_500_000_000)
+    run_id: str = Field(default="", pattern=r"^[0-9]{0,15}$")
 
 
 class LoginBody(BaseModel):
@@ -578,12 +590,30 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return mine + auto
 
     @app.post("/api/training/worker/generate", dependencies=[Depends(require_trainer)])
-    async def training_worker_generate():
+    async def training_worker_generate(theme: int | None = None):
         """Syrius fabrique lui-même un lot d'exemples (vérifiés) avant l'entraînement de la nuit."""
-        res = await asyncio.to_thread(autogen.generate, agent.llm.ordered())
+        th = theme if theme is not None and 0 <= theme < 1000 else None
+        res = await asyncio.to_thread(autogen.generate, agent.llm.ordered(), 10, None, th)
         added = autogen.add(db.base, res["kept"]) if res["kept"] else 0
         return {"theme": res["theme"], "added": added, "rejected": res["rejected"], "provider": res.get("provider", ""),
-                "error": res.get("error", ""), "total": len(autogen.stored(db.base))}
+                "reasons": res.get("reasons", {}), "error": res.get("error", ""),
+                "total": len(autogen.stored(db.base))}
+
+    # Nouvelle version de NOTRE IA pour les téléphones : annoncée par la conversion automatique (GitHub),
+    # lue par l'application qui propose « Mettre à jour » (le téléphone vérifie l'empreinte du fichier).
+    @app.post("/api/model/manifest", dependencies=[Depends(require_trainer)])
+    async def model_manifest_set(body: ModelManifestBody):
+        m = {**body.model_dump(), "at": int(time.time())}
+        db.base.set_secret(MODEL_MANIFEST_KEY, json.dumps(m))
+        return m
+
+    @app.get("/api/model/manifest", dependencies=[Depends(require_auth)])
+    async def model_manifest_get():
+        try:
+            m = json.loads(db.base.get_secret(MODEL_MANIFEST_KEY) or "{}")
+        except ValueError:
+            m = {}
+        return m if isinstance(m, dict) else {}
 
     # « Améliorer Syrius » : demandes de changement traitées par une IA programmeuse (proposition seulement)
     @app.get("/api/selfcode", dependencies=[Depends(require_auth), Depends(require_owner)])

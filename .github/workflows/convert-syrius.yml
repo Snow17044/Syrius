@@ -1,5 +1,7 @@
 # Transforme le modèle Syrius entraîné en fichier .litertlm (LiteRT-LM, Google) pour les téléphones,
 # puis le publie dans les « Releases » (téléchargé par l'application).
+# Automatique : après chaque entraînement de la nuit réussi, la nouvelle version est convertie, publiée et
+# annoncée à ton Syrius ; l'application propose alors « Mettre à jour » (empreinte vérifiée sur le téléphone).
 name: Convertir l'IA Syrius pour téléphone
 
 on:
@@ -11,6 +13,10 @@ on:
       quant:
         description: "Compression : dynamic_wi8_afp32 (qualité) ou dynamic_wi4_afp32 (plus léger)"
         default: "dynamic_wi8_afp32"
+  workflow_run:
+    workflows: ["Entraîner l'IA Syrius"]
+    types: [completed]
+    branches: [main]
   push:  # essai de la chaîne sur une branche de travail (modèle de départ)
     branches: ["claude/**"]
     paths: [".github/workflows/convert-syrius.yml", "training/convert-requirements.txt"]
@@ -18,15 +24,37 @@ on:
 permissions:
   contents: write
   actions: read
+  id-token: write  # pour annoncer la nouvelle version à ton Syrius (signature GitHub, aucun secret)
 
 jobs:
+  check:  # après un entraînement : y a-t-il vraiment un nouveau modèle ? (pas d'entraînement = rien à faire)
+    runs-on: ubuntu-24.04
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    outputs:
+      go: ${{ steps.c.outputs.go }}
+    steps:
+      - id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "workflow_run" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          n=$(gh api "repos/$GH_REPO/actions/runs/$RUN/artifacts" --jq '[.artifacts[] | select(.name == "syrius-modele" and .expired == false)] | length')
+          echo "Modèles trouvés : $n"
+          echo "go=$([ "$n" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   convert:
+    needs: check
+    if: needs.check.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
       QUANT: ${{ inputs.quant || 'dynamic_wi8_afp32' }}
-      # Sur une branche de travail : essai avec le dernier modèle Syrius entraîné connu.
-      RUN_ID: ${{ inputs.run_id || (github.event_name == 'push' && '43633673424' || '') }}
+      SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' }}
+      # Après l'entraînement de la nuit : ce modèle-là. Sur une branche de travail : le dernier modèle connu.
+      RUN_ID: ${{ inputs.run_id || (github.event_name == 'workflow_run' && format('{0}', github.event.workflow_run.id)) || (github.event_name == 'push' && '43633673424' || '') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,7 +101,7 @@ jobs:
           echo "FILE=out/$name" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.event_name != 'workflow_dispatch'
+        if: env.PUBLISH != 'true'
         with:
           name: syrius-litertlm-essai
           path: out/*.sha256
@@ -87,7 +115,7 @@ jobs:
           PY
 
       - name: Publier
-        if: github.event_name == 'workflow_dispatch'
+        if: env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -95,3 +123,15 @@ jobs:
           gh release view syrius-ia >/dev/null 2>&1 || gh release create syrius-ia --title "IA Syrius (modèles)" \
             --notes "Fichiers de l'IA Syrius pour l'application (LiteRT-LM). Téléchargés automatiquement par l'app."
           gh release upload syrius-ia "$FILE" "$FILE.sha256" --clobber
+          # Ménage : on garde les 3 dernières versions + celle inscrite dans l'application (version de départ).
+          keep=$(grep -oE 'syrius-1\.5b-[0-9]+-[a-z0-9_]+\.litertlm' android/app/src/main/java/fr/syrius/app/SyriusAI.java | head -1)
+          gh release view syrius-ia --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[].name' \
+            | grep -E '\.litertlm$' | tail -n +4 | while read -r a; do
+              if [ "$a" != "$keep" ]; then
+                gh release delete-asset syrius-ia "$a" -y; gh release delete-asset syrius-ia "$a.sha256" -y || true
+              fi
+            done
+
+      - name: Annoncer la nouvelle version aux téléphones
+        if: env.PUBLISH == 'true' && env.RUN_ID != ''
+        run: python3 training/report_model.py "$FILE"

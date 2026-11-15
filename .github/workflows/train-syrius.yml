@@ -47,7 +47,7 @@ jobs:
 
       - name: Syrius crée ses propres exemples
         if: steps.check.outputs.go == 'true'
-        run: python3 training/autogen_run.py 12
+        run: python3 training/autogen_run.py 33
 
       - name: Exemples d'entraînement
         if: steps.check.outputs.go == 'true'

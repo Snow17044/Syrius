@@ -277,8 +277,9 @@
           « Améliorer Syrius ») prouvent leur identité avec la signature officielle de GitHub. Ton Syrius vérifie
           qu'elles viennent bien de ton dépôt, sur la branche principale. Elles ne peuvent que suivre l'entraînement,
           lire tes phrases d'entraînement et tes demandes de changement, jamais tes discussions.</p>
-        <p class="small"><strong>Pour « Améliorer Syrius »</strong> : secret GitHub <code>OPENROUTER_API_KEY</code>, et
-          « Allow GitHub Actions to create and approve pull requests » coché (Settings → Actions → General).</p>
+        <p class="small"><strong>Pour « Améliorer Syrius »</strong> : secret GitHub <code>OPENROUTER_API_KEY</code>
+          (et, en option, <code>MISTRAL_API_KEY</code> : Devstral, l'IA de Mistral spécialisée dans le code, devient
+          alors la programmeuse principale), et « Allow GitHub Actions to create and approve pull requests » coché (Settings → Actions → General).</p>
         <p id="t-setup-msg" class="small"></p>
         <button type="button" id="t-copy" class="hidden"></button><button type="button" id="t-renew" class="hidden"></button>
       </details>
@@ -365,6 +366,14 @@
               <button type="button" class="ghost pack-del hidden"></button></div>
             <div class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
             <p class="small pack-status"></p>
+            <div class="syrius-update hidden">
+              <p class="small"><b>🆕 Nouvelle version de Syrius disponible</b> : elle a appris de nouvelles choses cette
+                nuit. L'ancienne reste utilisable pendant le téléchargement (1,6 Go, de préférence en Wi-Fi).</p>
+              <div class="local-actions"><button type="button" class="syrius-up" data-icon="download"><span>Mettre à jour</span></button>
+                <button type="button" class="ghost syrius-up-cancel hidden" data-icon="close"><span>Annuler</span></button></div>
+              <div class="local-progress syrius-up-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+              <p class="small syrius-up-status"></p>
+            </div>
           </div>
           <div class="pack" data-pack="vision">
             <h5 data-icon="eye"><span>Vision hors ligne</span><span class="muted small">820 Mo</span></h5>
