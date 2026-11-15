@@ -223,4 +223,11 @@ if (process.env.PORT) {
 }
 
 process.on("unhandledRejection", (e) => console.error("Erreur :", e && e.message));
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN).catch((err) => {
+  if (/invalid token|TokenInvalid/i.test(String(err && (err.code || err.message)))) {
+    console.error("Discord refuse le jeton (ancien jeton ou mal copié). Tape  syrius-discord-cles  et colle le NOUVEAU jeton.");
+    process.exit(2);  // 2 = clés à corriger : pas de redémarrage en boucle
+  }
+  console.error("Connexion à Discord impossible :", err && err.message);
+  process.exit(1);
+});
