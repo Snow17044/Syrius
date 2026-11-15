@@ -426,6 +426,13 @@
           <button type="button" id="dc-renew" class="ghost subtle" data-icon="refresh"><span>Nouvelle clé</span></button>
         </div>
         <p id="dc-msg" class="small"></p>
+        <h5 data-icon="sparkle"><span>Lancer le bot automatiquement (gratuit)</span></h5>
+        <p class="muted small">Colle le jeton de ton bot Discord : Syrius crée tout seul un Space gratuit sur ton compte
+          Hugging Face et y lance le bot. Le jeton est transmis directement à Hugging Face (rangé en secret), il
+          n'est pas gardé par Syrius.</p>
+        <label>Jeton du bot Discord<input id="dc-token" type="password" autocomplete="off" maxlength="120" placeholder="Colle le jeton ici"></label>
+        <button type="button" id="dc-space" class="primary wide" data-icon="send"><span>Créer et lancer le bot</span></button>
+        <p id="dc-space-msg" class="small"></p>
       </div>
 
       <div id="diag-box" class="hidden">

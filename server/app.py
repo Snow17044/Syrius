@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, autogen, diagnostic, family, github_oidc, safety, selfcode, training, voicebot
+from . import auth, autogen, diagnostic, family, github_oidc, hfspace, safety, selfcode, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -104,6 +104,10 @@ class LessonBody(BaseModel):
 
 class CoderModelBody(BaseModel):
     model: str = Field(default="", max_length=100)
+
+
+class SpaceBody(BaseModel):
+    discord_token: str = Field(min_length=50, max_length=120)
 
 
 class DiscordIdsBody(BaseModel):
@@ -776,6 +780,23 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         try:
             return {"discord_ids": voicebot.set_ids(db.base, body.ids)}
         except voicebot.VoiceBotError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.post("/api/voicebot/space", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def voicebot_space(body: SpaceBody, request: Request):
+        """Crée et lance le bot sur un Space Hugging Face gratuit (le jeton Discord n'est pas gardé ici)."""
+        base_url = f"https://{request.url.netloc}"  # derrière Vercel, toujours en HTTPS
+        try:
+            return await asyncio.to_thread(hfspace.setup, cfg.hf_token, body.discord_token.strip(),
+                                           voicebot.key(db.base), base_url, cfg.github_repo)
+        except hfspace.SpaceError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.get("/api/voicebot/space", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def voicebot_space_status():
+        try:
+            return await asyncio.to_thread(hfspace.status, cfg.hf_token)
+        except hfspace.SpaceError as e:
             raise HTTPException(400, str(e)) from None
 
     def require_bot(request: Request) -> None:

@@ -28,7 +28,7 @@ function watchMsg(el) {
 }
 document.addEventListener("DOMContentLoaded", () => {
   ["#local-status", "#wake-status", "#wake-learn-msg", "#briefing-msg", "#google-msg", "#outlook-msg",
-    "#settings-msg", "#pw-msg", "#family-msg", "#del-msg", "#dc-msg"].forEach((q) => watchMsg($(q)));
+    "#settings-msg", "#pw-msg", "#family-msg", "#del-msg", "#dc-msg", "#dc-space-msg"].forEach((q) => watchMsg($(q)));
   document.querySelectorAll(".pack-status").forEach(watchMsg);
 });
 
@@ -159,6 +159,7 @@ async function renderFamily(account) {
   $("#diag-box").classList.toggle("hidden", !owner);
   $("#discord-box").classList.toggle("hidden", !owner);
   if (owner) api("/api/voicebot").then((v) => { $("#dc-id").value = (v.discord_ids || [])[0] || ""; }).catch(() => {});
+  if (owner) refreshSpace();
   const guest = !!(account && account.guest);
   $("#del-title").textContent = owner ? "Effacer mes discussions et ma mémoire" : "Supprimer mon compte";
   $("#del-text").textContent = owner
@@ -261,6 +262,36 @@ $("#dc-save").addEventListener("click", async () => {
     setMsg($("#dc-msg"), "✅ Enregistré : Syrius n'écoutera que ce compte Discord.");
   } catch (err) { setMsg($("#dc-msg"), "⚠ " + err.message); }
 });
+const SPACE_STAGES = { BUILDING: "en construction (5 à 10 min)…", RUNNING: "en marche", RUNNING_BUILDING: "mise à jour…",
+  APP_STARTING: "démarrage…", RUNTIME_ERROR: "erreur au démarrage", BUILD_ERROR: "erreur de construction",
+  SLEEPING: "endormi (ouvre sa page pour le réveiller)", PAUSED: "en pause", STOPPED: "arrêté" };
+let spaceTimer = null;
+async function refreshSpace() {
+  try {
+    const s = await api("/api/voicebot/space");
+    if (!s.exists) { $("#dc-space-msg").textContent = ""; return; }
+    const st = SPACE_STAGES[s.stage] || s.stage || "?";
+    setMsg($("#dc-space-msg"), (s.stage === "RUNNING" ? "✅ " : /ERROR/.test(s.stage || "") ? "⚠ " : "") +
+      `Bot Discord : ${st}. Page : ${s.url}`);
+    clearTimeout(spaceTimer);
+    if (["BUILDING", "APP_STARTING", "RUNNING_BUILDING"].includes(s.stage) && $("#settings").open) spaceTimer = setTimeout(refreshSpace, 15000);
+  } catch (_) { /* ignore */ }
+}
+$("#dc-space").addEventListener("click", async () => {
+  const token = $("#dc-token").value.trim();
+  if (token.length < 50) { setMsg($("#dc-space-msg"), "⚠ Colle d'abord le jeton du bot Discord (portail développeur → Bot → Reset Token)."); return; }
+  const btn = $("#dc-space");
+  btn.disabled = true;
+  setMsg($("#dc-space-msg"), "Création du Space sur Hugging Face…");
+  try {
+    const r = await api("/api/voicebot/space", { method: "POST", body: JSON.stringify({ discord_token: token }) });
+    $("#dc-token").value = "";
+    setMsg($("#dc-space-msg"), `✅ Space créé : ${r.url} — construction en cours (5 à 10 min).`);
+    setTimeout(refreshSpace, 15000);
+  } catch (err) { setMsg($("#dc-space-msg"), "⚠ " + err.message); }
+  finally { btn.disabled = false; }
+});
+
 $("#dc-key").addEventListener("click", async () => {
   try {
     const { key } = await api("/api/voicebot/key");
