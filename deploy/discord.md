@@ -28,7 +28,23 @@ Il te faut un petit serveur toujours allumé, gratuit chez Google Cloud. Compte 
 2. Colle-le dans Syrius, puis touche **Enregistrer**.
 3. Touche **Copier la clé du bot**. Tu en auras besoin à l'étape 4.
 
-## 3. Option sans carte bancaire : Hugging Face (5 min)
+## 3. Sur ton téléphone, avec Termux (gratuit, sans serveur, 5 min)
+
+1. Installe **F-Droid** (<https://f-droid.org>), puis **Termux** depuis F-Droid. Ne prends pas la version du Play
+   Store, qui n'est plus à jour.
+2. Ouvre Termux, colle cette ligne, puis appuie sur Entrée :
+
+   ```
+   curl -fsSL https://raw.githubusercontent.com/Snow17044/Syrius/main/discord-bot/install-termux.sh | bash
+   ```
+
+3. Quand le script le demande, colle ton jeton Discord, puis la clé du bot.
+4. Pendant que tu joues, laisse le téléphone **branché**, avec Termux ouvert en arrière-plan.
+5. Pour éviter que le téléphone coupe Termux : Paramètres → Batterie → Termux → **Aucune restriction**.
+
+Plus tard, pour relancer le bot, ouvre Termux et tape `syrius-discord`.
+
+## 3 ter. Option Hugging Face (désormais payante pour les comptes gratuits)
 
 Avec ton compte Hugging Face habituel, c'est gratuit et sans carte.
 

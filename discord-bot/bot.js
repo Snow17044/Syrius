@@ -56,7 +56,30 @@ async function refreshAllowed() {
 }
 
 /** Texte → voix (Piper, sur ce serveur) → son au format Discord. */
+/** Voix eSpeak (téléphone / Termux) : programme local, texte passé en argument (jamais à un shell). */
+function espeak(text) {
+  const { spawn } = require("node:child_process");
+  const bin = process.env.ESPEAK_BIN || "espeak";
+  return new Promise((resolve, reject) => {
+    const p = spawn(bin, ["-v", "fr", "-s", "165", "-p", "45", "--stdout", "--", text.slice(0, 1200)],
+      { stdio: ["ignore", "pipe", "ignore"] });
+    const chunks = [];
+    const timer = setTimeout(() => p.kill("SIGKILL"), 60_000);
+    p.stdout.on("data", (c) => chunks.push(c));
+    p.on("error", (e) => { clearTimeout(timer); reject(e); });
+    p.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`eSpeak a échoué (${code})`));
+      try {
+        const { rate, channels, pcm } = audio.readWav(Buffer.concat(chunks));
+        resolve(audio.toDiscord(pcm, rate, channels));
+      } catch (e) { reject(e); }
+    });
+  });
+}
+
 async function synthesize(text) {
+  if (process.env.TTS === "espeak") return espeak(text);
   const res = await fetch(PIPER_URL + "/synthesize", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: text.slice(0, 1200) }), signal: AbortSignal.timeout(60_000),
