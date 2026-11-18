@@ -86,7 +86,29 @@ def run_tests() -> tuple[bool, str]:
     return p.returncode == 0, tail
 
 
+def mistral_model() -> str:
+    """Mistral (Devstral, puis Codestral) : IA spécialisées dans le code, offre gratuite « Experiment »."""
+    key = os.environ.get("MISTRAL_API_KEY", "")
+    if not key:
+        return ""
+    req = urllib.request.Request("https://api.mistral.ai/v1/models", headers={"Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:  # nosec B310 (adresse fixe de Mistral)
+            ids = [m["id"] for m in json.loads(r.read())["data"]]
+    except Exception:  # noqa: BLE001 — Mistral injoignable ou clé refusée : on passe à OpenRouter
+        return ""
+    for want in ("devstral-medium-latest", "devstral-latest", "devstral-small-latest", "codestral-latest"):
+        if want in ids:
+            return want
+    return next((i for i in ids if "devstral" in i or "codestral" in i), "")
+
+
 def pick_model(preferred: str = "") -> str:
+    """Modèle pour aider, avec son fournisseur : « mistral/… » si la clé Mistral existe, sinon « openrouter/… »."""
+    if not (preferred and not preferred.startswith("mistral")):
+        m = mistral_model()
+        if m:
+            return f"mistral/{m}"
     try:
         with urllib.request.urlopen("https://openrouter.ai/api/v1/models", timeout=30) as r:  # nosec B310
             ids = {m["id"] for m in json.loads(r.read())["data"]}
@@ -94,14 +116,14 @@ def pick_model(preferred: str = "") -> str:
         ids = set()
     for m in ([preferred] if preferred else []) + MODELS:
         if not ids or m in ids:
-            return m
-    return MODELS[0]
+            return f"openrouter/{m}"
+    return f"openrouter/{MODELS[0]}"
 
 
 def aider(model: str, message: str) -> None:
     msg = WORK / "message.txt"
     msg.write_text(message, encoding="utf-8")
-    subprocess.run([str(WORK / "avenv" / "bin" / "aider"), "--model", f"openrouter/{model}", "--message-file", str(msg),
+    subprocess.run([str(WORK / "avenv" / "bin" / "aider"), "--model", model, "--message-file", str(msg),
                     "--yes-always", "--no-auto-commits", "--no-dirty-commits", "--no-suggest-shell-commands",
                     "--no-check-update", "--analytics-disable", "--no-show-model-warnings", "--no-gitignore",
                     "--map-tokens", "2048", "--no-stream"], cwd=ROOT, timeout=1200, check=False)

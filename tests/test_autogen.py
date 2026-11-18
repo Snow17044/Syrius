@@ -45,3 +45,37 @@ def test_lot_cree_et_stocke(make_client, monkeypatch):
     assert st["auto"]["total"] == 2
     assert owner.delete("/api/training/auto/0", headers=H).status_code == 200
     assert owner.get("/api/training").json()["auto"]["total"] == 1
+
+
+def _call(name, args):
+    return "Voilà.\n<tool_call>\n" + json.dumps({"name": name, "arguments": args}, ensure_ascii=False) + "\n</tool_call>"
+
+
+def test_champs_inventes_retires_au_lieu_de_tout_jeter():
+    a = _call("show_diagram", {"title": "Guitare", "style": "flowchart", "couleur": "bleu", "nodes": [
+        {"id": "o", "label": "Jouer", "children": ["p1"]},
+        {"id": "p1", "label": "Accords", "parent": "o", "description": "x"}]})
+    fixed, why = autogen.review("Fais un schéma pour apprendre la guitare", a)
+    assert why == "" and fixed
+    args = json.loads(fixed.split("<tool_call>")[1].split("</tool_call>")[0])["arguments"]
+    assert set(args) == {"title", "nodes"} and all(set(n) <= {"id", "label", "parent"} for n in args["nodes"])
+    assert fixed.startswith("Voilà.")
+    assert autogen.check("Minuteur de 5 minutes", _call("phone_timer", {"seconds": 300, "unit": "s"}))
+
+
+def test_raison_du_refus_donnee():
+    assert autogen.review("Salut", "<tool_call>{pas du json}</tool_call>") == (None, "action illisible")
+    assert autogen.review("Salut", _call("pirater", {}))[1] == "outil inconnu"
+    assert autogen.review("x", "ok")[1].startswith("question")
+
+
+def test_theme_choisi_et_raisons_comptees(monkeypatch):
+    items = [{"q": "Un poème sur la mer", "a": "La mer chante, la mer danse."},
+             {"q": "Mauvais", "a": "<tool_call>{oops}</tool_call>"}]
+    monkeypatch.setattr(autogen, "_ask", lambda p, prompt: json.dumps(items))
+
+    class P:
+        label, model, base_url, api_key = "Test", "m", "http://x", ""
+    res = autogen.generate([P()], theme_index=3)
+    assert res["theme"] == autogen.THEMES[3][0]
+    assert len(res["kept"]) == 1 and res["reasons"] == {"action illisible": 1}

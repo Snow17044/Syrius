@@ -56,10 +56,10 @@ class Reporter:
         if not self.ok:
             return
         body = json.dumps({"run": self.run, "type": kind, **data}, ensure_ascii=False).encode()
-        req = urllib.request.Request(self.url + "/api/training/worker/report", data=body, method="POST", headers={
-            "Authorization": f"Bearer {self.auth.token()}", "Content-Type": "application/json", "X-Syrius": "1",
-            "User-Agent": "SyriusTraining/1.0"})
-        try:
+        try:  # jeton compris : un incident réseau passager (504…) ne doit jamais arrêter l'entraînement
+            req = urllib.request.Request(self.url + "/api/training/worker/report", data=body, method="POST", headers={
+                "Authorization": f"Bearer {self.auth.token()}", "Content-Type": "application/json", "X-Syrius": "1",
+                "User-Agent": "SyriusTraining/1.0"})
             urllib.request.urlopen(req, timeout=20).read(1000)  # nosec B310
         except Exception as e:  # noqa: BLE001 — le suivi ne doit jamais arrêter l'entraînement
             print(f"(suivi en direct indisponible : {e})")

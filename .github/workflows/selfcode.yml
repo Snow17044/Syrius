@@ -53,6 +53,7 @@ jobs:
         if: steps.next.outputs.go == 'true'
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}  # facultatif : Devstral/Codestral en priorité
           AIDER_ANALYTICS: "false"
         run: |
           git config user.name "Syrius (IA programmeuse)"

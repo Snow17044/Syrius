@@ -152,6 +152,11 @@ class ModelPack {
         prefs.edit().remove("downloads").apply();
     }
 
+    /** Fichiers déjà vérifiés ailleurs (mise à jour de Syrius) : le paquet est prêt. */
+    void markInstalled() {
+        prefs.edit().putBoolean("installed", true).apply();
+    }
+
     synchronized void delete() {
         cancel();
         for (Part p : parts) //noinspection ResultOfMethodCallIgnored
