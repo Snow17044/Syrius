@@ -198,6 +198,18 @@
   </nav>
 
   <div class="toast" id="toast" role="status" hidden></div>
+  <!-- Fenêtre de confirmation de l'appli (les fenêtres du téléphone sont bloquées dans WhatsApp, Instagram…) -->
+  <div class="modale-fond" id="modale" hidden>
+    <div class="modale" role="dialog" aria-modal="true" aria-labelledby="modale-titre">
+      <h3 id="modale-titre"></h3>
+      <p id="modale-texte"></p>
+      <input id="modale-saisie" autocomplete="off" hidden>
+      <div class="modale-boutons">
+        <button type="button" class="btn-secondaire" id="modale-non">Annuler</button>
+        <button type="button" class="btn-principal" id="modale-oui">OK</button>
+      </div>
+    </div>
+  </div>
   <div class="annulation" id="annulation" role="status" hidden>
     <span id="annulation-texte"></span>
     <button type="button" id="annulation-btn">↩️ Annuler</button>

@@ -19,6 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
+const VERSION = "7 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -75,6 +76,40 @@ function toast(texte) {
   clearTimeout(toast.minuteur);
   toast.minuteur = setTimeout(() => (t.hidden = true), 2600);
 }
+
+// ── Fenêtre de confirmation de l'appli ──────────────────────
+// Remplace confirm()/prompt() du téléphone, que bloquent les navigateurs intégrés
+// (WhatsApp, Instagram, Messenger…) : le bouton « Supprimer » n'y faisait alors rien.
+// Renvoie true/false, ou le texte saisi (null si annulé).
+function demander({ titre, texte = "", oui = "OK", non = "Annuler", danger = false, saisie = null, type = "text", valeur = "" }) {
+  return new Promise((resolve) => {
+    const fond = $("#modale"), champ = $("#modale-saisie"), bOui = $("#modale-oui"), bNon = $("#modale-non");
+    $("#modale-titre").textContent = titre;
+    $("#modale-texte").textContent = texte;
+    $("#modale-texte").hidden = !texte;
+    champ.hidden = saisie == null;
+    champ.type = type;
+    champ.placeholder = saisie || "";
+    champ.value = valeur;
+    bOui.textContent = oui;
+    bOui.classList.toggle("danger-plein", danger);
+    bNon.textContent = non || "";
+    bNon.hidden = !non;
+    fond.hidden = false;
+    setTimeout(() => (saisie != null ? champ : bOui).focus(), 30);
+    const fin = (r) => {
+      fond.hidden = true;
+      bOui.onclick = bNon.onclick = champ.onkeydown = fond.onclick = document.onkeydown = null;
+      resolve(r);
+    };
+    bOui.onclick = () => fin(saisie != null ? champ.value : true);
+    bNon.onclick = () => fin(saisie != null ? null : false);
+    champ.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); bOui.click(); } };
+    fond.onclick = (e) => { if (e.target === fond) bNon.click(); };
+    document.onkeydown = (e) => { if (e.key === "Escape") bNon.click(); };
+  });
+}
+const confirmerSuppression = (titre, texte = "") => demander({ titre, texte, oui: "🗑 Supprimer", danger: true });
 
 // ── Annuler une suppression (8 secondes) ─────────────────────
 const DUREE_ANNULATION = 8000;
@@ -137,7 +172,7 @@ async function api(chemin, options = {}) {
 
 async function partager(titre, url) {
   if (navigator.share) { try { await navigator.share({ title: titre, url }); } catch {} return; }
-  try { await navigator.clipboard.writeText(url); toast("Lien copié !"); } catch { prompt("Copie ce lien :", url); }
+  try { await navigator.clipboard.writeText(url); toast("Lien copié !"); } catch { demander({ titre: "Copie ce lien", saisie: "", valeur: url, oui: "Fermer", non: null }); }
 }
 
 // ── Navigation : barre du bas + rubriques du haut + menu ─────
@@ -237,11 +272,11 @@ async function reduirePhoto(fichier) {
   return toile.toDataURL("image/jpeg", 0.85);
 }
 
-function demanderCode() {
+async function demanderCode() {
   const saisi = $("#champ-code").value.trim();
   if (saisi) stocker(CLE_CODE, saisi);
   if (!codeEditeur()) {
-    const code = prompt("Code éditeur :");
+    const code = await demander({ titre: "Code éditeur", saisie: "Code", type: "password", oui: "Valider" });
     if (code) stocker(CLE_CODE, code.trim());
   }
   if (codeEditeur() && !qui().nom) connecter(codeEditeur()).then(majModeEditeur).catch(() => {});
@@ -262,7 +297,7 @@ function choixPhoto(conteneur, valeurInitiale = "") {
     const f = entree.files[0];
     entree.value = "";
     if (!f) return;
-    if (!demanderCode()) return toast("Entre d'abord le code éditeur.");
+    if (!(await demanderCode())) return toast("Entre d'abord le code éditeur.");
     rendre(true);
     try {
       const data = await reduirePhoto(f);
@@ -410,8 +445,8 @@ async function epingler(a) {
 // qu'après le délai d'annulation.
 const suppressionsEnAttente = new Set();
 
-function supprimer(a) {
-  if (!confirm(`Supprimer « ${a.titre} » ?`)) return;
+async function supprimer(a) {
+  if (!(await confirmerSuppression("Supprimer cette publication ?", `« ${a.titre} »`))) return;
   suppressionsEnAttente.add(a.id);
   afficherArticles();
   proposerAnnulation("Publication supprimée", {
@@ -488,7 +523,7 @@ $("#form-ajout").addEventListener("submit", async (e) => {
   const texte = $("#champ-texte").value.trim();
   if (!apercuActuel && !texte && !photoPublication.valeur) return erreur("Ajoute un lien, une photo ou un texte.");
   if (!$("#champ-titre").value.trim()) { $("#champ-titre").focus(); return erreur("Donne un titre à la publication."); }
-  if (!demanderCode()) { $("#champ-code").focus(); return erreur("Entre le code éditeur."); }
+  if (!(await demanderCode())) { $("#champ-code").focus(); return erreur("Entre le code éditeur."); }
 
   const btn = $("#btn-publier");
   btn.disabled = true;
@@ -644,9 +679,9 @@ function afficherOrganiser() {
           el("div", { class: "orga-boutons" },
             boutonOrga("↑", "Monter l'axe", i > 0 ? () => { const x = copieAxes(); deplacer(x, i, -1); changerAxes(x, "Ordre enregistré ✅"); } : null),
             boutonOrga("↓", "Descendre l'axe", i < n - 1 ? () => { const x = copieAxes(); deplacer(x, i, 1); changerAxes(x, "Ordre enregistré ✅"); } : null),
-            boutonOrga("🗑", "Supprimer l'axe", () => {
+            boutonOrga("🗑", "Supprimer l'axe", async () => {
               const nb = a.propositions.length;
-              if (!confirm(`Supprimer l'axe « ${a.titre} »${nb ? ` et ses ${nb} proposition${nb > 1 ? "s" : ""}` : ""} ?`)) return;
+              if (!(await confirmerSuppression(`Supprimer l'axe « ${a.titre} » ?`, nb ? `Ses ${nb} proposition${nb > 1 ? "s" : ""} seront supprimées aussi.` : ""))) return;
               changerAxes(copieAxes().filter((_, k) => k !== i), "Axe supprimé", true);
             }, "danger"))),
         a.propositions.length
@@ -659,15 +694,16 @@ function afficherOrganiser() {
           el("div", { class: "orga-boutons" },
             boutonOrga("↑", "Monter la proposition", k > 0 ? () => { const x = copieAxes(); deplacer(x[i].propositions, k, -1); changerAxes(x, "Ordre enregistré ✅"); } : null),
             boutonOrga("↓", "Descendre la proposition", k < a.propositions.length - 1 ? () => { const x = copieAxes(); deplacer(x[i].propositions, k, 1); changerAxes(x, "Ordre enregistré ✅"); } : null),
-            boutonOrga("🗑", "Supprimer la proposition", () => {
-              if (!confirm(`Supprimer cette proposition ?\n\n« ${prop.length > 140 ? prop.slice(0, 140) + "…" : prop} »`)) return;
+            boutonOrga("🗑", "Supprimer la proposition", async () => {
+              if (!(await confirmerSuppression("Supprimer cette proposition ?", `« ${prop.length > 140 ? prop.slice(0, 140) + "…" : prop} »`))) return;
               const x = copieAxes(); x[i].propositions.splice(k, 1); changerAxes(x, "Proposition supprimée", true);
             }, "danger"))))) : null);
     }),
     el("button", { type: "button", class: "btn-principal", onclick: () => { etat.organiser = false; afficherProgramme(); window.scrollTo(0, 0); } }, "✓ Terminer"),
-    n || programme.intro || programme.slogan ? el("button", { type: "button", class: "btn-secondaire large danger", onclick: () => {
-      if (!confirm("Vider TOUT le programme (slogan, introduction, photo et tous les axes) ?")) return;
-      if (prompt("Pour confirmer, écris : SUPPRIMER") !== "SUPPRIMER") return toast("Rien n'a été supprimé.");
+    n || programme.intro || programme.slogan ? el("button", { type: "button", class: "btn-secondaire large danger", onclick: async () => {
+      if (!(await confirmerSuppression("Vider TOUT le programme ?", "Le slogan, l'introduction, la photo et tous les axes seront supprimés."))) return;
+      const mot = await demander({ titre: "Dernière vérification", texte: "Pour confirmer, écris SUPPRIMER en majuscules.", saisie: "SUPPRIMER", oui: "Vider le programme", danger: true });
+      if ((mot || "").trim() !== "SUPPRIMER") return toast("Rien n'a été supprimé.");
       sauverProgramme({ ...programme, slogan: "", intro: "", photo: "", axes: [] }, "Programme vidé", { annulable: true });
     } }, "🗑 Vider tout le programme") : null);
 }
@@ -694,7 +730,7 @@ function blocAxe(a = { icone: "", titre: "", photo: "", resume: "", propositions
     el("div", { class: "ed-boutons" },
       el("button", { type: "button", onclick: () => { bloc.previousElementSibling?.before(bloc); numeroter(); } }, "↑ Monter"),
       el("button", { type: "button", onclick: () => { bloc.nextElementSibling?.after(bloc); numeroter(); } }, "↓ Descendre"),
-      el("button", { type: "button", class: "danger", onclick: () => { if (confirm("Supprimer cet axe ?")) { bloc.remove(); numeroter(); } } }, "Supprimer")));
+      el("button", { type: "button", class: "danger", onclick: async () => { if (await confirmerSuppression("Retirer cet axe du formulaire ?", "Il sera supprimé quand tu enregistreras.")) { bloc.remove(); numeroter(); } } }, "Supprimer")));
   bloc.querySelector(".ed-resume").value = a.resume || "";
   bloc.querySelector(".ed-props").value = (a.propositions || []).join("\n");
   bloc.dataset.id = a.id || "";
@@ -796,13 +832,14 @@ function construireMenu() {
     ]],
   ];
   $("#menu-contenu").replaceChildren(...sections.map(([titre, lignes]) =>
-    el("div", { class: "menu-section" }, el("h3", { class: "section-titre" }, titre), el("div", { class: "menu-groupe" }, lignes))));
+    el("div", { class: "menu-section" }, el("h3", { class: "section-titre" }, titre), el("div", { class: "menu-groupe" }, lignes))),
+    el("p", { class: "aide petite version" }, `Version ${VERSION}`));
 }
 
 async function basculerEditeur() {
   if (codeEditeur()) { deconnecter(); toast("Mode éditeur désactivé"); }
   else {
-    const code = prompt("Code éditeur :");
+    const code = await demander({ titre: "Mode éditeur", texte: "Entre le code de l'équipe.", saisie: "Code", type: "password", oui: "Valider" });
     if (!code) return;
     try {
       const d = await connecter(code.trim());

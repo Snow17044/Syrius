@@ -310,3 +310,18 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .annulation-temps { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--rouge); transform-origin: left; }
 .annulation-temps.defile { animation: compte-a-rebours 8s linear forwards; }
 @keyframes compte-a-rebours { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ── Fenêtre de confirmation de l'appli ───────────────────── */
+.modale-fond {
+  position: fixed; inset: 0; z-index: 50; background: rgba(10, 18, 40, .55);
+  display: flex; align-items: flex-end; justify-content: center; padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+.modale { width: 100%; max-width: 460px; background: #fff; border-radius: 20px; padding: 20px; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+.modale h3 { margin: 0 0 6px; font-size: 19px; color: var(--texte); line-height: 1.3; overflow-wrap: anywhere; }
+.modale p { margin: 0 0 4px; color: var(--doux); overflow-wrap: anywhere; }
+#modale-saisie { width: 100%; margin-top: 10px; border: 1.5px solid var(--bord); border-radius: 12px; padding: 12px; font-size: 16px; }
+.modale-boutons { display: flex; gap: 10px; margin-top: 18px; }
+.modale-boutons button { flex: 1; margin: 0; padding: 14px; font-size: 16px; }
+.modale-boutons .btn-principal { background: var(--bleu); }
+.modale-boutons .btn-principal.danger-plein { background: var(--rouge); }
+.version { text-align: center; margin: 22px 0 4px; }
