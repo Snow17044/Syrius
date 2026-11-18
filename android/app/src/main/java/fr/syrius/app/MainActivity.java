@@ -202,6 +202,8 @@ public class MainActivity extends Activity {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 tts.setLanguage(Locale.FRANCE);
+                chooseFrenchVoice();
+                tts.setSpeechRate(1.05f);  // un peu plus vif, plus naturel que le rythme par défaut
                 // Prévient la page quand Syrius a fini de parler (mode conversation : il réécoute ensuite).
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) { }
@@ -410,6 +412,26 @@ public class MainActivity extends Activity {
         String text = (list == null || list.isEmpty()) ? "" : list.get(0);
         // JSONObject.quote échappe le texte : il ne peut pas être interprété comme du code.
         sendJs("window.syriusOnSpeech && window.syriusOnSpeech(" + JSONObject.quote(text) + ", " + isFinal + ")");
+    }
+
+    /** Prend la plus belle voix française installée (qualité la plus haute, France d'abord). */
+    private void chooseFrenchVoice() {
+        try {
+            android.speech.tts.Voice best = null;
+            int bestScore = Integer.MIN_VALUE;
+            java.util.Set<android.speech.tts.Voice> voices = tts.getVoices();
+            if (voices == null) return;
+            for (android.speech.tts.Voice v : voices) {
+                if (v.getLocale() == null || !"fr".equals(v.getLocale().getLanguage())) continue;
+                if (v.getFeatures() != null && v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) continue;
+                int score = v.getQuality() * 10 + ("FR".equals(v.getLocale().getCountry()) ? 5 : 0)
+                        - (v.isNetworkConnectionRequired() ? 3 : 0);  // la voix locale marche aussi sans Internet
+                if (score > bestScore) { bestScore = score; best = v; }
+            }
+            if (best != null) tts.setVoice(best);
+        } catch (Exception ignored) {
+            // on garde la voix par défaut du téléphone
+        }
     }
 
     private void sendJs(String js) {

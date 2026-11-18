@@ -14,7 +14,8 @@ def test_mistral_en_premier_groq_en_secours(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "cle-groq")
     names = [(p.name, p.base_url, p.model, p.reasoning) for p in providers_from_config(Config())]
     assert names[0] == ("mistral", "https://api.mistral.ai/v1", "mistral-small-latest", False)
-    assert names[1][0] == "groq"
+    assert names[1][0] == "codestral"  # IA spécialisée dans le code, juste derrière Mistral
+    assert names[2][0] == "groq"
     assert providers_from_config(Config())[0].api_key == "cle-mistral"
 
 

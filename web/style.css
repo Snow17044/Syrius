@@ -550,6 +550,9 @@ body.voice-split #voice .voice-hint { display: none; }
   background: transparent; border: 0; color: var(--muted); opacity: .55; display: inline-flex; align-items: center; }
 .msg-report:hover, .msg-report:focus-visible { opacity: 1; }
 .msg-report svg { width: 13px; height: 13px; }
+.msg-feedback { display: flex; align-self: flex-start; }
+.msg-feedback .msg-report { margin: 2px 0 0 2px; }
+.msg-feedback .msg-report:disabled { opacity: .9; }
 #del-box input { margin: 8px 0; }
 
 /* ------------------------------------------------------------------ entraînement de Syrius */
