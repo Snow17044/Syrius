@@ -128,12 +128,36 @@ export function imagePropre(t) {
   return lienPropre(s);
 }
 
-// Vérifie le code éditeur sans révéler d'indice par le temps de réponse.
+// Codes d'accès, comparés sans révéler d'indice par le temps de réponse.
+const empreinte = (s) => createHash("sha256").update(String(s)).digest();
+const egal = (a, b) => timingSafeEqual(empreinte(a), empreinte(b));
+
+// Code principal (bureau) : tous les droits, y compris le programme.
+function codeBureau() {
+  return process.env.NE_CODE_EDITEUR || (process.env.NE_DEV === "1" ? "elan" : "");
+}
+
+// Liens personnels de l'équipe : NE_CODES_EQUIPE = "Président:jeton1,Secrétaire:jeton2"
+// Chaque personne a son propre lien ; on en coupe un en retirant sa ligne, sans toucher aux autres.
+function codesEquipe() {
+  const brut = process.env.NE_CODES_EQUIPE || (process.env.NE_DEV === "1" ? "Président:essai-president,Secrétaire:essai-secretaire" : "");
+  return brut.split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
+    const i = x.lastIndexOf(":");
+    return { nom: x.slice(0, i).trim(), jeton: x.slice(i + 1).trim() };
+  }).filter((x) => x.nom && (x.jeton.length >= 16 || process.env.NE_DEV === "1"));
+}
+
+// Renvoie qui publie (« Bureau », « Président »…) ou "" si le code est faux.
 export function codeValide(code) {
-  const attendu = process.env.NE_CODE_EDITEUR || (process.env.NE_DEV === "1" ? "elan" : "");
-  if (!attendu || typeof code !== "string" || !code) return false;
-  const h = (s) => createHash("sha256").update(s).digest();
-  return timingSafeEqual(h(code), h(attendu));
+  if (typeof code !== "string" || !code) return "";
+  if (codeBureau() && egal(code, codeBureau())) return "Bureau";
+  let nom = "";
+  for (const x of codesEquipe()) if (egal(code, x.jeton)) nom = x.nom; // pas d'arrêt anticipé
+  return nom;
+}
+
+export function estBureau(code) {
+  return Boolean(typeof code === "string" && code && codeBureau() && egal(code, codeBureau()));
 }
 
 export function repondre(res, statut, donnees) {

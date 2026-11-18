@@ -20,7 +20,8 @@ export default async function handler(req, res) {
     }
 
     const code = req.headers["x-code-editeur"];
-    if (!codeValide(code)) return repondre(res, 401, { erreur: "Code éditeur incorrect." });
+    const auteur = codeValide(code);
+    if (!auteur) return repondre(res, 401, { erreur: "Code éditeur incorrect." });
 
     if (req.method === "POST") {
       const c = await lireCorps(req, 1_000_000);
@@ -44,6 +45,7 @@ export default async function handler(req, res) {
         categorie: CATEGORIES.includes(c.categorie) ? c.categorie : CATEGORIES[0],
         date: new Date().toISOString(),
         epingle: false,
+        auteur, // qui a publié (Bureau, Président…), pour s'y retrouver
       };
       await enregistrerArticle(article);
       return repondre(res, 201, { article });

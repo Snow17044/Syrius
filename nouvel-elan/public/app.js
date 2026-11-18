@@ -20,6 +20,7 @@ const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "a
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
 const CLE_CODE = "ne-code-editeur";
+const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
 const etat = { articles: [], categories: [], filtre: "Tous", recherche: "", page: "accueil", lecture: null };
 let programme = { slogan: "", intro: "", photo: "", lienAdhesion: "", axes: [], maj: null };
@@ -27,6 +28,22 @@ let programme = { slogan: "", intro: "", photo: "", lienAdhesion: "", axes: [], 
 function stocker(cle, valeur) { try { valeur == null ? localStorage.removeItem(cle) : localStorage.setItem(cle, valeur); } catch {} }
 function lire(cle) { try { return localStorage.getItem(cle); } catch { return null; } }
 const codeEditeur = () => lire(CLE_CODE) || "";
+function qui() { try { return JSON.parse(lire(CLE_QUI)) || {}; } catch { return {}; } }
+const peutModifierProgramme = () => Boolean(codeEditeur() && qui().programme);
+
+// Vérifie un code (ou un lien d'accès) auprès du serveur et retient qui est connecté.
+async function connecter(code) {
+  stocker(CLE_CODE, code);
+  try {
+    const d = await api("/api/editeur");
+    stocker(CLE_QUI, JSON.stringify({ nom: d.nom, programme: d.programme }));
+    return d;
+  } catch (e) {
+    if (e.statut === 401) { stocker(CLE_CODE, null); stocker(CLE_QUI, null); }
+    throw e;
+  }
+}
+function deconnecter() { stocker(CLE_CODE, null); stocker(CLE_QUI, null); }
 
 function el(balise, attributs = {}, ...enfants) {
   const n = document.createElement(balise);
@@ -145,8 +162,25 @@ document.addEventListener("click", (e) => {
   if (b) aller(b.dataset.aller);
 });
 
+// Lien d'accès personnel : https://…/#acces=JETON (le jeton ne part jamais vers le serveur dans l'adresse).
+async function ouvrirLienAcces(jeton) {
+  history.replaceState(null, "", "/#ajouter"); // on efface le jeton de la barre d'adresse et de l'historique
+  aller("ajouter", { historique: false });
+  try {
+    const d = await connecter(jeton);
+    toast(`Bienvenue (${d.nom}) ! Tu peux publier ✅`);
+  } catch (e) {
+    toast(e.message);
+    aller("accueil", { historique: false });
+  }
+  majModeEditeur();
+  afficherArticles();
+  afficherProgramme();
+}
+
 function routeDepuisHash() {
   const h = location.hash.slice(1);
+  if (h.startsWith("acces=")) return ouvrirLienAcces(decodeURIComponent(h.slice(6)));
   if (h.startsWith("lire/")) { etat.lecture = h.slice(5); afficherLecture(); return aller("lire", { historique: false }); }
   aller(h || "accueil", { historique: false });
 }
@@ -171,6 +205,7 @@ function demanderCode() {
     const code = prompt("Code éditeur :");
     if (code) stocker(CLE_CODE, code.trim());
   }
+  if (codeEditeur() && !qui().nom) connecter(codeEditeur()).then(majModeEditeur).catch(() => {});
   return codeEditeur();
 }
 
@@ -195,7 +230,7 @@ function choixPhoto(conteneur, valeurInitiale = "") {
       valeur = (await api("/api/photo", { method: "POST", body: JSON.stringify({ data }) })).url;
       toast("Photo ajoutée ✅");
     } catch (e) {
-      if (e.statut === 401) { stocker(CLE_CODE, null); majModeEditeur(); }
+      if (e.statut === 401) { deconnecter(); majModeEditeur(); }
       toast(e.statut ? e.message : "Impossible de lire cette photo.");
     }
     rendre();
@@ -342,7 +377,7 @@ async function supprimer(a) {
 }
 
 function erreurEditeur(e) {
-  if (e.statut === 401) { stocker(CLE_CODE, null); majModeEditeur(); afficherArticles(); }
+  if (e.statut === 401) { deconnecter(); majModeEditeur(); afficherArticles(); }
   toast(e.message);
 }
 
@@ -426,7 +461,7 @@ $("#form-ajout").addEventListener("submit", async (e) => {
     await chargerArticles();
     aller("accueil");
   } catch (err) {
-    if (err.statut === 401) { stocker(CLE_CODE, null); majModeEditeur(); }
+    if (err.statut === 401) { deconnecter(); majModeEditeur(); }
     erreur(err.message);
   } finally {
     btn.disabled = false;
@@ -475,8 +510,8 @@ function afficherProgramme() {
         el("span", { class: "axe-tuile-titre" }, a.titre),
         el("span", { class: "axe-tuile-nb" }, a.propositions.length ? `${a.propositions.length} proposition${a.propositions.length > 1 ? "s" : ""}` : "Lire →")))
     : [el("div", { class: "vide-etat" },
-        el("p", {}, codeEditeur() ? "Le programme n'est pas encore rédigé." : "Notre programme arrive très bientôt !"),
-        codeEditeur() ? el("button", { class: "btn-secondaire", type: "button", onclick: () => { aller("programme"); ouvrirEdition(); } }, "✏️ Rédiger le programme") : null)]));
+        el("p", {}, peutModifierProgramme() ? "Le programme n'est pas encore rédigé." : "Notre programme arrive très bientôt !"),
+        peutModifierProgramme() ? el("button", { class: "btn-secondaire", type: "button", onclick: () => { aller("programme"); ouvrirEdition(); } }, "✏️ Rédiger le programme") : null)]));
 
   // Page programme
   $("#programme-photo").hidden = !p.photo;
@@ -493,7 +528,7 @@ function afficherProgramme() {
       a.photo ? el("img", { class: "photo-large", src: a.photo, alt: "", loading: "lazy" }) : null,
       el("div", { class: "texte-long" }, paragraphes(a.resume)),
       a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null))));
-  $("#btn-modifier-programme").hidden = !codeEditeur();
+  $("#btn-modifier-programme").hidden = !peutModifierProgramme();
   construireMenu();
 }
 
@@ -575,7 +610,7 @@ $("#programme-edition").addEventListener("submit", async (e) => {
     window.scrollTo(0, 0);
     toast("Programme enregistré ✅");
   } catch (err) {
-    if (err.statut === 401) { stocker(CLE_CODE, null); majModeEditeur(); }
+    if (err.statut === 401) { deconnecter(); majModeEditeur(); }
     msg.className = "message erreur"; msg.textContent = err.message;
   } finally { btn.disabled = false; btn.textContent = "Enregistrer le programme"; }
 });
@@ -613,6 +648,7 @@ function construireMenu() {
       invitationInstall ? ligneMenu("📲", "Installer l'application", installer) : null,
       estIOS && !installee ? el("p", { class: "aide petite menu-aide" }, "Sur iPhone : Partager → « Sur l'écran d'accueil » pour installer l'application.") : null,
       ligneMenu("🔗", "Partager l'application", () => partager("Nouvel Élan", location.origin)),
+      codeEditeur() && qui().nom ? el("p", { class: "aide petite menu-aide" }, `✅ Connecté en mode éditeur : ${qui().nom}`) : null,
       ligneMenu("✏️", codeEditeur() ? "Quitter le mode éditeur" : "Mode éditeur (équipe)", basculerEditeur),
     ]],
   ];
@@ -620,13 +656,15 @@ function construireMenu() {
     el("div", { class: "menu-section" }, el("h3", { class: "section-titre" }, titre), el("div", { class: "menu-groupe" }, lignes))));
 }
 
-function basculerEditeur() {
-  if (codeEditeur()) { stocker(CLE_CODE, null); toast("Mode éditeur désactivé"); }
+async function basculerEditeur() {
+  if (codeEditeur()) { deconnecter(); toast("Mode éditeur désactivé"); }
   else {
     const code = prompt("Code éditeur :");
     if (!code) return;
-    stocker(CLE_CODE, code.trim());
-    toast("Mode éditeur activé : tu peux publier et modifier le programme");
+    try {
+      const d = await connecter(code.trim());
+      toast(d.programme ? "Mode éditeur activé : tu peux publier et modifier le programme" : `Bienvenue (${d.nom}) : tu peux publier`);
+    } catch (e) { toast(e.message); }
   }
   majModeEditeur();
   afficherArticles();
@@ -634,7 +672,7 @@ function basculerEditeur() {
 }
 
 function majModeEditeur() {
-  $("#btn-modifier-programme").hidden = !codeEditeur();
+  $("#btn-modifier-programme").hidden = !peutModifierProgramme();
   // Le bouton « Publier » n'apparaît que pour l'équipe : les visiteurs voient d'abord le programme.
   $(".barre-plus").hidden = !codeEditeur();
   majBlocCode();
@@ -661,6 +699,8 @@ const params = new URLSearchParams(location.search);
 const lienRecu = extraireLien(params.get("ajouter") || params.get("url") || params.get("text") || params.get("title"));
 construireRubriques();
 majModeEditeur();
+// Code enregistré avant les liens d'accès : on redemande au serveur qui c'est (et ses droits).
+if (codeEditeur() && !location.hash.startsWith("#acces=")) connecter(codeEditeur()).then(() => { majModeEditeur(); afficherProgramme(); }).catch(() => majModeEditeur());
 if (lienRecu) {
   history.replaceState(null, "", "/#ajouter");
   aller("ajouter", { historique: false });

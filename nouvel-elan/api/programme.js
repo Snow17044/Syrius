@@ -1,6 +1,6 @@
 // GET /api/programme → le programme de l'association (public)
 // PUT /api/programme → le remplacer (code éditeur requis)
-import { stockagePret, lireContenu, ecrireContenu, codeValide, repondre, lireCorps, textePropre, lienPropre, paragraphe, imagePropre } from "./_outils.js";
+import { stockagePret, lireContenu, ecrireContenu, estBureau, repondre, lireCorps, textePropre, lienPropre, paragraphe, imagePropre } from "./_outils.js";
 
 const VIDE = { slogan: "", intro: "", photo: "", lienAdhesion: "", axes: [], maj: null };
 
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === "GET") return repondre(res, 200, { programme: (await lireContenu("programme")) || VIDE });
     if (req.method === "PUT") {
-      if (!codeValide(req.headers["x-code-editeur"])) return repondre(res, 401, { erreur: "Code éditeur incorrect." });
+      if (!estBureau(req.headers["x-code-editeur"])) return repondre(res, 403, { erreur: "Seul le bureau peut modifier le programme." });
       const programme = nettoyer(await lireCorps(req, 4_000_000));
       await ecrireContenu("programme", programme);
       return repondre(res, 200, { programme });
