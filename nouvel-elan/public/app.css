@@ -368,3 +368,6 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .axe-ligne { display: flex; align-items: center; gap: 12px; padding: 16px; }
 .axe-photo { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--fond); }
 .axe-corps { padding-top: 0; }
+
+.mauvaise-adresse { background: #fde8ea; color: #8a0a14; font-weight: 700; padding: 10px 16px; text-align: center; font-size: 15px; }
+.mauvaise-adresse a { color: var(--bleu); }

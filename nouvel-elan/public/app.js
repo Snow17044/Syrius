@@ -19,7 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "11 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "12 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -941,6 +941,16 @@ window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); invi
 $("#asso-description").textContent = ASSOCIATION.description;
 $("#reseaux").replaceChildren(...ASSOCIATION.reseaux.map((r) =>
   el("a", { class: "ligne-lien", href: r.lien, target: "_blank", rel: "noopener noreferrer" }, el("span", {}, r.icone), r.nom)));
+
+// ── Mauvaise adresse ─────────────────────────────────────────
+// Chaque mise en ligne crée aussi une adresse figée (nouvelles-elan-xxxx-….vercel.app) qui garde
+// une vieille version pour toujours : on prévient et on renvoie vers la bonne adresse.
+const ADRESSE = "nouvelles-elan.vercel.app";
+if (location.hostname.endsWith(".vercel.app") && location.hostname !== ADRESSE) {
+  document.body.prepend(el("div", { class: "mauvaise-adresse" },
+    "⚠️ Cette adresse affiche une ancienne version. ",
+    el("a", { href: `https://${ADRESSE}/installer` }, "Ouvrir la bonne adresse")));
+}
 
 // ── Démarrage ────────────────────────────────────────────────
 // Lien partagé vers l'application (menu « Partager » du téléphone) ou lien du type /?ajouter=https://…

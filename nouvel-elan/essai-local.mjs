@@ -19,7 +19,7 @@ createServer(async (req, res) => {
   if (pathname === "/api/programme") return programme(req, res);
   if (pathname === "/api/photo") return photo(req, res);
   if (pathname === "/api/editeur") return editeur(req, res);
-  const chemin = normalize(join(racine, pathname === "/" ? "index.html" : pathname === "/installer" ? "installer.html" : pathname));
+  const chemin = normalize(join(racine, pathname === "/" ? "index.html" : pathname === "/installer" ? "installer.html" : pathname === "/reparer" ? "reparer.html" : pathname));
   if (!chemin.startsWith(racine)) { res.statusCode = 403; return res.end(); }
   try {
     const contenu = await readFile(chemin);

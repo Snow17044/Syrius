@@ -1,0 +1,7 @@
+.diag { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; text-align: left; }
+.diag li { padding: 10px 12px; border-radius: 12px; font-size: 15px; overflow-wrap: anywhere; }
+.diag .ok { background: #e7f6ec; }
+.diag .ko { background: #fde8ea; color: #8a0a14; font-weight: 600; }
+.diag .info { background: var(--fond); }
+.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+.photos img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }

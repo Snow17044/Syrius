@@ -33,6 +33,10 @@
     {
       "source": "/installer",
       "destination": "/installer.html"
+    },
+    {
+      "source": "/reparer",
+      "destination": "/reparer.html"
     }
   ]
 }
