@@ -298,3 +298,15 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .orga-props .btn-orga { width: 36px; height: 36px; font-size: 15px; background: #fff; }
 #programme-axes > .btn-principal { margin-top: 6px; }
 #programme-axes > .btn-secondaire.large { margin-top: 0; }
+
+/* ── Barre « Annuler » après une suppression ──────────────── */
+.annulation {
+  position: fixed; left: 12px; right: 12px; bottom: calc(var(--barre-h) + env(safe-area-inset-bottom) + 10px); z-index: 31;
+  display: flex; align-items: center; gap: 12px; background: var(--texte); color: #fff; border-radius: 14px;
+  padding: 10px 10px 14px 16px; max-width: 520px; margin: 0 auto; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+}
+#annulation-texte { flex: 1; font-weight: 600; }
+#annulation-btn { flex: none; background: #fff; color: var(--bleu); border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 800; font-size: 15px; }
+.annulation-temps { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--rouge); transform-origin: left; }
+.annulation-temps.defile { animation: compte-a-rebours 8s linear forwards; }
+@keyframes compte-a-rebours { from { transform: scaleX(1); } to { transform: scaleX(0); } }

@@ -76,6 +76,41 @@ function toast(texte) {
   toast.minuteur = setTimeout(() => (t.hidden = true), 2600);
 }
 
+// ── Annuler une suppression (8 secondes) ─────────────────────
+const DUREE_ANNULATION = 8000;
+let annulation = null; // { annuler, valider, minuteur }
+
+function proposerAnnulation(texte, { annuler, valider }) {
+  terminerAnnulation(); // une nouvelle suppression rend la précédente définitive
+  $("#toast").hidden = true;
+  $("#annulation-texte").textContent = texte;
+  $("#annulation").hidden = false;
+  const temps = $("#annulation-temps");
+  temps.classList.remove("defile"); void temps.offsetWidth; temps.classList.add("defile"); // relance la barre de temps
+  annulation = { annuler, valider, minuteur: setTimeout(terminerAnnulation, DUREE_ANNULATION) };
+}
+
+// Délai écoulé, autre action, ou appli fermée : la suppression devient définitive.
+function terminerAnnulation() {
+  const a = annulation;
+  if (!a) return;
+  annulation = null;
+  clearTimeout(a.minuteur);
+  $("#annulation").hidden = true;
+  a.valider?.();
+}
+
+$("#annulation-btn").addEventListener("click", () => {
+  const a = annulation;
+  if (!a) return;
+  annulation = null;
+  clearTimeout(a.minuteur);
+  $("#annulation").hidden = true;
+  a.annuler();
+});
+addEventListener("pagehide", terminerAnnulation);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") terminerAnnulation(); });
+
 function dateCourte(iso) {
   const d = new Date(iso);
   const jours = Math.floor((Date.now() - d) / 86400000);
@@ -311,7 +346,7 @@ function etatVide(texte, avecBouton = false) {
 }
 
 function afficherArticles() {
-  const tous = etat.articles;
+  const tous = etat.articles.filter((a) => !suppressionsEnAttente.has(a.id));
   const une = tous.find((a) => a.epingle) || tous[0];
   $("#une").replaceChildren(une
     ? el("a", { class: "une", ...attributsLien(une) },
@@ -371,13 +406,26 @@ async function epingler(a) {
   } catch (e) { erreurEditeur(e); }
 }
 
-async function supprimer(a) {
+// La publication disparaît tout de suite, mais n'est vraiment supprimée (avec sa photo)
+// qu'après le délai d'annulation.
+const suppressionsEnAttente = new Set();
+
+function supprimer(a) {
   if (!confirm(`Supprimer « ${a.titre} » ?`)) return;
-  try {
-    await api(`/api/articles?id=${encodeURIComponent(a.id)}`, { method: "DELETE" });
-    toast("Publication supprimée");
-    chargerArticles();
-  } catch (e) { erreurEditeur(e); }
+  suppressionsEnAttente.add(a.id);
+  afficherArticles();
+  proposerAnnulation("Publication supprimée", {
+    annuler: () => { suppressionsEnAttente.delete(a.id); afficherArticles(); toast("Suppression annulée ↩️"); },
+    valider: async () => {
+      try {
+        await api(`/api/articles?id=${encodeURIComponent(a.id)}`, { method: "DELETE", keepalive: true });
+        etat.articles = etat.articles.filter((x) => x.id !== a.id);
+        stocker(CLE_CACHE, JSON.stringify({ articles: etat.articles, categories: etat.categories }));
+      } catch (e) { erreurEditeur(e); }
+      suppressionsEnAttente.delete(a.id);
+      afficherArticles();
+    },
+  });
 }
 
 function erreurEditeur(e) {
@@ -542,8 +590,9 @@ function afficherProgramme() {
 // ── Organiser le programme : réordonner et supprimer, enregistré tout de suite ──
 let enregistrementEnCours = false;
 
-async function sauverProgramme(nouveau, message) {
+async function sauverProgramme(nouveau, message, { annulable = false } = {}) {
   if (enregistrementEnCours) return;
+  terminerAnnulation(); // après un autre changement, on ne peut plus revenir avant la suppression précédente
   enregistrementEnCours = true;
   const avant = programme;
   programme = nouveau;          // affichage immédiat…
@@ -551,7 +600,8 @@ async function sauverProgramme(nouveau, message) {
   try {
     programme = (await api("/api/programme", { method: "PUT", body: JSON.stringify(nouveau) })).programme;
     stocker(CLE_PROGRAMME, JSON.stringify(programme));
-    toast(message);
+    if (annulable) proposerAnnulation(message, { annuler: () => sauverProgramme(avant, "Suppression annulée ↩️") });
+    else toast(message);
   } catch (err) {
     programme = avant;          // …et retour en arrière si l'enregistrement échoue
     if (err.statut === 401) { deconnecter(); majModeEditeur(); etat.organiser = false; }
@@ -578,7 +628,7 @@ function boutonOrga(texte, titre, action, classe = "") {
 function afficherOrganiser() {
   const axes = programme.axes;
   const n = axes.length;
-  const changerAxes = (nouveauxAxes, message) => sauverProgramme({ ...programme, axes: nouveauxAxes }, message);
+  const changerAxes = (nouveauxAxes, message, annulable = false) => sauverProgramme({ ...programme, axes: nouveauxAxes }, message, { annulable });
 
   remplir($("#programme-axes"),
     el("div", { class: "orga-aide" },
@@ -597,7 +647,7 @@ function afficherOrganiser() {
             boutonOrga("🗑", "Supprimer l'axe", () => {
               const nb = a.propositions.length;
               if (!confirm(`Supprimer l'axe « ${a.titre} »${nb ? ` et ses ${nb} proposition${nb > 1 ? "s" : ""}` : ""} ?`)) return;
-              changerAxes(copieAxes().filter((_, k) => k !== i), "Axe supprimé");
+              changerAxes(copieAxes().filter((_, k) => k !== i), "Axe supprimé", true);
             }, "danger"))),
         a.propositions.length
           ? el("button", { type: "button", class: "orga-depli", "aria-expanded": String(ouvert),
@@ -611,14 +661,14 @@ function afficherOrganiser() {
             boutonOrga("↓", "Descendre la proposition", k < a.propositions.length - 1 ? () => { const x = copieAxes(); deplacer(x[i].propositions, k, 1); changerAxes(x, "Ordre enregistré ✅"); } : null),
             boutonOrga("🗑", "Supprimer la proposition", () => {
               if (!confirm(`Supprimer cette proposition ?\n\n« ${prop.length > 140 ? prop.slice(0, 140) + "…" : prop} »`)) return;
-              const x = copieAxes(); x[i].propositions.splice(k, 1); changerAxes(x, "Proposition supprimée");
+              const x = copieAxes(); x[i].propositions.splice(k, 1); changerAxes(x, "Proposition supprimée", true);
             }, "danger"))))) : null);
     }),
     el("button", { type: "button", class: "btn-principal", onclick: () => { etat.organiser = false; afficherProgramme(); window.scrollTo(0, 0); } }, "✓ Terminer"),
     n || programme.intro || programme.slogan ? el("button", { type: "button", class: "btn-secondaire large danger", onclick: () => {
       if (!confirm("Vider TOUT le programme (slogan, introduction, photo et tous les axes) ?")) return;
       if (prompt("Pour confirmer, écris : SUPPRIMER") !== "SUPPRIMER") return toast("Rien n'a été supprimé.");
-      sauverProgramme({ ...programme, slogan: "", intro: "", photo: "", axes: [] }, "Programme vidé");
+      sauverProgramme({ ...programme, slogan: "", intro: "", photo: "", axes: [] }, "Programme vidé", { annulable: true });
     } }, "🗑 Vider tout le programme") : null);
 }
 
@@ -678,6 +728,7 @@ $("#ed-ajouter-axe").addEventListener("click", () => {
 
 $("#programme-edition").addEventListener("submit", async (e) => {
   e.preventDefault();
+  terminerAnnulation();
   const msg = $("#ed-message");
   const axes = [...document.querySelectorAll("#ed-axes .ed-axe")].map((b, i) => ({
     id: b.dataset.id || `axe-${Date.now().toString(36)}-${i}`,
