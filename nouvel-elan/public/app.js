@@ -282,7 +282,10 @@ function afficherArticles() {
           el("h4", {}, une.titre),
           une.resume ? el("p", {}, une.resume) : null))
     : etatVide("Aucune actualité pour l'instant.", Boolean(codeEditeur())));
-  $("#derniers").replaceChildren(...tous.filter((a) => a !== une).slice(0, 5).map(carte));
+  // Nouveautés (au-dessus du programme) : la une + les 3 suivantes, pour que le programme reste visible juste après.
+  $("#derniers").replaceChildren(...tous.filter((a) => a !== une).slice(0, 3).map(carte));
+  // Rien de publié : la section est cachée aux visiteurs (l'équipe garde le bouton « Publier »).
+  $("#bloc-nouveautes").hidden = !tous.length && !codeEditeur();
 
   $("#rubrique-titre").textContent = etat.filtre === "Tous" ? "Toute l'actualité" : etat.filtre;
   const q = etat.recherche.toLowerCase();
