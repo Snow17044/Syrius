@@ -19,7 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "9 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "10 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -161,7 +161,12 @@ function paragraphes(texte) {
 }
 
 async function api(chemin, options = {}) {
-  const r = await fetch(chemin, {
+  // Les lectures portent un marqueur unique : aucun vieux cache (navigateur, ancien site) ne peut
+  // renvoyer une version périmée du programme ou des actualités.
+  const lecture = !options.method || options.method === "GET";
+  const adresse = lecture ? `${chemin}${chemin.includes("?") ? "&" : "?"}_=${Date.now()}` : chemin;
+  const r = await fetch(adresse, {
+    cache: "no-store",
     ...options,
     headers: { "Content-Type": "application/json", "X-Code-Editeur": codeEditeur(), ...(options.headers || {}) },
   });
@@ -879,6 +884,7 @@ function construireMenu() {
     ["L'application", [
       invitationInstall ? ligneMenu("📲", "Installer l'application", installer)
         : !installee ? ligneMenu("📲", "Installer l'application", () => { location.href = "/installer"; }) : null,
+      ligneMenu("🔄", "Actualiser l'application", actualiserApplication),
       ligneMenu("🔗", "Partager le lien d'installation", () => partager("Installe l'application Nouvel Élan", `${location.origin}/installer`)),
       codeEditeur() && qui().nom ? el("p", { class: "aide petite menu-aide" }, `✅ Connecté en mode éditeur : ${qui().nom}`) : null,
       ligneMenu("✏️", codeEditeur() ? "Quitter le mode éditeur" : "Mode éditeur (équipe)", basculerEditeur),
@@ -947,4 +953,33 @@ if (lienRecu) {
 }
 chargerProgramme();
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+// ── Mises à jour de l'appli ─────────────────────────────────
+// À chaque ouverture, on vérifie s'il existe une nouvelle version ; si oui, elle remplace
+// l'ancienne (y compris le cache de l'ancien site vitrine) et la page se recharge une fois.
+if ("serviceWorker" in navigator) {
+  const avaitUnControleur = Boolean(navigator.serviceWorker.controller);
+  let recharge = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!avaitUnControleur || recharge) return;
+    recharge = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+    .then((reg) => {
+      reg.update().catch(() => {});
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+    })
+    .catch(() => {});
+}
+
+// Bouton de secours (Menu) : efface tous les caches de l'appli et recharge la dernière version.
+async function actualiserApplication() {
+  toast("Actualisation…");
+  try {
+    if ("serviceWorker" in navigator) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+    if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+  } catch {}
+  stocker(CLE_CACHE, null);
+  stocker(CLE_PROGRAMME, null); // le code éditeur, lui, est gardé
+  location.replace(`/?maj=${Date.now()}${location.hash}`);
+}
