@@ -186,11 +186,15 @@ class SyriusAI {
                 List<Message> history = new ArrayList<>();
                 String last = "";
                 int n = msgs == null ? 0 : msgs.length();
-                for (int i = Math.max(0, n - 8); i < n; i++) {
+                // Le téléphone relit tout l'historique à chaque question : on n'en garde que le strict nécessaire
+                // (3 derniers messages + la question), sinon la réponse met de plus en plus longtemps à démarrer.
+                for (int i = Math.max(0, n - 4); i < n; i++) {
                     JSONObject m = msgs.optJSONObject(i);
                     if (m == null) continue;
                     String text = m.optString("text", "");
-                    if (text.length() > 900) text = text.substring(0, 900);
+                    boolean isLast = i == n - 1;
+                    int cap = isLast ? 900 : 350;
+                    if (text.length() > cap) text = text.substring(0, cap);
                     boolean assistant = "assistant".equals(m.optString("role"));
                     if (i == n - 1 && !assistant) {
                         last = text;
