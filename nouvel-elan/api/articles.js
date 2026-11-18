@@ -5,10 +5,10 @@
 import { randomUUID } from "node:crypto";
 import {
   stockagePret, lireArticles, enregistrerArticle, lireArticle, supprimerArticle,
-  codeValide, repondre, lireCorps, lienPropre, textePropre,
+  codeValide, repondre, lireCorps, lienPropre, textePropre, paragraphe, imagePropre, supprimerPhoto,
 } from "./_outils.js";
 
-export const CATEGORIES = ["Actualités", "Événements", "Idées & tribunes", "Presse", "Vidéos"];
+export const CATEGORIES = ["Communiqués", "Événements", "Actions de terrain", "Idées & tribunes", "Presse", "Vidéos"];
 
 export default async function handler(req, res) {
   if (!stockagePret()) {
@@ -23,18 +23,24 @@ export default async function handler(req, res) {
     if (!codeValide(code)) return repondre(res, 401, { erreur: "Code éditeur incorrect." });
 
     if (req.method === "POST") {
-      const c = await lireCorps(req);
-      const url = lienPropre(c.url);
-      if (!url) return repondre(res, 400, { erreur: "Ce lien n'est pas valide." });
-      const existants = await lireArticles();
-      if (existants.some((a) => a.url === url)) return repondre(res, 409, { erreur: "Cet article est déjà dans l'application." });
+      const c = await lireCorps(req, 1_000_000);
+      // Deux sortes de publications : un lien vers un article, ou une publication de l'asso (photo + texte).
+      const url = c.url ? lienPropre(c.url) : "";
+      if (c.url && !url) return repondre(res, 400, { erreur: "Ce lien n'est pas valide." });
+      const texte = paragraphe(c.texte, 200000);
+      const image = c.image ? imagePropre(c.image) : "";
+      if (!url && !texte && !image) return repondre(res, 400, { erreur: "Ajoute un lien, une photo ou un texte." });
+      const titre = textePropre(c.titre, 300) || (url ? new URL(url).hostname : "");
+      if (!titre) return repondre(res, 400, { erreur: "Donne un titre à la publication." });
+      if (url && (await lireArticles()).some((a) => a.url === url)) return repondre(res, 409, { erreur: "Cet article est déjà dans l'application." });
       const article = {
         id: randomUUID(),
         url,
-        titre: textePropre(c.titre, 200) || new URL(url).hostname,
-        resume: textePropre(c.resume, 400),
-        image: c.image ? lienPropre(c.image) : "",
-        source: textePropre(c.source, 80) || new URL(url).hostname.replace(/^www\./, ""),
+        titre,
+        resume: textePropre(c.resume, 600) || textePropre(texte, 220),
+        texte,
+        image,
+        source: url ? (textePropre(c.source, 80) || new URL(url).hostname.replace(/^www\./, "")) : "Nouvel Élan",
         categorie: CATEGORIES.includes(c.categorie) ? c.categorie : CATEGORIES[0],
         date: new Date().toISOString(),
         epingle: false,
@@ -56,7 +62,11 @@ export default async function handler(req, res) {
 
     if (req.method === "DELETE") {
       const id = new URL(req.url, "http://x").searchParams.get("id") || "";
+      const a = await lireArticle(id);
       await supprimerArticle(id);
+      // La photo envoyée avec la publication est supprimée avec elle.
+      const photo = a?.image?.match(/^\/api\/photo\?id=([a-f0-9-]{36})$/);
+      if (photo) await supprimerPhoto(photo[1]).catch(() => {});
       return repondre(res, 200, { ok: true });
     }
 

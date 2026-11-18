@@ -5,8 +5,28 @@ Elle ne dépend d'aucun site existant, et il n'y a ni boutique d'applications ni
 
 ## Ce qu'elle fait
 
-| Écran | Contenu |
+**En haut, les rubriques, comme dans un journal** : À la une · Programme · Actualités · Communiqués ·
+Événements · Actions de terrain · Idées & tribunes · Presse · Vidéos · Qui sommes-nous.
+
+| Onglet du bas | Contenu |
 |---|---|
+| 🏠 **À la une** | Le slogan, « Découvrir notre programme », « Nous rejoindre », les grands axes, puis l'actualité |
+| 🚩 **Programme** | L'introduction, une photo de couverture, et les axes (photo, présentation, propositions) |
+| ➕ **Publier** | (équipe seulement) Un lien vers un article, **ou** votre propre publication : photo + texte |
+| 📰 **Actualités** | Toutes les publications, avec recherche |
+| ☰ **Menu** | Tout le contenu en un coup d'œil : chaque axe du programme, chaque rubrique, réseaux, installation |
+
+- **Publier** : une publication avec un texte s'ouvre dans l'appli ; un simple lien ouvre le site du journal.
+  Depuis n'importe quel site : **Partager → Nouvel Élan** (Android, une fois l'appli installée).
+- **Photos** : réduites automatiquement sur le téléphone avant l'envoi (rapide même en 4G), puis rangées
+  dans la base de données. Une photo d'une publication supprimée est supprimée avec elle.
+- **Programme** : Menu → **Mode éditeur** → onglet Programme → **Modifier le programme**.
+  Aucune limite de longueur : on peut coller un document entier. Une proposition par ligne.
+- **Code éditeur** : seules les personnes qui ont le code peuvent publier, modifier le programme ou supprimer.
+  Tout le monde peut lire et partager.
+- **Hors connexion** : l'appli s'ouvre et affiche les derniers contenus même sans réseau.
+
+---|---|
 | 🏠 **Accueil** | Le slogan, « Découvrir notre programme », « Nous rejoindre », les grands axes, puis l'actualité |
 | 🚩 **Programme** | L'introduction et les grands axes, chacun avec sa présentation et ses propositions |
 | 📰 **Articles** | Tous les articles, avec recherche et filtre par thème |
@@ -57,7 +77,7 @@ L'icône Nouvel Élan apparaît alors comme une vraie application.
 
 - **Présentation et réseaux sociaux** : en haut du fichier `public/app.js` (bloc `ASSOCIATION`).
   Mets les vrais liens Instagram, TikTok, etc.
-- **Thèmes des articles** : liste `CATEGORIES` dans `api/articles.js`.
+- **Rubriques** : liste `CATEGORIES` dans `api/articles.js`.
 - **Couleurs** : en haut de `public/app.css` (bleu `#00246A` et rouge `#D60616`, ceux du logo).
 
 ## Essayer sur un ordinateur

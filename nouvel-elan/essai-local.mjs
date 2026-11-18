@@ -6,6 +6,7 @@ import { extname, join, normalize } from "node:path";
 import articles from "./api/articles.js";
 import apercu from "./api/apercu.js";
 import programme from "./api/programme.js";
+import photo from "./api/photo.js";
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".webmanifest": "application/manifest+json" };
 const racine = new URL("./public/", import.meta.url).pathname;
@@ -15,6 +16,7 @@ createServer(async (req, res) => {
   if (pathname === "/api/articles") return articles(req, res);
   if (pathname === "/api/apercu") return apercu(req, res);
   if (pathname === "/api/programme") return programme(req, res);
+  if (pathname === "/api/photo") return photo(req, res);
   const chemin = normalize(join(racine, pathname === "/" ? "index.html" : pathname));
   if (!chemin.startsWith(racine)) { res.statusCode = 403; return res.end(); }
   try {

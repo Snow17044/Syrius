@@ -94,6 +94,40 @@ export async function ecrireContenu(nom, valeur) {
   else memoireContenu.set(nom, v);
 }
 
+// Photos : rangées dans la base (texte base64), servies par /api/photo?id=…
+const memoirePhotos = new Map();
+let tablePhotos = null;
+function pgPhotos() {
+  tablePhotos ??= sql`CREATE TABLE IF NOT EXISTS ne_photos (id text PRIMARY KEY, mime text NOT NULL, donnees text NOT NULL, cree timestamptz DEFAULT now())`
+    .catch((e) => { tablePhotos = null; throw e; });
+  return tablePhotos;
+}
+
+export async function enregistrerPhoto(id, mime, base64) {
+  if (sql) { await pgPhotos(); await sql`INSERT INTO ne_photos (id, mime, donnees) VALUES (${id}, ${mime}, ${base64})`; }
+  else if (URL_REDIS && JETON_REDIS) await redis(["SET", `nouvel-elan:photo:${id}`, JSON.stringify({ mime, base64 })]);
+  else memoirePhotos.set(id, { mime, base64 });
+}
+
+export async function lirePhoto(id) {
+  if (sql) { await pgPhotos(); const r = await sql`SELECT mime, donnees FROM ne_photos WHERE id = ${id}`; return r[0] ? { mime: r[0].mime, base64: r[0].donnees } : null; }
+  if (URL_REDIS && JETON_REDIS) { const v = await redis(["GET", `nouvel-elan:photo:${id}`]); return v ? JSON.parse(v) : null; }
+  return memoirePhotos.get(id) || null;
+}
+
+export async function supprimerPhoto(id) {
+  if (sql) { await pgPhotos(); await sql`DELETE FROM ne_photos WHERE id = ${id}`; }
+  else if (URL_REDIS && JETON_REDIS) await redis(["DEL", `nouvel-elan:photo:${id}`]);
+  else memoirePhotos.delete(id);
+}
+
+// Adresse d'une photo : lien web classique, ou photo envoyée dans l'appli.
+export function imagePropre(t) {
+  const s = String(t ?? "").trim();
+  if (/^\/api\/photo\?id=[a-f0-9-]{36}$/.test(s)) return s;
+  return lienPropre(s);
+}
+
 // Vérifie le code éditeur sans révéler d'indice par le temps de réponse.
 export function codeValide(code) {
   const attendu = process.env.NE_CODE_EDITEUR || (process.env.NE_DEV === "1" ? "elan" : "");
@@ -109,14 +143,14 @@ export function repondre(res, statut, donnees) {
   res.end(JSON.stringify(donnees));
 }
 
-export async function lireCorps(req) {
+export async function lireCorps(req, max = 100000) {
   if (req.body !== undefined && req.body !== null) {
     return typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body;
   }
   let brut = "";
   for await (const morceau of req) {
     brut += morceau;
-    if (brut.length > 100000) throw new Error("Requête trop grosse");
+    if (brut.length > max) throw new Error("Envoi trop gros");
   }
   return brut ? JSON.parse(brut) : {};
 }
@@ -131,6 +165,11 @@ export function lienPropre(texte, max = 2000) {
   } catch {
     return "";
   }
+}
+
+export function paragraphe(t, max) {
+  return String(t ?? "").replace(/\r/g, "").replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n").trim().slice(0, max);
 }
 
 export function textePropre(t, max) {

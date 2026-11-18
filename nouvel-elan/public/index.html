@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Nouvel Élan</title>
-  <meta name="description" content="L'application de l'association Nouvel Élan : actualités, événements et idées.">
+  <meta name="description" content="L'application de Nouvel Élan : notre programme, nos actions et l'actualité du mouvement.">
   <meta name="theme-color" content="#00246A">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png">
@@ -15,14 +15,21 @@
 </head>
 <body>
   <header class="entete">
-    <img src="/icons/logo.png" alt="Nouvel Élan" class="entete-logo">
-    <h1 class="entete-titre" id="titre-page">Accueil</h1>
+    <div class="entete-haut">
+      <button class="entete-logo-btn" data-aller="accueil" aria-label="Retour à l'accueil">
+        <img src="/icons/logo.png" alt="Nouvel Élan" class="entete-logo">
+      </button>
+      <a class="entete-rejoindre" id="btn-rejoindre-entete" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
+    </div>
+    <!-- Rubriques, comme dans un journal : on choisit ce qu'on veut voir -->
+    <nav class="rubriques" id="rubriques" aria-label="Rubriques"></nav>
   </header>
+  <h1 class="cache" id="titre-page">Accueil</h1>
 
   <main id="contenu">
     <!-- ACCUEIL -->
-    <section class="page" id="page-accueil" data-titre="Accueil">
-      <div class="banniere">
+    <section class="page" id="page-accueil" data-titre="À la une">
+      <div class="banniere" id="banniere">
         <p class="banniere-sur">Mouvement politique jeune</p>
         <h2 id="banniere-slogan">Une nouvelle génération <span>s'engage</span></h2>
         <p id="banniere-texte">Découvre nos propositions et rejoins celles et ceux qui veulent changer les choses.</p>
@@ -40,7 +47,7 @@
 
       <div class="ligne-titre">
         <h3 class="section-titre">L'actualité</h3>
-        <button class="lien-btn" data-aller="articles">Tout voir →</button>
+        <button class="lien-btn" data-rubrique="Tous">Tout voir →</button>
       </div>
       <div id="une"></div>
       <div class="liste liste-suite" id="derniers"></div>
@@ -49,6 +56,7 @@
     <!-- PROGRAMME -->
     <section class="page" id="page-programme" data-titre="Programme" hidden>
       <div id="programme-lecture">
+        <img id="programme-photo" class="photo-large" alt="" hidden>
         <div class="programme-tete">
           <p class="banniere-sur">Le programme de Nouvel Élan</p>
           <h2 id="programme-slogan">Notre programme</h2>
@@ -65,11 +73,13 @@
 
       <form id="programme-edition" class="carte-form" hidden autocomplete="off">
         <h2>Modifier le programme</h2>
-        <p class="aide">Les changements sont visibles par tout le monde dès que tu enregistres.</p>
+        <p class="aide">Pas de limite de longueur : tu peux coller ton texte directement. Les changements sont visibles par tout le monde dès que tu enregistres.</p>
         <label class="etiquette" for="ed-slogan">Slogan (en haut de l'accueil)</label>
-        <input type="text" id="ed-slogan" maxlength="140" placeholder="Ex. : Une nouvelle génération s'engage">
+        <input type="text" id="ed-slogan" placeholder="Ex. : Une nouvelle génération s'engage">
+        <label class="etiquette">Photo de couverture</label>
+        <div class="choix-photo" id="ed-photo"></div>
         <label class="etiquette" for="ed-intro">Introduction</label>
-        <textarea id="ed-intro" rows="5" maxlength="3000" placeholder="Qui sommes-nous, pourquoi nous nous engageons…"></textarea>
+        <textarea id="ed-intro" rows="6" class="auto" placeholder="Qui sommes-nous, pourquoi nous nous engageons…"></textarea>
         <label class="etiquette" for="ed-adhesion">Lien pour nous rejoindre (formulaire d'adhésion, HelloAsso…)</label>
         <input type="url" id="ed-adhesion" inputmode="url" placeholder="https://…">
         <h3 class="section-titre">Les grands axes</h3>
@@ -81,37 +91,43 @@
       </form>
     </section>
 
-    <!-- ARTICLES -->
-    <section class="page" id="page-articles" data-titre="Articles" hidden>
+    <!-- ACTUALITÉS -->
+    <section class="page" id="page-articles" data-titre="Actualités" hidden>
+      <h2 class="rubrique-titre" id="rubrique-titre">Toute l'actualité</h2>
       <label class="recherche">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-        <input type="search" id="recherche" placeholder="Rechercher un article…" aria-label="Rechercher un article">
+        <input type="search" id="recherche" placeholder="Rechercher…" aria-label="Rechercher une publication">
       </label>
-      <div class="puces" id="puces-articles"></div>
       <p class="compteur" id="compteur"></p>
       <div class="liste" id="liste-articles"></div>
     </section>
 
-    <!-- AJOUTER -->
-    <section class="page" id="page-ajouter" data-titre="Ajouter un article" hidden>
+    <!-- LECTURE D'UNE PUBLICATION -->
+    <section class="page" id="page-lire" data-titre="Publication" hidden>
+      <article id="lecture"></article>
+    </section>
+
+    <!-- PUBLIER -->
+    <section class="page" id="page-ajouter" data-titre="Publier" hidden>
       <div class="carte-form">
-        <h2>Ajouter un article</h2>
-        <p class="aide">Colle simplement le lien de l'article. Le titre et l'image se remplissent tout seuls.</p>
+        <h2>Publier</h2>
+        <p class="aide">Colle le lien d'un article <b>ou</b> publie votre propre actualité avec une photo et un texte.</p>
         <form id="form-ajout" autocomplete="off">
-          <label class="etiquette" for="champ-lien">Lien de l'article</label>
+          <label class="etiquette" for="champ-lien">Lien d'un article (facultatif)</label>
           <div class="champ-groupe">
-            <input type="url" id="champ-lien" inputmode="url" placeholder="https://…" required>
+            <input type="url" id="champ-lien" inputmode="url" placeholder="https://…">
             <button type="button" class="btn-secondaire" id="btn-coller">Coller</button>
           </div>
-
           <div id="apercu" class="apercu" hidden></div>
 
-          <div id="details" hidden>
-            <label class="etiquette" for="champ-titre">Titre</label>
-            <input type="text" id="champ-titre" maxlength="200" required>
-            <label class="etiquette" for="champ-categorie">Thème</label>
-            <select id="champ-categorie"></select>
-          </div>
+          <label class="etiquette" for="champ-titre">Titre</label>
+          <input type="text" id="champ-titre" placeholder="Ex. : Distribution de tracts au marché" required>
+          <label class="etiquette" for="champ-categorie">Rubrique</label>
+          <select id="champ-categorie"></select>
+          <label class="etiquette">Photo</label>
+          <div class="choix-photo" id="champ-photo"></div>
+          <label class="etiquette" for="champ-texte">Texte (facultatif)</label>
+          <textarea id="champ-texte" rows="5" class="auto" placeholder="Raconte l'action, l'événement, votre position…"></textarea>
 
           <div id="bloc-code">
             <label class="etiquette" for="champ-code">Code éditeur</label>
@@ -119,51 +135,50 @@
             <p class="aide petite">Demandé une seule fois sur ce téléphone.</p>
           </div>
 
-          <button type="submit" class="btn-principal" id="btn-publier">Publier l'article</button>
+          <button type="submit" class="btn-principal" id="btn-publier">Publier</button>
           <p class="message" id="message-ajout" role="status"></p>
         </form>
         <p class="aide petite astuce">💡 Astuce : depuis n'importe quel site, appuie sur <b>Partager</b> puis choisis <b>Nouvel Élan</b> (une fois l'application installée).</p>
       </div>
     </section>
 
+    <!-- MENU -->
+    <section class="page" id="page-menu" data-titre="Menu" hidden>
+      <div id="menu-contenu"></div>
+    </section>
+
     <!-- ASSOCIATION -->
-    <section class="page" id="page-asso" data-titre="L'association" hidden>
+    <section class="page" id="page-asso" data-titre="Qui sommes-nous" hidden>
       <div class="carte-form centre">
         <img src="/icons/logo.png" alt="" class="logo-grand">
         <p id="asso-description"></p>
+        <a class="btn-principal lien-bouton" id="btn-rejoindre-asso" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
       </div>
       <h3 class="section-titre">Nous suivre</h3>
       <div class="liste-liens" id="reseaux"></div>
-      <h3 class="section-titre">L'application</h3>
-      <div class="liste-liens">
-        <button class="ligne-lien" id="btn-installer" hidden><span>📲</span> Installer l'application sur ce téléphone</button>
-        <button class="ligne-lien" id="btn-partager-app"><span>🔗</span> Partager l'application</button>
-        <button class="ligne-lien" id="btn-mode-editeur"><span>✏️</span> <span id="txt-mode-editeur">Mode éditeur</span></button>
-      </div>
-      <p class="aide petite" id="aide-ios" hidden>Sur iPhone : appuie sur <b>Partager</b> en bas de Safari puis sur <b>« Sur l'écran d'accueil »</b>.</p>
     </section>
   </main>
 
   <nav class="barre" aria-label="Navigation principale">
     <button data-aller="accueil" aria-current="page">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
-      <span>Accueil</span>
+      <span>À la une</span>
     </button>
     <button data-aller="programme">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>
       <span>Programme</span>
     </button>
-    <button data-aller="articles">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
-      <span>Articles</span>
-    </button>
-    <button data-aller="ajouter" class="barre-plus">
+    <button data-aller="ajouter" class="barre-plus" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      <span>Ajouter</span>
+      <span>Publier</span>
     </button>
-    <button data-aller="asso">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.9.7 3.1 2.4 3.5 5.2"/></svg>
-      <span>Association</span>
+    <button data-rubrique="Tous" data-page="articles">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <span>Actualités</span>
+    </button>
+    <button data-aller="menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="18.5" cy="18" r="2.5"/></svg>
+      <span>Menu</span>
     </button>
   </nav>
 

@@ -215,3 +215,54 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .ed-boutons { display: flex; gap: 6px; margin-top: 10px; }
 .ed-boutons button { flex: 1; background: #fff; border: 1.5px solid var(--bord); border-radius: 10px; padding: 8px; font-size: 14px; font-weight: 600; }
 .ed-boutons .danger { color: var(--rouge); }
+
+/* ── En-tête façon journal : logo + rubriques ─────────────── */
+.entete { flex-direction: column; align-items: stretch; gap: 0; padding: calc(8px + env(safe-area-inset-top)) 0 0; }
+.entete-haut { display: flex; align-items: center; justify-content: space-between; padding: 0 16px 6px; }
+.entete-logo-btn { background: none; border: 0; padding: 0; display: flex; }
+.entete-rejoindre { background: var(--rouge); color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 8px 14px; border-radius: 999px; }
+.rubriques { display: flex; gap: 4px; overflow-x: auto; padding: 0 12px; scrollbar-width: none; scroll-behavior: smooth; }
+.rubriques::-webkit-scrollbar { display: none; }
+.rubriques button {
+  flex: none; background: none; border: 0; padding: 10px 8px 9px; font-size: 15px; font-weight: 600; color: var(--doux);
+  border-bottom: 3px solid transparent; white-space: nowrap;
+}
+.rubriques button[aria-current="page"] { color: var(--bleu); border-bottom-color: var(--bleu); }
+.cache { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rubrique-titre { margin: 4px 0 12px; font-size: 24px; color: var(--bleu); }
+
+/* ── Photos ───────────────────────────────────────────────── */
+.photo-large { display: block; width: 100%; max-height: 420px; object-fit: cover; border-radius: var(--rayon); margin-bottom: 14px; background: var(--fond); }
+.axe-corps .photo-large { margin-top: 4px; }
+.choix-photo { display: grid; gap: 8px; }
+.choix-photo-apercu { width: 100%; max-height: 240px; object-fit: cover; border-radius: 12px; }
+.choix-photo-boutons { display: flex; gap: 8px; }
+.choix-photo-boutons .btn-secondaire { padding: 11px 14px; }
+.choix-photo-boutons .btn-secondaire:first-child { flex: 1; }
+.btn-secondaire.danger { color: var(--rouge); }
+.banniere.avec-photo { background-size: cover; background-position: center; padding-top: 70px; }
+.axe-tuile.avec-photo { padding: 0 0 12px; overflow: hidden; }
+.axe-tuile.avec-photo .axe-tuile-titre, .axe-tuile.avec-photo .axe-tuile-nb { padding: 0 12px; }
+.axe-tuile-photo { width: 100%; aspect-ratio: 16/10; object-fit: cover; display: block; margin-bottom: 4px; }
+
+/* ── Lecture d'une publication ────────────────────────────── */
+.retour { display: block; margin: 0 0 12px; padding: 4px 0; }
+.lecture-titre { margin: 4px 0 6px; font-size: 25px; line-height: 1.25; }
+.lecture-infos { margin: 0 0 16px; color: var(--doux); font-size: 14px; }
+.lecture-texte { font-size: 17px; line-height: 1.65; margin-bottom: 18px; }
+.lecture-texte p { margin: 0 0 14px; }
+#lecture .btn-secondaire.large { margin-top: 0; margin-bottom: 10px; }
+
+/* ── Menu ─────────────────────────────────────────────────── */
+.menu-section .section-titre { margin-top: 18px; }
+.menu-section:first-child .section-titre { margin-top: 4px; }
+.menu-groupe { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); overflow: hidden; }
+.menu-ligne {
+  display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: 0; text-align: left;
+  padding: 14px 16px; text-decoration: none; color: inherit; font-weight: 600; border-top: 1px solid var(--bord);
+}
+.menu-groupe > .menu-ligne:first-child { border-top: 0; }
+.menu-icone { flex: none; width: 26px; text-align: center; font-size: 18px; color: var(--bleu); font-weight: 800; }
+.menu-texte { flex: 1; min-width: 0; }
+.menu-fleche { color: var(--doux); font-size: 20px; line-height: 1; }
+.menu-aide { padding: 10px 16px; margin: 0; border-top: 1px solid var(--bord); }
