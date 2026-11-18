@@ -6,7 +6,7 @@ Pensé pour tourner gratuitement sur un serveur GitHub (processeur seulement) :
 - un budget de temps arrête proprement l'entraînement et sauvegarde ce qui est fait.
 
 Sécurité : modèle téléchargé en safetensors uniquement (aucun code exécuté), révision affichée.
-Usage : python training/train.py --model Qwen/Qwen2.5-1.5B-Instruct --minutes 300 --out build/syrius
+Usage : python training/train.py --model Qwen/Qwen2.5-0.5B-Instruct --minutes 300 --out build/syrius
 """
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def generate(model, tok, system: str, question: str) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
+    ap.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
     ap.add_argument("--data", default=str(Path(__file__).with_name("data") / "syrius.jsonl"))
     ap.add_argument("--out", default="build/syrius")
     ap.add_argument("--minutes", type=float, default=300)

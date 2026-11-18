@@ -10,6 +10,9 @@ on:
       run_id:
         description: "Numéro de l'entraînement (vide = modèle de départ Qwen, pour tester la chaîne)"
         default: ""
+      model:
+        description: "IA de départ (si pas de numéro d'entraînement) : Qwen/Qwen2.5-0.5B-Instruct ou Qwen/Qwen2.5-1.5B-Instruct"
+        default: "Qwen/Qwen2.5-0.5B-Instruct"
       quant:
         description: "Compression : dynamic_wi8_afp32 (qualité) ou dynamic_wi4_afp32 (plus léger)"
         default: "dynamic_wi8_afp32"
@@ -51,10 +54,11 @@ jobs:
     timeout-minutes: 240
     env:
       QUANT: ${{ inputs.quant || 'dynamic_wi8_afp32' }}
+      BASE_MODEL: ${{ inputs.model || 'Qwen/Qwen2.5-0.5B-Instruct' }}
       SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' }}
-      # Après l'entraînement de la nuit : ce modèle-là. Sur une branche de travail : le dernier modèle connu.
-      RUN_ID: ${{ inputs.run_id || (github.event_name == 'workflow_run' && format('{0}', github.event.workflow_run.id)) || (github.event_name == 'push' && '43633673424' || '') }}
+      # Après l'entraînement de la nuit : ce modèle-là. Sur une branche de travail : essai avec le modèle de départ.
+      RUN_ID: ${{ inputs.run_id || (github.event_name == 'workflow_run' && format('{0}', github.event.workflow_run.id)) || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,14 +92,19 @@ jobs:
         run: |
           src="build/syrius"
           if [ -z "$RUN_ID" ]; then
-            src="$(.cvenv/bin/python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen2.5-1.5B-Instruct', allow_patterns=['*.json','*.safetensors','merges.txt','vocab.json']))")"
+            src="$(.cvenv/bin/python -c "from huggingface_hub import snapshot_download as s; print(s('$BASE_MODEL', allow_patterns=['*.json','*.safetensors','merges.txt','vocab.json']))")"
           fi
           .cvenv/bin/python -m litert_torch.generative.export_hf --model "$src" --output_dir out \
             --quantization_recipe "$QUANT" --prefill_lengths 256 --cache_length 1280 \
             --bundle_litert_lm True --use_v2 True --delete_in_memory_params True
           ls -la out
           f=$(ls out/*.litertlm | head -1)
-          name="syrius-1.5b-$( [ -z "$RUN_ID" ] && echo base || echo "$RUN_ID" )-$QUANT.litertlm"
+          # taille (0.5b / 1.5b) lue dans le modèle réellement converti
+          base=$BASE_MODEL
+          [ -n "$RUN_ID" ] && base=$(python3 -c "import json;print(json.load(open('build/syrius/syrius.json'))['base'])")
+          size=$(echo "$base" | grep -oiE '[0-9]\.[0-9]b' | head -1 | tr 'A-Z' 'a-z')
+          case "$size" in 0.5b|1.5b) ;; *) echo "Taille de modèle inconnue : $base"; exit 1;; esac
+          name="syrius-$size-$( [ -z "$RUN_ID" ] && echo base || echo "$RUN_ID" )-$QUANT.litertlm"
           mv "$f" "out/$name"
           sha256sum "out/$name" | tee "out/$name.sha256"
           echo "FILE=out/$name" >> "$GITHUB_ENV"

@@ -540,8 +540,52 @@ function addMessage(role, text) {
   renderText(view, role);
   state.views = (state.views || []).filter((v) => v.wrap.isConnected);
   state.views.push(view);
-  if (role === "assistant") addReportButton(view);
+  if (role === "assistant") { addReportButton(view); addFeedbackButtons(view); }
   return view;
+}
+
+// 👍 / 👎 (propriétaire seulement) : une bonne réponse, ou la bonne réponse écrite à la main, devient un exemple
+// d'entraînement de la nuit. Les discussions des autres membres de la famille ne servent jamais à entraîner Syrius.
+function addFeedbackButtons(view) {
+  if (state.settings?.account?.owner === false || state.offline) return;
+  const bar = document.createElement("div");
+  bar.className = "msg-feedback";
+  const mk = (icon, label) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "msg-report";
+    Icons.set(b, icon, label);
+    return b;
+  };
+  const up = mk("thumbup", "Bonne réponse"), down = mk("thumbdown", "À corriger");
+  const question = () => {
+    const i = state.views.indexOf(view);
+    for (let k = i - 1; k >= 0; k--) if (state.views[k].role === "user" && state.views[k].text.trim()) return state.views[k].text.trim();
+    return "";
+  };
+  const plain = () => view.bubble.children.length === 2 && !view.tools.childElementCount  // ni carte ni image ni action
+    && !view.body.querySelector("img, canvas, video, iframe");
+  const send = async (q, a, btn, done) => {
+    try {
+      await api("/api/training/examples", { method: "POST", body: JSON.stringify({ question: q.slice(0, 500), answer: a.slice(0, 2000) }) });
+      up.disabled = down.disabled = true;
+      Icons.set(btn, "check", done);
+    } catch (err) { alert("Non ajouté : " + err.message); }
+  };
+  up.addEventListener("click", () => {
+    const q = question(), a = (view.text || "").trim();
+    if (!plain()) return alert("Cette réponse contient une action (image, schéma…). Utilise 👎 pour écrire la bonne réponse.");
+    if (!q || !a) return;
+    send(q, a, up, "Ajoutée à l'entraînement");
+  });
+  down.addEventListener("click", () => {
+    const q = question();
+    if (!q) return;
+    const fix = prompt("Quelle aurait dû être la bonne réponse de Syrius ?\n(elle sera apprise cette nuit)");
+    if (fix && fix.trim()) send(q, fix.trim(), down, "Correction ajoutée");
+  });
+  bar.append(up, down);
+  view.wrap.append(bar);
 }
 
 // Signaler une réponse ou une image de l'IA (règle Google Play sur l'IA générative)
@@ -748,7 +792,8 @@ document.querySelector('#packs .pack[data-pack="syrius"] .syrius-up').addEventLi
     alert("Mets à jour l'application Syrius pour profiter des nouvelles versions de notre IA.");
     return;
   }
-  if (!confirm("Télécharger la nouvelle version de Syrius (1,6 Go) ? Utilise de préférence le Wi-Fi.")) return;
+  const go = (modelManifest.size / 1e9).toFixed(1).replace(".", ",");
+  if (!confirm(`Télécharger la nouvelle version de Syrius (${go} Go) ? Utilise de préférence le Wi-Fi.`)) return;
   const r = window.SyriusAndroid.syriusUpdate(JSON.stringify(modelManifest));
   if (r !== "ok") alert(r);
   setTimeout(refreshLocalBox, 500);
@@ -1697,13 +1742,29 @@ window.SyriusChat = {
 // Dans l'application Android, la voix passe par le téléphone (pont "SyriusAndroid").
 const Native = window.SyriusAndroid || null;
 
+// Texte lu à voix haute : sans code, sans émojis (« visage souriant »…), sans symboles ni actions cachées.
+function spokenText(text) {
+  return String(text || "").replace(/<tool_call>[\s\S]*?(<\/tool_call>|$)/g, " ").replace(/```[\s\S]*?```/g, " ")
+    .replace(/\p{Extended_Pictographic}|\p{Emoji_Modifier}|\uFE0F|\u200D/gu, "").replace(/https?:\/\/\S+/g, "lien")
+    .replace(/^\s*[-*•]\s+/gm, "").replace(/[`*#>_\[\]()|~]/g, "").replace(/([^.!?:;,\s])[ \t]*\n\s*/g, "$1. ").replace(/\s*\n\s*/g, " ")
+    .replace(/\s+/g, " ").trim().slice(0, 1500);
+}
+// Meilleure voix française du navigateur : les voix « naturelles » / réseau d'abord, la voix par défaut sinon.
+function bestFrenchVoice() {
+  const fr = speechSynthesis.getVoices().filter((v) => v.lang && /^fr/i.test(v.lang));
+  const score = (v) => (/natural|neural|online|google|premium|enhanced/i.test(v.name) ? 4 : 0)
+    + (/^fr[-_]fr/i.test(v.lang) ? 2 : 0) + (v.localService ? 0 : 1);
+  return fr.sort((a, b) => score(b) - score(a))[0] || null;
+}
 function speak(text) {
-  const clean = text.replace(/[`*#>_\[\]()]/g, "").replace(/https?:\/\/\S+/g, "lien").slice(0, 1500);
+  const clean = spokenText(text);
+  if (!clean) return;
   if (Native) { Native.speak(clean); return; }
   if (!("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(clean);
   u.lang = "fr-FR";
-  const voice = speechSynthesis.getVoices().find((v) => v.lang && v.lang.startsWith("fr"));
+  u.rate = 1.05;
+  const voice = bestFrenchVoice();
   if (voice) u.voice = voice;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);

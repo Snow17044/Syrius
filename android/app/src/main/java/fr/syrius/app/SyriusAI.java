@@ -41,7 +41,7 @@ class SyriusAI {
                     "06bf04fbfbaeee4dc867e8eb1c53cc8b7d4628f2f73cb86a9af177e6bab6d942", 1_567_653_904L),
     };
     static final String LABEL = "Syrius — notre IA (1,6 Go)";
-    private static final Pattern NAME = Pattern.compile("syrius-1\\.5b-[0-9]{6,15}-dynamic_wi[48]_afp32\\.litertlm");
+    private static final Pattern NAME = Pattern.compile("syrius-(0\\.5|1\\.5)b-[0-9]{6,15}-dynamic_wi[48]_afp32\\.litertlm");
 
     private final Context ctx;
     private final SharedPreferences prefs;
@@ -186,11 +186,15 @@ class SyriusAI {
                 List<Message> history = new ArrayList<>();
                 String last = "";
                 int n = msgs == null ? 0 : msgs.length();
-                for (int i = Math.max(0, n - 8); i < n; i++) {
+                // Le téléphone relit tout l'historique à chaque question : on n'en garde que le strict nécessaire
+                // (3 derniers messages + la question), sinon la réponse met de plus en plus longtemps à démarrer.
+                for (int i = Math.max(0, n - 4); i < n; i++) {
                     JSONObject m = msgs.optJSONObject(i);
                     if (m == null) continue;
                     String text = m.optString("text", "");
-                    if (text.length() > 900) text = text.substring(0, 900);
+                    boolean isLast = i == n - 1;
+                    int cap = isLast ? 900 : 350;
+                    if (text.length() > cap) text = text.substring(0, cap);
                     boolean assistant = "assistant".equals(m.optString("role"));
                     if (i == n - 1 && !assistant) {
                         last = text;
