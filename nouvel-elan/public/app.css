@@ -371,3 +371,11 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 
 .mauvaise-adresse { background: #fde8ea; color: #8a0a14; font-weight: 700; padding: 10px 16px; text-align: center; font-size: 15px; }
 .mauvaise-adresse a { color: var(--bleu); }
+
+/* ── Galerie des photos déjà envoyées ─────────────────────── */
+.galerie-lien { justify-self: start; padding: 4px 0; font-size: 14px; }
+.galerie { max-height: 85vh; display: flex; flex-direction: column; }
+.galerie-grille { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; overflow-y: auto; margin-top: 8px; }
+.galerie-photo { border: 0; padding: 0; background: none; display: grid; gap: 2px; }
+.galerie-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--fond); }
+.galerie-photo span { font-size: 11px; color: var(--doux); }

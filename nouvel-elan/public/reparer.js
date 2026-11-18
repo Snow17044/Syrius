@@ -47,6 +47,16 @@
     ligne(programme.axes.length ? "ok" : "ko", `Programme reçu : ${programme.axes.length} thème${programme.axes.length > 1 ? "s" : ""}, ${avecPhoto.length} avec photo`);
   } catch (e) { ligne("ko", `Programme non reçu : ${e.message}`); }
 
+  // Photos stockées sur le serveur (visible pour l'équipe, avec le code déjà enregistré sur ce téléphone)
+  let code = ""; try { code = localStorage.getItem("ne-code-editeur") || ""; } catch {}
+  if (code) {
+    try {
+      const r = await fetch(`/api/photo?liste=1&_=${t}`, { cache: "no-store", headers: { "X-Code-Editeur": code } });
+      const n = r.ok ? (await r.json()).photos.length : null;
+      ligne(n == null ? "info" : "ok", n == null ? "Photos stockées : vérification impossible" : `Photos stockées sur le serveur : ${n} (réutilisables avec « 🖼 Choisir parmi les photos déjà envoyées »)`);
+    } catch {}
+  }
+
   if (programme) {
     const zone = document.getElementById("photos");
     const essais = programme.axes.filter((a) => a.photo).map((a, i) => new Promise((fin) => {

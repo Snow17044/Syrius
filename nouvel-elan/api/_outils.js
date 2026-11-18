@@ -106,13 +106,20 @@ function pgPhotos() {
 export async function enregistrerPhoto(id, mime, base64) {
   if (sql) { await pgPhotos(); await sql`INSERT INTO ne_photos (id, mime, donnees) VALUES (${id}, ${mime}, ${base64})`; }
   else if (URL_REDIS && JETON_REDIS) await redis(["SET", `nouvel-elan:photo:${id}`, JSON.stringify({ mime, base64 })]);
-  else memoirePhotos.set(id, { mime, base64 });
+  else memoirePhotos.set(id, { mime, base64, cree: new Date().toISOString() });
 }
 
 export async function lirePhoto(id) {
   if (sql) { await pgPhotos(); const r = await sql`SELECT mime, donnees FROM ne_photos WHERE id = ${id}`; return r[0] ? { mime: r[0].mime, base64: r[0].donnees } : null; }
   if (URL_REDIS && JETON_REDIS) { const v = await redis(["GET", `nouvel-elan:photo:${id}`]); return v ? JSON.parse(v) : null; }
   return memoirePhotos.get(id) || null;
+}
+
+// Liste des photos envoyées (les plus récentes d'abord), pour pouvoir les réutiliser.
+export async function listerPhotos() {
+  if (sql) { await pgPhotos(); return (await sql`SELECT id, cree FROM ne_photos ORDER BY cree DESC LIMIT 300`).map((r) => ({ id: r.id, cree: r.cree })); }
+  if (URL_REDIS && JETON_REDIS) return []; // non disponible avec Redis
+  return [...memoirePhotos.entries()].map(([id, p]) => ({ id, cree: p.cree })).reverse();
 }
 
 export async function supprimerPhoto(id) {

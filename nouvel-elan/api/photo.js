@@ -1,7 +1,7 @@
 // POST /api/photo        → envoyer une photo (code éditeur requis), renvoie son adresse
 // GET  /api/photo?id=…   → afficher la photo (public)
 import { randomUUID } from "node:crypto";
-import { stockagePret, enregistrerPhoto, lirePhoto, codeValide, repondre, lireCorps } from "./_outils.js";
+import { stockagePret, enregistrerPhoto, lirePhoto, listerPhotos, codeValide, repondre, lireCorps } from "./_outils.js";
 
 const MAX_OCTETS = 3 * 1024 * 1024;
 
@@ -16,6 +16,11 @@ function format(octets) {
 export default async function handler(req, res) {
   if (!stockagePret()) return repondre(res, 503, { erreur: "La base de données n'est pas encore branchée." });
   try {
+    if (req.method === "GET" && new URL(req.url, "http://x").searchParams.has("liste")) {
+      // Galerie des photos déjà envoyées (équipe seulement)
+      if (!codeValide(req.headers["x-code-editeur"])) return repondre(res, 401, { erreur: "Code éditeur incorrect." });
+      return repondre(res, 200, { photos: (await listerPhotos()).map((p) => ({ url: `/api/photo?id=${p.id}`, cree: p.cree })) });
+    }
     if (req.method === "GET") {
       const id = new URL(req.url, "http://x").searchParams.get("id") || "";
       const photo = /^[a-f0-9-]{36}$/.test(id) ? await lirePhoto(id) : null;

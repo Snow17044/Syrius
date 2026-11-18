@@ -19,7 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "12 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "13 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -168,7 +168,7 @@ async function api(chemin, options = {}) {
   const r = await fetch(adresse, {
     cache: "no-store",
     ...options,
-    headers: { "Content-Type": "application/json", "X-Code-Editeur": codeEditeur(), ...(options.headers || {}) },
+    headers: { "Content-Type": "application/json", "X-Code-Editeur": codeEditeur(), "X-Version-App": String(parseInt(VERSION, 10)), ...(options.headers || {}) },
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(d.erreur || "Connexion impossible."), { statut: r.status });
@@ -308,6 +308,28 @@ function photoTheme(a, classe, secours) {
   return img;
 }
 
+// Galerie des photos déjà envoyées : permet de remettre une photo sans la renvoyer.
+async function choisirDansGalerie() {
+  if (!(await demanderCode())) return null;
+  let photos;
+  try { photos = (await api("/api/photo?liste=1")).photos; }
+  catch (e) { toast(e.message); return null; }
+  return new Promise((resolve) => {
+    const fond = el("div", { class: "modale-fond galerie-fond" });
+    const fermer = (r) => { fond.remove(); resolve(r); };
+    fond.append(el("div", { class: "modale galerie", role: "dialog", "aria-modal": "true", "aria-label": "Photos déjà envoyées" },
+      el("h3", {}, "Photos déjà envoyées"),
+      photos.length
+        ? el("div", { class: "galerie-grille" }, photos.map((ph) => el("button", { type: "button", class: "galerie-photo", onclick: () => fermer(ph.url) },
+            el("img", { src: ph.url, alt: "", loading: "lazy" }),
+            el("span", {}, new Date(ph.cree).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })))))
+        : el("p", {}, "Aucune photo envoyée pour l'instant."),
+      el("div", { class: "modale-boutons" }, el("button", { type: "button", class: "btn-secondaire", onclick: () => fermer(null) }, "Fermer"))));
+    fond.addEventListener("click", (e) => { if (e.target === fond) fermer(null); });
+    document.body.append(fond);
+  });
+}
+
 // Bloc « choisir une photo » réutilisable : envoi, cadrage, changer, retirer.
 function choixPhoto(conteneur, valeurInitiale = "", positionInitiale = CENTRE) {
   let valeur = valeurInitiale;
@@ -346,7 +368,11 @@ function choixPhoto(conteneur, valeurInitiale = "", positionInitiale = CENTRE) {
       el("div", { class: "choix-photo-boutons" },
         el("button", { type: "button", class: "btn-secondaire", disabled: enCours || null, onclick: () => entree.click() },
           enCours ? "Envoi…" : valeur ? "📷 Changer la photo" : "📷 Ajouter une photo"),
-        valeur && !enCours ? el("button", { type: "button", class: "btn-secondaire danger", onclick: () => { valeur = ""; position = CENTRE; rendre(); } }, "Retirer") : null));
+        valeur && !enCours ? el("button", { type: "button", class: "btn-secondaire danger", onclick: () => { valeur = ""; position = CENTRE; rendre(); } }, "Retirer") : null),
+      enCours ? null : el("button", { type: "button", class: "lien-btn galerie-lien", onclick: async () => {
+        const choisie = await choisirDansGalerie();
+        if (choisie) { valeur = choisie; position = CENTRE; rendre(); toast("Photo remise ✅ Touche-la pour la cadrer."); }
+      } }, "🖼 Choisir parmi les photos déjà envoyées"));
   }
 
   entree.addEventListener("change", async () => {

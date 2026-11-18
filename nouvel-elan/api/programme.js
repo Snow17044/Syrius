@@ -27,6 +27,22 @@ function nettoyer(c) {
   };
 }
 
+const VERSION_MINIMALE = 13;
+
+// Si une photo n'est pas du tout envoyée (champ absent), on garde celle déjà enregistrée.
+// Un champ vide ("") veut dire, lui, que la photo a été retirée volontairement.
+function garderPhotos(recu, ancien) {
+  const anciens = Array.isArray(ancien.axes) ? ancien.axes : [];
+  const trouver = (a) => anciens.find((x) => a?.id && x.id === a.id) || anciens.find((x) => x.titre && x.titre === a?.titre);
+  const r = { ...recu };
+  if (!("photo" in recu)) { r.photo = ancien.photo; r.photoPos = ancien.photoPos; }
+  r.axes = (Array.isArray(recu.axes) ? recu.axes : []).map((a) => {
+    const avant = trouver(a);
+    return a && !("photo" in a) && avant ? { ...a, photo: avant.photo, photoPos: avant.photoPos } : a;
+  });
+  return r;
+}
+
 export default async function handler(req, res) {
   if (!stockagePret()) return repondre(res, 503, { erreur: "La base de données n'est pas encore branchée." });
   try {
@@ -34,7 +50,14 @@ export default async function handler(req, res) {
     if (req.method === "PUT") {
       // Toute l'équipe (bureau, président, secrétaire) peut modifier le programme.
       if (!codeValide(req.headers["x-code-editeur"])) return repondre(res, 401, { erreur: "Code éditeur incorrect." });
-      const programme = nettoyer(await lireCorps(req, 4_000_000));
+      // Une appli pas à jour (ancienne version gardée en cache) ne connaît pas toutes les
+      // informations (ex. les photos) : elle les effacerait. On lui demande de se mettre à jour.
+      if (!(parseInt(req.headers["x-version-app"], 10) >= VERSION_MINIMALE)) {
+        return repondre(res, 426, { erreur: "Ton appli n'est pas à jour : Menu → 🔄 Actualiser l'application, puis recommence." });
+      }
+      const recu = await lireCorps(req, 4_000_000);
+      const ancien = (await lireContenu("programme")) || VIDE;
+      const programme = nettoyer(garderPhotos(recu, ancien));
       await ecrireContenu("programme", programme);
       return repondre(res, 200, { programme });
     }
