@@ -22,7 +22,8 @@ const CLE_PROGRAMME = "ne-programme";
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
-const etat = { articles: [], categories: [], filtre: "Tous", recherche: "", page: "accueil", lecture: null };
+const etat = { articles: [], categories: [], filtre: "Tous", recherche: "", page: "accueil", lecture: null, organiser: false };
+const axesOuverts = new Set(); // axes dont on voit les propositions en mode « Organiser »
 let programme = { slogan: "", intro: "", photo: "", lienAdhesion: "", axes: [], maj: null };
 
 function stocker(cle, valeur) { try { valeur == null ? localStorage.removeItem(cle) : localStorage.setItem(cle, valeur); } catch {} }
@@ -116,6 +117,7 @@ function aller(page, { historique = true } = {}) {
   window.scrollTo(0, 0);
   if (page === "ajouter") majBlocCode();
   if (page !== "programme" && !$("#programme-edition").hidden) fermerEdition();
+  if (page !== "programme") etat.organiser = false;
   majNavigation();
 }
 
@@ -156,7 +158,8 @@ function construireRubriques() {
 }
 
 document.addEventListener("click", (e) => {
-  if (e.target.closest('[data-action="modifier-programme"]')) { aller("programme"); return ouvrirEdition(); }
+  if (e.target.closest('[data-action="modifier-programme"]')) { etat.organiser = false; aller("programme"); return ouvrirEdition(); }
+  if (e.target.closest('[data-action="organiser"]')) { etat.organiser = true; aller("programme"); afficherProgramme(); return; }
   const r = e.target.closest("[data-rubrique]");
   if (r) return allerRubrique(r.dataset.rubrique);
   const b = e.target.closest("[data-aller]");
@@ -520,7 +523,8 @@ function afficherProgramme() {
   $("#programme-slogan").textContent = p.slogan || "Notre programme";
   $("#programme-intro").replaceChildren(...(vide ? [el("p", {}, "Notre programme est en cours de rédaction. Reviens très vite !")] : paragraphes(p.intro)));
   $("#programme-maj").textContent = p.maj ? `Mis à jour le ${new Date(p.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : "";
-  $("#programme-axes").replaceChildren(...p.axes.map((a, i) => el("details", { class: "axe", id: `axe-${a.id}` },
+  if (etat.organiser && peutModifierProgramme()) afficherOrganiser();
+  else $("#programme-axes").replaceChildren(...p.axes.map((a, i) => el("details", { class: "axe", id: `axe-${a.id}` },
     el("summary", {},
       el("span", { class: "axe-num", "aria-hidden": "true" }, a.icone || String(i + 1)),
       el("span", { class: "axe-titre" }, a.titre),
@@ -530,8 +534,92 @@ function afficherProgramme() {
       el("div", { class: "texte-long" }, paragraphes(a.resume)),
       a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null,
       peutModifierProgramme() ? el("button", { type: "button", class: "btn-secondaire large", onclick: () => ouvrirEdition(a.id) }, "✏️ Modifier cet axe") : null))));
+  $(".programme-actions").hidden = etat.organiser && peutModifierProgramme();
   $("#btn-modifier-programme").hidden = !peutModifierProgramme();
   construireMenu();
+}
+
+// ── Organiser le programme : réordonner et supprimer, enregistré tout de suite ──
+let enregistrementEnCours = false;
+
+async function sauverProgramme(nouveau, message) {
+  if (enregistrementEnCours) return;
+  enregistrementEnCours = true;
+  const avant = programme;
+  programme = nouveau;          // affichage immédiat…
+  afficherProgramme();
+  try {
+    programme = (await api("/api/programme", { method: "PUT", body: JSON.stringify(nouveau) })).programme;
+    stocker(CLE_PROGRAMME, JSON.stringify(programme));
+    toast(message);
+  } catch (err) {
+    programme = avant;          // …et retour en arrière si l'enregistrement échoue
+    if (err.statut === 401) { deconnecter(); majModeEditeur(); etat.organiser = false; }
+    toast(`Pas enregistré : ${err.message}`);
+  } finally {
+    enregistrementEnCours = false;
+    afficherProgramme();
+  }
+}
+
+const copieAxes = () => programme.axes.map((a) => ({ ...a, propositions: [...a.propositions] }));
+function deplacer(liste, i, sens) {
+  const j = i + sens;
+  if (j < 0 || j >= liste.length) return false;
+  [liste[i], liste[j]] = [liste[j], liste[i]];
+  return true;
+}
+
+function boutonOrga(texte, titre, action, classe = "") {
+  return el("button", { type: "button", class: `btn-orga ${classe}`, "aria-label": titre, title: titre, disabled: action ? null : true,
+    onclick: action }, texte);
+}
+
+function afficherOrganiser() {
+  const axes = programme.axes;
+  const n = axes.length;
+  const changerAxes = (nouveauxAxes, message) => sauverProgramme({ ...programme, axes: nouveauxAxes }, message);
+
+  remplir($("#programme-axes"),
+    el("div", { class: "orga-aide" },
+      el("strong", {}, "↕️ Organiser le programme"),
+      el("p", {}, "↑ ↓ pour changer l'ordre, 🗑 pour supprimer. Chaque changement est enregistré tout de suite.")),
+    n ? null : etatVide("Le programme n'a aucun axe."),
+    axes.map((a, i) => {
+      const ouvert = axesOuverts.has(a.id);
+      return el("div", { class: "orga-axe" },
+        el("div", { class: "orga-ligne" },
+          el("span", { class: "axe-num", "aria-hidden": "true" }, a.icone || String(i + 1)),
+          el("span", { class: "orga-titre" }, a.titre),
+          el("div", { class: "orga-boutons" },
+            boutonOrga("↑", "Monter l'axe", i > 0 ? () => { const x = copieAxes(); deplacer(x, i, -1); changerAxes(x, "Ordre enregistré ✅"); } : null),
+            boutonOrga("↓", "Descendre l'axe", i < n - 1 ? () => { const x = copieAxes(); deplacer(x, i, 1); changerAxes(x, "Ordre enregistré ✅"); } : null),
+            boutonOrga("🗑", "Supprimer l'axe", () => {
+              const nb = a.propositions.length;
+              if (!confirm(`Supprimer l'axe « ${a.titre} »${nb ? ` et ses ${nb} proposition${nb > 1 ? "s" : ""}` : ""} ?`)) return;
+              changerAxes(copieAxes().filter((_, k) => k !== i), "Axe supprimé");
+            }, "danger"))),
+        a.propositions.length
+          ? el("button", { type: "button", class: "orga-depli", "aria-expanded": String(ouvert),
+              onclick: () => { ouvert ? axesOuverts.delete(a.id) : axesOuverts.add(a.id); afficherProgramme(); } },
+              `${ouvert ? "▾" : "▸"} ${a.propositions.length} proposition${a.propositions.length > 1 ? "s" : ""}`)
+          : el("p", { class: "orga-vide" }, "Aucune proposition"),
+        ouvert ? el("ol", { class: "orga-props" }, a.propositions.map((prop, k) => el("li", {},
+          el("span", { class: "orga-prop-texte" }, prop),
+          el("div", { class: "orga-boutons" },
+            boutonOrga("↑", "Monter la proposition", k > 0 ? () => { const x = copieAxes(); deplacer(x[i].propositions, k, -1); changerAxes(x, "Ordre enregistré ✅"); } : null),
+            boutonOrga("↓", "Descendre la proposition", k < a.propositions.length - 1 ? () => { const x = copieAxes(); deplacer(x[i].propositions, k, 1); changerAxes(x, "Ordre enregistré ✅"); } : null),
+            boutonOrga("🗑", "Supprimer la proposition", () => {
+              if (!confirm(`Supprimer cette proposition ?\n\n« ${prop.length > 140 ? prop.slice(0, 140) + "…" : prop} »`)) return;
+              const x = copieAxes(); x[i].propositions.splice(k, 1); changerAxes(x, "Proposition supprimée");
+            }, "danger"))))) : null);
+    }),
+    el("button", { type: "button", class: "btn-principal", onclick: () => { etat.organiser = false; afficherProgramme(); window.scrollTo(0, 0); } }, "✓ Terminer"),
+    n || programme.intro || programme.slogan ? el("button", { type: "button", class: "btn-secondaire large danger", onclick: () => {
+      if (!confirm("Vider TOUT le programme (slogan, introduction, photo et tous les axes) ?")) return;
+      if (prompt("Pour confirmer, écris : SUPPRIMER") !== "SUPPRIMER") return toast("Rien n'a été supprimé.");
+      sauverProgramme({ ...programme, slogan: "", intro: "", photo: "", axes: [] }, "Programme vidé");
+    } }, "🗑 Vider tout le programme") : null);
 }
 
 $("#btn-partager-programme").addEventListener("click", () => partager("Le programme de Nouvel Élan", `${location.origin}/#programme`));

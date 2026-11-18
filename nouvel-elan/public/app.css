@@ -277,3 +277,24 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .btn-equipe-rouge { background: var(--rouge); border-color: var(--rouge); color: #fff; }
 #programme-lecture > .barre-equipe { margin: 0 0 14px; }
 .axe-corps .btn-secondaire.large { margin-top: 14px; }
+
+/* ── Mode « Organiser le programme » ──────────────────────── */
+.orga-aide { background: #fff7d6; border: 1.5px solid #f0d77a; border-radius: 12px; padding: 12px 14px; }
+.orga-aide p { margin: 4px 0 0; font-size: 14px; color: var(--doux); }
+.orga-axe { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); padding: 12px; border-left: 5px solid var(--bleu); }
+.orga-axe:nth-child(odd) { border-left-color: var(--rouge); }
+.orga-ligne { display: flex; align-items: center; gap: 10px; }
+.orga-titre { flex: 1; min-width: 0; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.orga-boutons { display: flex; gap: 6px; flex: none; }
+.btn-orga { width: 42px; height: 42px; border-radius: 10px; border: 1.5px solid var(--bord); background: var(--fond); color: var(--bleu); font-size: 18px; font-weight: 800; display: grid; place-items: center; }
+.btn-orga:disabled { opacity: .3; }
+.btn-orga.danger { color: var(--rouge); }
+.orga-depli { margin: 10px 0 0 44px; background: none; border: 0; padding: 4px 0; color: var(--bleu); font-weight: 600; font-size: 14px; }
+.orga-vide { margin: 8px 0 0 44px; font-size: 13px; color: var(--doux); }
+.orga-props { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: prop; }
+.orga-props li { display: flex; align-items: center; gap: 8px; background: var(--fond); border-radius: 10px; padding: 6px 6px 6px 10px; counter-increment: prop; }
+.orga-props li::before { content: counter(prop) "."; font-weight: 700; color: var(--doux); font-size: 13px; flex: none; }
+.orga-prop-texte { flex: 1; min-width: 0; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.orga-props .btn-orga { width: 36px; height: 36px; font-size: 15px; background: #fff; }
+#programme-axes > .btn-principal { margin-top: 6px; }
+#programme-axes > .btn-secondaire.large { margin-top: 0; }
