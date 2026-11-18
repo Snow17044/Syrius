@@ -1,0 +1,9 @@
+{
+  "name": "nouvel-elan",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "NE_DEV=1 node essai-local.mjs"
+  }
+}

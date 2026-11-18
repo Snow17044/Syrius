@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nouvel Élan</title>
+  <meta name="description" content="L'application de l'association Nouvel Élan : actualités, événements et idées.">
+  <meta name="theme-color" content="#00246A">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Nouvel Élan">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="entete">
+    <img src="/icons/logo.png" alt="Nouvel Élan" class="entete-logo">
+    <h1 class="entete-titre" id="titre-page">Accueil</h1>
+  </header>
+
+  <main id="contenu">
+    <!-- ACCUEIL -->
+    <section class="page" id="page-accueil" data-titre="Accueil">
+      <div class="banniere">
+        <p class="banniere-sur">Association politique jeune</p>
+        <h2>Bienvenue sur <span>Nouvel Élan</span></h2>
+        <p>Retrouve ici toute l'actualité de l'association : articles, événements et prises de position.</p>
+      </div>
+      <h3 class="section-titre">À la une</h3>
+      <div id="une"></div>
+      <h3 class="section-titre">Explorer par thème</h3>
+      <div class="puces" id="puces-accueil"></div>
+      <div class="ligne-titre">
+        <h3 class="section-titre">Derniers articles</h3>
+        <button class="lien-btn" data-aller="articles">Tout voir →</button>
+      </div>
+      <div class="liste" id="derniers"></div>
+    </section>
+
+    <!-- ARTICLES -->
+    <section class="page" id="page-articles" data-titre="Articles" hidden>
+      <label class="recherche">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+        <input type="search" id="recherche" placeholder="Rechercher un article…" aria-label="Rechercher un article">
+      </label>
+      <div class="puces" id="puces-articles"></div>
+      <p class="compteur" id="compteur"></p>
+      <div class="liste" id="liste-articles"></div>
+    </section>
+
+    <!-- AJOUTER -->
+    <section class="page" id="page-ajouter" data-titre="Ajouter un article" hidden>
+      <div class="carte-form">
+        <h2>Ajouter un article</h2>
+        <p class="aide">Colle simplement le lien de l'article. Le titre et l'image se remplissent tout seuls.</p>
+        <form id="form-ajout" autocomplete="off">
+          <label class="etiquette" for="champ-lien">Lien de l'article</label>
+          <div class="champ-groupe">
+            <input type="url" id="champ-lien" inputmode="url" placeholder="https://…" required>
+            <button type="button" class="btn-secondaire" id="btn-coller">Coller</button>
+          </div>
+
+          <div id="apercu" class="apercu" hidden></div>
+
+          <div id="details" hidden>
+            <label class="etiquette" for="champ-titre">Titre</label>
+            <input type="text" id="champ-titre" maxlength="200" required>
+            <label class="etiquette" for="champ-categorie">Thème</label>
+            <select id="champ-categorie"></select>
+          </div>
+
+          <div id="bloc-code">
+            <label class="etiquette" for="champ-code">Code éditeur</label>
+            <input type="password" id="champ-code" placeholder="Donné par le bureau de l'association">
+            <p class="aide petite">Demandé une seule fois sur ce téléphone.</p>
+          </div>
+
+          <button type="submit" class="btn-principal" id="btn-publier">Publier l'article</button>
+          <p class="message" id="message-ajout" role="status"></p>
+        </form>
+        <p class="aide petite astuce">💡 Astuce : depuis n'importe quel site, appuie sur <b>Partager</b> puis choisis <b>Nouvel Élan</b> (une fois l'application installée).</p>
+      </div>
+    </section>
+
+    <!-- ASSOCIATION -->
+    <section class="page" id="page-asso" data-titre="L'association" hidden>
+      <div class="carte-form centre">
+        <img src="/icons/logo.png" alt="" class="logo-grand">
+        <p id="asso-description"></p>
+      </div>
+      <h3 class="section-titre">Nous suivre</h3>
+      <div class="liste-liens" id="reseaux"></div>
+      <h3 class="section-titre">L'application</h3>
+      <div class="liste-liens">
+        <button class="ligne-lien" id="btn-installer" hidden><span>📲</span> Installer l'application sur ce téléphone</button>
+        <button class="ligne-lien" id="btn-partager-app"><span>🔗</span> Partager l'application</button>
+        <button class="ligne-lien" id="btn-mode-editeur"><span>✏️</span> <span id="txt-mode-editeur">Mode éditeur</span></button>
+      </div>
+      <p class="aide petite" id="aide-ios" hidden>Sur iPhone : appuie sur <b>Partager</b> en bas de Safari puis sur <b>« Sur l'écran d'accueil »</b>.</p>
+    </section>
+  </main>
+
+  <nav class="barre" aria-label="Navigation principale">
+    <button data-aller="accueil" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+      <span>Accueil</span>
+    </button>
+    <button data-aller="articles">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <span>Articles</span>
+    </button>
+    <button data-aller="ajouter" class="barre-plus">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span>Ajouter</span>
+    </button>
+    <button data-aller="asso">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.9.7 3.1 2.4 3.5 5.2"/></svg>
+      <span>Association</span>
+    </button>
+  </nav>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
