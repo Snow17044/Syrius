@@ -28,8 +28,13 @@ Elle ne dépend d'aucun site existant, et il n'y a ni boutique d'applications ni
 3. Nom du projet : `nouvel-elan`. Clique sur **Deploy**.
 
 ### 2. Brancher la base de données (où sont rangés les articles)
-1. Dans le projet Vercel : onglet **Storage** → **Create Database** → **Upstash for Redis** (offre gratuite).
-2. Relie-la au projet `nouvel-elan`. Les variables `KV_REST_API_URL` et `KV_REST_API_TOKEN` sont ajoutées toutes seules.
+1. Dans le projet Vercel : onglet **Storage** → **Create Database** → **Neon (Postgres)** (offre gratuite).
+   Upstash for Redis fonctionne aussi.
+2. Relie-la au projet. Les variables (`DATABASE_URL`…) sont ajoutées toutes seules,
+   et l'application crée sa table au premier lancement.
+
+> Déjà fait : l'application est en ligne sur **https://nouvelles-elan.vercel.app**
+> (projet Vercel `nouvelles-elan`, base Neon branchée, code éditeur enregistré).
 
 ### 3. Choisir le code éditeur
 1. **Settings → Environment Variables** → ajoute `NE_CODE_EDITEUR` avec un code solide

@@ -1,15 +1,25 @@
 // Outils communs aux fonctions serveur de Nouvel Élan (stockage + réponses).
 import { timingSafeEqual, createHash } from "node:crypto";
+import { neon } from "@neondatabase/serverless";
 
 const URL_REDIS = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const JETON_REDIS = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const CLE = "nouvel-elan:articles";
+// Base Postgres (Neon), branchée depuis l'onglet Storage de Vercel.
+const URL_PG = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const sql = URL_PG ? neon(URL_PG) : null;
+let tablePrete = null;
+function pg() {
+  tablePrete ??= sql`CREATE TABLE IF NOT EXISTS ne_articles (id text PRIMARY KEY, donnees jsonb NOT NULL)`
+    .catch((e) => { tablePrete = null; throw e; });
+  return tablePrete;
+}
 
 // Stockage en mémoire, uniquement pour les essais sur ordinateur (NE_DEV=1).
 const memoire = new Map();
 
 export function stockagePret() {
-  return Boolean((URL_REDIS && JETON_REDIS) || process.env.NE_DEV === "1");
+  return Boolean(sql || (URL_REDIS && JETON_REDIS) || process.env.NE_DEV === "1");
 }
 
 async function redis(commande) {
@@ -26,7 +36,10 @@ async function redis(commande) {
 
 export async function lireArticles() {
   let valeurs;
-  if (URL_REDIS && JETON_REDIS) {
+  if (sql) {
+    await pg();
+    valeurs = (await sql`SELECT donnees::text AS v FROM ne_articles`).map((r) => r.v);
+  } else if (URL_REDIS && JETON_REDIS) {
     const plat = (await redis(["HGETALL", CLE])) || [];
     valeurs = plat.filter((_, i) => i % 2 === 1);
   } else {
@@ -40,16 +53,19 @@ export async function lireArticles() {
 
 export async function enregistrerArticle(a) {
   const v = JSON.stringify(a);
+  if (sql) { await pg(); await sql`INSERT INTO ne_articles (id, donnees) VALUES (${a.id}, ${v}::jsonb) ON CONFLICT (id) DO UPDATE SET donnees = EXCLUDED.donnees`; return; }
   if (URL_REDIS && JETON_REDIS) await redis(["HSET", CLE, a.id, v]);
   else memoire.set(a.id, v);
 }
 
 export async function lireArticle(id) {
+  if (sql) { await pg(); const r = await sql`SELECT donnees::text AS v FROM ne_articles WHERE id = ${id}`; return r[0] ? JSON.parse(r[0].v) : null; }
   const v = URL_REDIS && JETON_REDIS ? await redis(["HGET", CLE, id]) : memoire.get(id);
   return v ? JSON.parse(v) : null;
 }
 
 export async function supprimerArticle(id) {
+  if (sql) { await pg(); await sql`DELETE FROM ne_articles WHERE id = ${id}`; return; }
   if (URL_REDIS && JETON_REDIS) await redis(["HDEL", CLE, id]);
   else memoire.delete(id);
 }
