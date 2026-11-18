@@ -19,7 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "13 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "14 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -978,6 +978,40 @@ if (location.hostname.endsWith(".vercel.app") && location.hostname !== ADRESSE) 
     el("a", { href: `https://${ADRESSE}/installer` }, "Ouvrir la bonne adresse")));
 }
 
+// ── Écran de bienvenue ───────────────────────────────────────
+// À la première visite (site ou appli non installée) : présentation + proposition d'installer.
+// « Plus tard » le cache pendant 2 semaines ; jamais affiché si l'appli est déjà installée.
+const CLE_BIENVENUE = "ne-bienvenue";
+const DELAI_BIENVENUE = 14 * 86400000;
+
+function bienvenueAMontrer() {
+  if (installee || codeEditeur()) return false;
+  if (location.hash.startsWith("#acces=") || location.search.includes("ajouter=")) return false;
+  const vu = Number(lire(CLE_BIENVENUE) || 0);
+  return !vu || Date.now() - vu > DELAI_BIENVENUE;
+}
+
+function afficherBienvenue() {
+  const fond = el("div", { class: "bienvenue-fond", role: "dialog", "aria-modal": "true", "aria-labelledby": "bienvenue-titre" });
+  const fermer = () => { stocker(CLE_BIENVENUE, String(Date.now())); fond.remove(); };
+  const themes = programme.axes.slice(0, 4).map((a) => el("li", {}, el("span", { "aria-hidden": "true" }, a.icone || "🚩"), a.titre));
+  fond.append(el("div", { class: "bienvenue" },
+    el("img", { src: "/icons/logo.png", alt: "Nouvel Élan", class: "bienvenue-logo" }),
+    el("h2", { id: "bienvenue-titre" }, "Bienvenue !"),
+    el("p", { class: "bienvenue-texte" }, ASSOCIATION.description),
+    el("ul", { class: "bienvenue-points" },
+      el("li", {}, "🚩 Programme"), el("li", {}, "📰 Actualités"), el("li", {}, "✊ Nous rejoindre")),
+    themes.length ? el("div", { class: "bienvenue-themes" }, el("p", {}, "Au programme :"), el("ul", {}, themes)) : null,
+    el("p", { class: "bienvenue-question" }, "Tu veux installer l'application sur ton téléphone ?"),
+    el("button", { type: "button", class: "bouton-bienvenue", onclick: async () => {
+      if (invitationInstall) { fermer(); await installer(); }
+      else { stocker(CLE_BIENVENUE, String(Date.now())); location.href = "/installer"; }
+    } }, "📲 Oui, installer l'application"),
+    el("button", { type: "button", class: "bienvenue-plus-tard", onclick: fermer }, "Plus tard, découvrir le site →"),
+    el("p", { class: "bienvenue-petit" }, "Gratuit · sans compte · sans publicité")));
+  document.body.append(fond);
+}
+
 // ── Démarrage ────────────────────────────────────────────────
 // Lien partagé vers l'application (menu « Partager » du téléphone) ou lien du type /?ajouter=https://…
 const params = new URLSearchParams(location.search);
@@ -995,7 +1029,7 @@ if (lienRecu) {
   routeDepuisHash();
   chargerArticles();
 }
-chargerProgramme();
+chargerProgramme().finally(() => { if (bienvenueAMontrer()) afficherBienvenue(); });
 
 // ── Mises à jour de l'appli ─────────────────────────────────
 // À chaque ouverture, on vérifie s'il existe une nouvelle version ; si oui, elle remplace

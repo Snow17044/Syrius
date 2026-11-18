@@ -379,3 +379,39 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .galerie-photo { border: 0; padding: 0; background: none; display: grid; gap: 2px; }
 .galerie-photo img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--fond); }
 .galerie-photo span { font-size: 11px; color: var(--doux); }
+
+/* ── Écran de bienvenue ───────────────────────────────────── */
+.bienvenue-fond {
+  position: fixed; inset: 0; z-index: 60; overflow-y: auto; display: grid; place-items: center;
+  padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));
+  background: linear-gradient(160deg, #00246A 0%, #1d3f8f 60%, #6b1b3d 120%);
+  animation: apparaitre .25s ease-out;
+}
+@keyframes apparaitre { from { opacity: 0; } to { opacity: 1; } }
+.bienvenue { width: 100%; max-width: 420px; background: #fff; border-radius: 24px; padding: 26px 22px 18px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.bienvenue-logo { width: 190px; max-width: 65%; display: block; margin: 0 auto 8px; }
+.bienvenue h2 { margin: 0 0 8px; font-size: 27px; color: var(--bleu); }
+.bienvenue-texte { margin: 0 0 14px; color: var(--doux); }
+.bienvenue-points, .bienvenue-themes ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; text-align: left; }
+.bienvenue-points li, .bienvenue-themes li { display: flex; gap: 10px; align-items: flex-start; background: var(--fond); border-radius: 12px; padding: 10px 12px; font-weight: 600; }
+.bienvenue-points li span, .bienvenue-themes li span { flex: none; }
+.bienvenue-themes { margin-top: 12px; text-align: left; }
+.bienvenue-themes p { margin: 0 0 6px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--rouge); }
+.bienvenue-themes li { font-size: 14px; background: #fff; border: 1.5px solid var(--bord); }
+.bienvenue-question { margin: 18px 0 8px; font-weight: 700; color: var(--texte); }
+.bouton-bienvenue { width: 100%; border: 0; border-radius: 14px; padding: 16px; background: var(--rouge); color: #fff; font-weight: 800; font-size: 18px; }
+.bienvenue-plus-tard { width: 100%; margin-top: 8px; border: 0; background: none; color: var(--doux); font-weight: 600; padding: 12px; font-size: 15px; }
+.bienvenue-petit { margin: 2px 0 0; font-size: 13px; color: var(--doux); }
+/* Version compacte : tout tient sur un écran de téléphone */
+.bienvenue { padding: 20px 18px 12px; }
+.bienvenue-logo { width: 150px; margin-bottom: 4px; }
+.bienvenue h2 { font-size: 24px; margin-bottom: 6px; }
+.bienvenue-texte { font-size: 15px; line-height: 1.45; margin-bottom: 10px; }
+.bienvenue-points { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.bienvenue-points li { display: inline-block; padding: 6px 10px; font-size: 13px; border-radius: 999px; }
+.bienvenue-themes { margin-top: 12px; }
+.bienvenue-themes ul { gap: 6px; }
+.bienvenue-themes li { padding: 8px 10px; font-size: 13px; line-height: 1.3; }
+.bienvenue-question { margin: 14px 0 8px; }
+.bouton-bienvenue { padding: 14px; font-size: 17px; }
+.bienvenue-plus-tard { margin-top: 4px; padding: 10px; }
