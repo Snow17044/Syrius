@@ -128,6 +128,12 @@ export function imagePropre(t) {
   return lienPropre(s);
 }
 
+// Point de cadrage d'une photo, ex. "40% 25%".
+export function positionPropre(t) {
+  const m = String(t ?? "").match(/^(\d{1,3})% (\d{1,3})%$/);
+  return m && +m[1] <= 100 && +m[2] <= 100 ? `${+m[1]}% ${+m[2]}%` : "";
+}
+
 // Codes d'accès, comparés sans révéler d'indice par le temps de réponse.
 const empreinte = (s) => createHash("sha256").update(String(s)).digest();
 const egal = (a, b) => timingSafeEqual(empreinte(a), empreinte(b));

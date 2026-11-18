@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import {
   stockagePret, lireArticles, enregistrerArticle, lireArticle, supprimerArticle,
-  codeValide, repondre, lireCorps, lienPropre, textePropre, paragraphe, imagePropre, supprimerPhoto,
+  codeValide, repondre, lireCorps, lienPropre, textePropre, paragraphe, imagePropre, supprimerPhoto, positionPropre,
 } from "./_outils.js";
 
 export const CATEGORIES = ["Communiqués", "Événements", "Actions de terrain", "Idées & tribunes", "Presse", "Vidéos"];
@@ -41,6 +41,7 @@ export default async function handler(req, res) {
         resume: textePropre(c.resume, 600) || textePropre(texte, 220),
         texte,
         image,
+        imagePos: positionPropre(c.imagePos),
         source: url ? (textePropre(c.source, 80) || new URL(url).hostname.replace(/^www\./, "")) : "Nouvel Élan",
         categorie: CATEGORIES.includes(c.categorie) ? c.categorie : CATEGORIES[0],
         date: new Date().toISOString(),

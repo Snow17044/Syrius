@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Installer Nouvel Élan</title>
+  <meta name="description" content="Installe l'application Nouvel Élan sur ton téléphone : notre programme et nos actualités, en un geste.">
+  <meta name="theme-color" content="#00246A">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Nouvel Élan">
+  <meta property="og:title" content="Installe l'application Nouvel Élan">
+  <meta property="og:description" content="Notre programme et nos actualités, directement sur ton téléphone.">
+  <meta property="og:image" content="https://nouvelles-elan.vercel.app/icons/icon-512.png">
+  <meta property="og:url" content="https://nouvelles-elan.vercel.app/installer">
+  <link rel="stylesheet" href="/installer.css">
+</head>
+<body>
+  <main class="carte">
+    <img src="/icons/logo.png" alt="Nouvel Élan" class="logo">
+    <h1>Installe l'application</h1>
+    <p class="sous-titre">Notre programme et nos actualités, directement sur ton téléphone. Gratuit, sans compte, sans publicité.</p>
+
+    <!-- Un seul de ces blocs est affiché, selon le téléphone -->
+    <section id="deja" hidden>
+      <p class="ok">✅ L'application est déjà installée sur ce téléphone.</p>
+      <a class="bouton" href="/">Ouvrir l'application</a>
+    </section>
+
+    <section id="integre-android" hidden>
+      <p class="alerte">Tu es dans le navigateur d'une autre appli (Instagram, Facebook…) : l'installation n'y est pas possible.</p>
+      <a class="bouton" id="ouvrir-chrome" href="#">Ouvrir dans Chrome</a>
+      <p class="petit">Si rien ne se passe : touche <b>⋮</b> en haut à droite puis <b>« Ouvrir dans le navigateur »</b>.</p>
+    </section>
+
+    <section id="integre-ios" hidden>
+      <p class="alerte">Tu es dans le navigateur d'une autre appli (Instagram, Facebook…) : l'installation n'y est pas possible.</p>
+      <ol class="etapes">
+        <li>Touche <b>⋯</b> (ou <b>↗</b>) en haut ou en bas de l'écran.</li>
+        <li>Choisis <b>« Ouvrir dans Safari »</b>.</li>
+        <li>Reviens sur cette page dans Safari et suis les étapes.</li>
+      </ol>
+    </section>
+
+    <section id="android" hidden>
+      <button class="bouton" id="installer" type="button" hidden>📲 Installer l'application</button>
+      <div id="android-manuel">
+        <ol class="etapes">
+          <li>Touche <b>⋮</b> en haut à droite de Chrome.</li>
+          <li>Choisis <b>« Installer l'application »</b> (ou <b>« Ajouter à l'écran d'accueil »</b>).</li>
+          <li>Confirme : l'icône Nouvel Élan apparaît sur ton écran d'accueil.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="ios" hidden>
+      <ol class="etapes">
+        <li>En bas de Safari, touche <b>Partager</b> <span class="icone-partage" aria-hidden="true">⬆︎</span> (le carré avec une flèche).</li>
+        <li>Fais défiler et choisis <b>« Sur l'écran d'accueil »</b>.</li>
+        <li>Touche <b>« Ajouter »</b> : l'icône Nouvel Élan apparaît sur ton écran d'accueil.</li>
+      </ol>
+    </section>
+
+    <section id="ordinateur" hidden>
+      <p>Pour installer l'application sur ton téléphone, ouvre cette adresse avec lui :</p>
+      <p class="adresse" id="adresse"></p>
+      <p class="petit">Sur ordinateur (Chrome ou Edge), tu peux aussi cliquer sur l'icône d'installation à droite de la barre d'adresse.</p>
+    </section>
+
+    <section id="installee" hidden>
+      <p class="ok">🎉 C'est installé ! Retrouve l'icône Nouvel Élan sur ton écran d'accueil.</p>
+      <a class="bouton" href="/">Ouvrir l'application</a>
+    </section>
+
+    <a class="lien" href="/">Continuer sans installer →</a>
+  </main>
+  <script src="/installer.js"></script>
+</body>
+</html>

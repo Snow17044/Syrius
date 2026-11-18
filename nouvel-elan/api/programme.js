@@ -1,6 +1,6 @@
 // GET /api/programme → le programme de l'association (public)
 // PUT /api/programme → le remplacer (code éditeur requis)
-import { stockagePret, lireContenu, ecrireContenu, codeValide, repondre, lireCorps, textePropre, lienPropre, paragraphe, imagePropre } from "./_outils.js";
+import { stockagePret, lireContenu, ecrireContenu, codeValide, repondre, lireCorps, textePropre, lienPropre, paragraphe, imagePropre, positionPropre } from "./_outils.js";
 
 const VIDE = { slogan: "", intro: "", photo: "", lienAdhesion: "", axes: [], maj: null };
 
@@ -11,6 +11,7 @@ function nettoyer(c) {
     icone: textePropre(a?.icone, 16),
     titre: textePropre(a?.titre, 500),
     photo: a?.photo ? imagePropre(a.photo) : "",
+    photoPos: positionPropre(a?.photoPos),
     resume: paragraphe(a?.resume, 200000),
     propositions: (Array.isArray(a?.propositions) ? a.propositions : [])
       .map((p) => textePropre(p, 20000)).filter(Boolean).slice(0, 2000),
@@ -19,6 +20,7 @@ function nettoyer(c) {
     slogan: textePropre(c.slogan, 500),
     intro: paragraphe(c.intro, 200000),
     photo: c.photo ? imagePropre(c.photo) : "",
+    photoPos: positionPropre(c.photoPos),
     lienAdhesion: c.lienAdhesion ? lienPropre(c.lienAdhesion) : "",
     axes,
     maj: new Date().toISOString(),

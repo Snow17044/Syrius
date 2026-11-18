@@ -19,7 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "7 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "8 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -283,16 +283,54 @@ async function demanderCode() {
   return codeEditeur();
 }
 
-// Bloc « choisir une photo » réutilisable : aperçu, changer, retirer.
-function choixPhoto(conteneur, valeurInitiale = "") {
+// ── Cadrage des photos ───────────────────────────────────────
+// On retient le « point important » de la photo (x %, y %) : l'appli s'en sert pour cadrer
+// la photo dans tous les formats (tuile, bannière, grande photo) sans couper l'essentiel.
+const CENTRE = "50% 50%";
+const positionValide = (p) => (/^\d{1,3}% \d{1,3}%$/.test(p || "") ? p : CENTRE);
+function cadrer(img, position) { img.style.objectPosition = positionValide(position); return img; }
+
+// Bloc « choisir une photo » réutilisable : envoi, cadrage, changer, retirer.
+function choixPhoto(conteneur, valeurInitiale = "", positionInitiale = CENTRE) {
   let valeur = valeurInitiale;
+  let position = positionValide(positionInitiale);
   const entree = el("input", { type: "file", accept: "image/*", hidden: true, class: "entree-photo" });
-  const rendre = (enCours = false) => remplir(conteneur, entree,
-    valeur ? el("img", { src: valeur, alt: "", class: "choix-photo-apercu" }) : null,
-    el("div", { class: "choix-photo-boutons" },
-      el("button", { type: "button", class: "btn-secondaire", disabled: enCours || null, onclick: () => entree.click() },
-        enCours ? "Envoi…" : valeur ? "📷 Changer la photo" : "📷 Ajouter une photo"),
-      valeur && !enCours ? el("button", { type: "button", class: "btn-secondaire danger", onclick: () => { valeur = ""; rendre(); } }, "Retirer") : null));
+
+  function rendre(enCours = false) {
+    let cadrage = null;
+    if (valeur && !enCours) {
+      const [x, y] = position.split(" ").map(parseFloat);
+      const repere = el("span", { class: "cadrage-repere", "aria-hidden": "true" });
+      repere.style.left = `${x}%`;
+      repere.style.top = `${y}%`;
+      const entiere = el("img", { src: valeur, alt: "Photo entière : touche l'endroit le plus important", class: "cadrage-image" });
+      const apercus = [
+        ["Tuile", "cadrage-apercu tuile"],
+        ["Bannière", "cadrage-apercu banniere-format"],
+        ["Grande photo", "cadrage-apercu large"],
+      ].map(([nom, classe]) => el("figure", { class: "cadrage-figure" }, cadrer(el("img", { src: valeur, alt: "", class: classe }), position), el("figcaption", {}, nom)));
+      const choisir = (e) => {
+        const r = entiere.getBoundingClientRect();
+        const px = Math.round(Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100)));
+        const py = Math.round(Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100)));
+        position = `${px}% ${py}%`;
+        repere.style.left = `${px}%`;
+        repere.style.top = `${py}%`;
+        apercus.forEach((f) => cadrer(f.querySelector("img"), position));
+      };
+      cadrage = el("div", { class: "cadrage" },
+        el("p", { class: "aide petite cadrage-aide" }, "🎯 Touche la photo à l'endroit le plus important (un visage, une banderole…) : elle sera cadrée autour."),
+        el("div", { class: "cadrage-zone", onclick: choisir }, entiere, repere),
+        el("div", { class: "cadrage-apercus" }, apercus),
+        el("button", { type: "button", class: "lien-btn cadrage-centre", onclick: () => { position = CENTRE; rendre(); } }, "Recentrer"));
+    }
+    remplir(conteneur, entree, cadrage,
+      el("div", { class: "choix-photo-boutons" },
+        el("button", { type: "button", class: "btn-secondaire", disabled: enCours || null, onclick: () => entree.click() },
+          enCours ? "Envoi…" : valeur ? "📷 Changer la photo" : "📷 Ajouter une photo"),
+        valeur && !enCours ? el("button", { type: "button", class: "btn-secondaire danger", onclick: () => { valeur = ""; position = CENTRE; rendre(); } }, "Retirer") : null));
+  }
+
   entree.addEventListener("change", async () => {
     const f = entree.files[0];
     entree.value = "";
@@ -302,7 +340,8 @@ function choixPhoto(conteneur, valeurInitiale = "") {
     try {
       const data = await reduirePhoto(f);
       valeur = (await api("/api/photo", { method: "POST", body: JSON.stringify({ data }) })).url;
-      toast("Photo ajoutée ✅");
+      position = CENTRE;
+      toast("Photo ajoutée ✅ Touche-la pour la cadrer.");
     } catch (e) {
       if (e.statut === 401) { deconnecter(); majModeEditeur(); }
       toast(e.statut ? e.message : "Impossible de lire cette photo.");
@@ -310,7 +349,11 @@ function choixPhoto(conteneur, valeurInitiale = "") {
     rendre();
   });
   rendre();
-  return { get valeur() { return valeur; }, set valeur(v) { valeur = v || ""; rendre(); } };
+  return {
+    get valeur() { return valeur; },
+    set valeur(v) { valeur = v || ""; position = CENTRE; rendre(); },
+    get position() { return valeur ? position : ""; },
+  };
 }
 
 // Les zones de texte s'agrandissent avec leur contenu (pratique pour coller un long texte).
@@ -336,7 +379,7 @@ async function chargerArticles() {
 function vignette(a, classe) {
   const vide = () => el("div", { class: `${classe} ${classe === "article-image" ? "vide" : "une-vide"}` }, "NÉ");
   if (!a.image) return vide();
-  const img = el("img", { class: classe, src: a.image, alt: "", loading: "lazy", referrerpolicy: "no-referrer" });
+  const img = cadrer(el("img", { class: classe, src: a.image, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }), a.imagePos);
   img.addEventListener("error", () => img.replaceWith(vide()));
   return img;
 }
@@ -423,7 +466,7 @@ function afficherLecture() {
   }
   remplir($("#lecture"),
     el("button", { class: "lien-btn retour", type: "button", onclick: () => (history.length > 1 ? history.back() : aller("accueil")) }, "← Retour"),
-    a.image ? el("img", { class: "photo-large", src: a.image, alt: "", referrerpolicy: "no-referrer" }) : null,
+    a.image ? cadrer(el("img", { class: "photo-large", src: a.image, alt: "", referrerpolicy: "no-referrer" }), a.imagePos) : null,
     el("span", { class: "article-theme" }, a.categorie),
     el("h2", { class: "lecture-titre" }, a.titre),
     el("p", { class: "lecture-infos" }, `${a.source} · ${dateCourte(a.date)}`),
@@ -537,6 +580,7 @@ $("#form-ajout").addEventListener("submit", async (e) => {
         categorie: $("#champ-categorie").value,
         texte,
         image: photoPublication.valeur || apercuActuel?.image || "",
+        imagePos: photoPublication.valeur ? photoPublication.position : "",
       }),
     });
     $("#form-ajout").reset();
@@ -585,6 +629,7 @@ function afficherProgramme() {
   }
   $("#banniere").classList.toggle("avec-photo", Boolean(p.photo));
   $("#banniere").style.backgroundImage = p.photo ? `linear-gradient(180deg, rgba(0,36,106,.45), rgba(0,36,106,.92)), url("${p.photo}")` : "";
+  $("#banniere").style.backgroundPosition = p.photo ? `center, ${positionValide(p.photoPos)}` : "";
   for (const id of ["#btn-rejoindre-accueil", "#btn-rejoindre-programme", "#btn-rejoindre-entete", "#btn-rejoindre-asso"]) {
     $(id).hidden = !p.lienAdhesion;
     if (p.lienAdhesion) $(id).href = p.lienAdhesion;
@@ -593,7 +638,7 @@ function afficherProgramme() {
   // Tuiles des axes sur l'accueil
   $("#axes-accueil").replaceChildren(...(p.axes.length
     ? p.axes.map((a) => el("button", { class: `axe-tuile${a.photo ? " avec-photo" : ""}`, type: "button", onclick: () => ouvrirAxe(a.id) },
-        a.photo ? el("img", { class: "axe-tuile-photo", src: a.photo, alt: "", loading: "lazy" }) : el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"),
+        a.photo ? cadrer(el("img", { class: "axe-tuile-photo", src: a.photo, alt: "", loading: "lazy" }), a.photoPos) : el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"),
         el("span", { class: "axe-tuile-titre" }, a.titre),
         el("span", { class: "axe-tuile-nb" }, a.propositions.length ? `${a.propositions.length} proposition${a.propositions.length > 1 ? "s" : ""}` : "Lire →")))
     : [el("div", { class: "vide-etat" },
@@ -602,7 +647,7 @@ function afficherProgramme() {
 
   // Page programme
   $("#programme-photo").hidden = !p.photo;
-  if (p.photo) $("#programme-photo").src = p.photo;
+  if (p.photo) cadrer($("#programme-photo"), p.photoPos).src = p.photo;
   $("#programme-slogan").textContent = p.slogan || "Notre programme";
   $("#programme-intro").replaceChildren(...(vide ? [el("p", {}, "Notre programme est en cours de rédaction. Reviens très vite !")] : paragraphes(p.intro)));
   $("#programme-maj").textContent = p.maj ? `Mis à jour le ${new Date(p.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : "";
@@ -613,7 +658,7 @@ function afficherProgramme() {
       el("span", { class: "axe-titre" }, a.titre),
       svgIcone('<path d="m6 9 6 6 6-6"/>', "axe-fleche")),
     el("div", { class: "axe-corps" },
-      a.photo ? el("img", { class: "photo-large", src: a.photo, alt: "", loading: "lazy" }) : null,
+      a.photo ? cadrer(el("img", { class: "photo-large", src: a.photo, alt: "", loading: "lazy" }), a.photoPos) : null,
       el("div", { class: "texte-long" }, paragraphes(a.resume)),
       a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null,
       peutModifierProgramme() ? el("button", { type: "button", class: "btn-secondaire large", onclick: () => ouvrirEdition(a.id) }, "✏️ Modifier cet axe") : null))));
@@ -734,7 +779,7 @@ function blocAxe(a = { icone: "", titre: "", photo: "", resume: "", propositions
   bloc.querySelector(".ed-resume").value = a.resume || "";
   bloc.querySelector(".ed-props").value = (a.propositions || []).join("\n");
   bloc.dataset.id = a.id || "";
-  photosAxes.set(bloc, choixPhoto(zonePhoto, a.photo || ""));
+  photosAxes.set(bloc, choixPhoto(zonePhoto, a.photo || "", a.photoPos));
   return bloc;
 }
 function numeroter() { document.querySelectorAll("#ed-axes .ed-num").forEach((n, i) => (n.textContent = `Axe ${i + 1}`)); }
@@ -743,7 +788,7 @@ function ouvrirEdition(axeId) {
   $("#ed-slogan").value = programme.slogan || "";
   $("#ed-intro").value = programme.intro || "";
   $("#ed-adhesion").value = programme.lienAdhesion || "";
-  photoCouverture = choixPhoto($("#ed-photo"), programme.photo || "");
+  photoCouverture = choixPhoto($("#ed-photo"), programme.photo || "", programme.photoPos);
   $("#ed-axes").replaceChildren(...(programme.axes.length ? programme.axes : [undefined]).map((a) => blocAxe(a)));
   numeroter();
   $("#ed-message").textContent = "";
@@ -771,6 +816,7 @@ $("#programme-edition").addEventListener("submit", async (e) => {
     icone: b.querySelector(".ed-icone").value.trim(),
     titre: b.querySelector(".ed-titre").value.trim(),
     photo: photosAxes.get(b)?.valeur || "",
+    photoPos: photosAxes.get(b)?.position || "",
     resume: b.querySelector(".ed-resume").value.trim(),
     propositions: b.querySelector(".ed-props").value.split("\n").map((x) => x.replace(/^\s*[-•*–]\s*/, "").trim()).filter(Boolean),
   })).filter((a) => a.titre || a.resume || a.propositions.length || a.photo);
@@ -780,7 +826,7 @@ $("#programme-edition").addEventListener("submit", async (e) => {
   btn.disabled = true; btn.textContent = "Enregistrement…";
   try {
     const d = await api("/api/programme", { method: "PUT", body: JSON.stringify({
-      slogan: $("#ed-slogan").value, intro: $("#ed-intro").value, photo: photoCouverture?.valeur || "",
+      slogan: $("#ed-slogan").value, intro: $("#ed-intro").value, photo: photoCouverture?.valeur || "", photoPos: photoCouverture?.position || "",
       lienAdhesion: $("#ed-adhesion").value.trim(), axes }) });
     programme = d.programme;
     stocker(CLE_PROGRAMME, JSON.stringify(programme));
@@ -824,9 +870,9 @@ function construireMenu() {
       ...ASSOCIATION.reseaux.map((r) => ligneMenu(r.icone, r.nom, null, r.lien)),
     ]],
     ["L'application", [
-      invitationInstall ? ligneMenu("📲", "Installer l'application", installer) : null,
-      estIOS && !installee ? el("p", { class: "aide petite menu-aide" }, "Sur iPhone : Partager → « Sur l'écran d'accueil » pour installer l'application.") : null,
-      ligneMenu("🔗", "Partager l'application", () => partager("Nouvel Élan", location.origin)),
+      invitationInstall ? ligneMenu("📲", "Installer l'application", installer)
+        : !installee ? ligneMenu("📲", "Installer l'application", () => { location.href = "/installer"; }) : null,
+      ligneMenu("🔗", "Partager le lien d'installation", () => partager("Installe l'application Nouvel Élan", `${location.origin}/installer`)),
       codeEditeur() && qui().nom ? el("p", { class: "aide petite menu-aide" }, `✅ Connecté en mode éditeur : ${qui().nom}`) : null,
       ligneMenu("✏️", codeEditeur() ? "Quitter le mode éditeur" : "Mode éditeur (équipe)", basculerEditeur),
     ]],

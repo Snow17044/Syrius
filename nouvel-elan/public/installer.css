@@ -1,0 +1,29 @@
+:root { --bleu: #00246A; --rouge: #D60616; --fond: #f3f5fa; --texte: #141a2e; --doux: #5b6480; --bord: #dde2ee; }
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  background: linear-gradient(160deg, var(--bleu) 0%, #1d3f8f 60%, var(--rouge) 160%);
+  font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--texte);
+}
+.carte { width: 100%; max-width: 440px; background: #fff; border-radius: 24px; padding: 28px 22px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.3); text-align: center; }
+.logo { width: 200px; max-width: 70%; display: block; margin: 0 auto 12px; }
+h1 { margin: 0 0 6px; font-size: 25px; color: var(--bleu); }
+.sous-titre { margin: 0 0 20px; color: var(--doux); }
+section { text-align: left; }
+.bouton {
+  display: block; width: 100%; text-align: center; text-decoration: none; border: 0; border-radius: 14px; padding: 16px;
+  background: var(--rouge); color: #fff; font: inherit; font-weight: 800; font-size: 18px; cursor: pointer; margin: 8px 0 12px;
+}
+.etapes { margin: 0 0 12px; padding: 0; list-style: none; counter-reset: e; display: grid; gap: 10px; }
+.etapes li { counter-increment: e; position: relative; padding: 12px 12px 12px 52px; background: var(--fond); border-radius: 14px; }
+.etapes li::before {
+  content: counter(e); position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border-radius: 50%;
+  background: var(--bleu); color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 15px;
+}
+.icone-partage { display: inline-block; border: 1.5px solid currentColor; border-radius: 5px; padding: 0 4px; font-size: 13px; line-height: 1.4; }
+.alerte { background: #fff4e0; border: 1.5px solid #f1c27d; border-radius: 12px; padding: 12px; margin: 0 0 8px; }
+.ok { background: #e7f6ec; border: 1.5px solid #8fd1a5; border-radius: 12px; padding: 12px; margin: 0 0 8px; font-weight: 600; }
+.adresse { font-weight: 800; color: var(--bleu); font-size: 19px; text-align: center; word-break: break-all; background: var(--fond); border-radius: 12px; padding: 12px; }
+.petit { font-size: 14px; color: var(--doux); margin: 4px 0 10px; }
+.lien { display: inline-block; margin-top: 10px; color: var(--doux); text-decoration: none; font-weight: 600; font-size: 15px; }

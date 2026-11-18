@@ -325,3 +325,25 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .modale-boutons .btn-principal { background: var(--bleu); }
 .modale-boutons .btn-principal.danger-plein { background: var(--rouge); }
 .version { text-align: center; margin: 22px 0 4px; }
+
+/* ── Cadrage des photos ───────────────────────────────────── */
+/* Formats fixes : toutes les photos d'un même endroit ont la même forme, cadrées sur leur point important. */
+.photo-large { aspect-ratio: 3 / 2; max-height: none; height: auto; }
+.axe-tuile-photo { aspect-ratio: 16 / 10; }
+.une img.une-img, .une .une-img { aspect-ratio: 16 / 9; }
+.cadrage { display: grid; gap: 10px; }
+.cadrage-aide { margin: 0; color: var(--bleu); font-weight: 600; }
+.cadrage-zone { position: relative; cursor: crosshair; border-radius: 12px; overflow: hidden; background: #000; line-height: 0; touch-action: manipulation; }
+.cadrage-image { width: 100%; height: auto; max-height: 420px; object-fit: contain; display: block; }
+.cadrage-repere {
+  position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; pointer-events: none;
+  border: 3px solid #fff; box-shadow: 0 0 0 2px var(--rouge), 0 2px 8px rgba(0,0,0,.5); background: rgba(214,6,22,.35);
+}
+.cadrage-apercus { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 8px; align-items: end; }
+.cadrage-figure { margin: 0; display: grid; gap: 4px; }
+.cadrage-figure figcaption { font-size: 12px; color: var(--doux); text-align: center; }
+.cadrage-apercu { width: 100%; object-fit: cover; border-radius: 8px; display: block; background: var(--fond); }
+.cadrage-apercu.tuile { aspect-ratio: 16 / 10; }
+.cadrage-apercu.banniere-format { aspect-ratio: 2 / 1; }
+.cadrage-apercu.large { aspect-ratio: 3 / 2; }
+.cadrage-centre { justify-self: start; padding: 2px 0; font-size: 14px; }
