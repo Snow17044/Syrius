@@ -362,3 +362,9 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
   .modale { max-width: calc(var(--largeur-app) - 32px); }
   main { max-width: none; }
 }
+
+/* ── Photo des thèmes visible directement sur la page Programme ── */
+.axe summary { display: block; padding: 0; }
+.axe-ligne { display: flex; align-items: center; gap: 12px; padding: 16px; }
+.axe-photo { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--fond); }
+.axe-corps { padding-top: 0; }

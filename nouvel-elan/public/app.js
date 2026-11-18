@@ -19,7 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "10 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "11 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -301,6 +301,12 @@ async function demanderCode() {
 const CENTRE = "50% 50%";
 const positionValide = (p) => (/^\d{1,3}% \d{1,3}%$/.test(p || "") ? p : CENTRE);
 function cadrer(img, position) { img.style.objectPosition = positionValide(position); return img; }
+// Photo d'un thème : cadrée, et remplacée par l'emoji si elle ne se charge pas (réseau faible…).
+function photoTheme(a, classe, secours) {
+  const img = cadrer(el("img", { class: classe, src: a.photo, alt: "", loading: "lazy", decoding: "async" }), a.photoPos);
+  img.addEventListener("error", () => img.replaceWith(secours()));
+  return img;
+}
 
 // Bloc « choisir une photo » réutilisable : envoi, cadrage, changer, retirer.
 function choixPhoto(conteneur, valeurInitiale = "", positionInitiale = CENTRE) {
@@ -650,7 +656,8 @@ function afficherProgramme() {
   // Tuiles des axes sur l'accueil
   $("#axes-accueil").replaceChildren(...(p.axes.length
     ? p.axes.map((a) => el("button", { class: `axe-tuile${a.photo ? " avec-photo" : ""}`, type: "button", onclick: () => ouvrirAxe(a.id) },
-        a.photo ? cadrer(el("img", { class: "axe-tuile-photo", src: a.photo, alt: "", loading: "lazy" }), a.photoPos) : el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"),
+        a.photo ? photoTheme(a, "axe-tuile-photo", () => el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"))
+          : el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"),
         el("span", { class: "axe-tuile-titre" }, a.titre),
         el("span", { class: "axe-tuile-nb" }, a.propositions.length ? `${a.propositions.length} proposition${a.propositions.length > 1 ? "s" : ""}` : "Lire →")))
     : [el("div", { class: "vide-etat" },
@@ -665,12 +672,13 @@ function afficherProgramme() {
   $("#programme-maj").textContent = p.maj ? `Mis à jour le ${new Date(p.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : "";
   if (etat.organiser && peutModifierProgramme()) afficherOrganiser();
   else $("#programme-axes").replaceChildren(...p.axes.map((a, i) => el("details", { class: "axe", id: `axe-${a.id}` },
-    el("summary", {},
-      el("span", { class: "axe-num", "aria-hidden": "true" }, a.icone || String(i + 1)),
-      el("span", { class: "axe-titre" }, a.titre),
-      svgIcone('<path d="m6 9 6 6 6-6"/>', "axe-fleche")),
+    el("summary", { class: a.photo ? "avec-photo" : null },
+      a.photo ? photoTheme(a, "axe-photo", () => el("span", { hidden: true })) : null,
+      el("span", { class: "axe-ligne" },
+        el("span", { class: "axe-num", "aria-hidden": "true" }, a.icone || String(i + 1)),
+        el("span", { class: "axe-titre" }, a.titre),
+        svgIcone('<path d="m6 9 6 6 6-6"/>', "axe-fleche"))),
     el("div", { class: "axe-corps" },
-      a.photo ? cadrer(el("img", { class: "photo-large", src: a.photo, alt: "", loading: "lazy" }), a.photoPos) : null,
       el("div", { class: "texte-long" }, paragraphes(a.resume)),
       a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null,
       peutModifierProgramme() ? el("button", { type: "button", class: "btn-secondaire large", onclick: () => ouvrirEdition(a.id) }, "✏️ Modifier cet axe") : null))));
