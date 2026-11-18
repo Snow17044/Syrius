@@ -29,7 +29,7 @@ function stocker(cle, valeur) { try { valeur == null ? localStorage.removeItem(c
 function lire(cle) { try { return localStorage.getItem(cle); } catch { return null; } }
 const codeEditeur = () => lire(CLE_CODE) || "";
 function qui() { try { return JSON.parse(lire(CLE_QUI)) || {}; } catch { return {}; } }
-const peutModifierProgramme = () => Boolean(codeEditeur() && qui().programme);
+const peutModifierProgramme = () => Boolean(codeEditeur());
 
 // Vérifie un code (ou un lien d'accès) auprès du serveur et retient qui est connecté.
 async function connecter(code) {
@@ -156,6 +156,7 @@ function construireRubriques() {
 }
 
 document.addEventListener("click", (e) => {
+  if (e.target.closest('[data-action="modifier-programme"]')) { aller("programme"); return ouvrirEdition(); }
   const r = e.target.closest("[data-rubrique]");
   if (r) return allerRubrique(r.dataset.rubrique);
   const b = e.target.closest("[data-aller]");
@@ -174,8 +175,8 @@ async function ouvrirLienAcces(jeton) {
     aller("accueil", { historique: false });
   }
   majModeEditeur();
-  afficherArticles();
-  afficherProgramme();
+  chargerArticles();
+  chargerProgramme();
 }
 
 function routeDepuisHash() {
@@ -527,7 +528,8 @@ function afficherProgramme() {
     el("div", { class: "axe-corps" },
       a.photo ? el("img", { class: "photo-large", src: a.photo, alt: "", loading: "lazy" }) : null,
       el("div", { class: "texte-long" }, paragraphes(a.resume)),
-      a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null))));
+      a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null,
+      peutModifierProgramme() ? el("button", { type: "button", class: "btn-secondaire large", onclick: () => ouvrirEdition(a.id) }, "✏️ Modifier cet axe") : null))));
   $("#btn-modifier-programme").hidden = !peutModifierProgramme();
   construireMenu();
 }
@@ -563,7 +565,7 @@ function blocAxe(a = { icone: "", titre: "", photo: "", resume: "", propositions
 }
 function numeroter() { document.querySelectorAll("#ed-axes .ed-num").forEach((n, i) => (n.textContent = `Axe ${i + 1}`)); }
 
-function ouvrirEdition() {
+function ouvrirEdition(axeId) {
   $("#ed-slogan").value = programme.slogan || "";
   $("#ed-intro").value = programme.intro || "";
   $("#ed-adhesion").value = programme.lienAdhesion || "";
@@ -575,6 +577,8 @@ function ouvrirEdition() {
   $("#programme-edition").hidden = false;
   ajusterTextes($("#programme-edition"));
   window.scrollTo(0, 0);
+  const cible = axeId && [...document.querySelectorAll("#ed-axes .ed-axe")].find((b) => b.dataset.id === axeId);
+  if (cible) setTimeout(() => { cible.scrollIntoView({ block: "start" }); window.scrollBy(0, -150); cible.querySelector(".ed-titre").focus({ preventScroll: true }); }, 50);
 }
 function fermerEdition() { $("#programme-edition").hidden = true; $("#programme-lecture").hidden = false; }
 
@@ -675,6 +679,8 @@ function majModeEditeur() {
   $("#btn-modifier-programme").hidden = !peutModifierProgramme();
   // Le bouton « Publier » n'apparaît que pour l'équipe : les visiteurs voient d'abord le programme.
   $(".barre-plus").hidden = !codeEditeur();
+  $("#equipe-accueil").hidden = !codeEditeur();
+  $("#equipe-programme").hidden = !codeEditeur();
   majBlocCode();
   construireMenu();
 }

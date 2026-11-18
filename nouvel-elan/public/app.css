@@ -266,3 +266,14 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .menu-texte { flex: 1; min-width: 0; }
 .menu-fleche { color: var(--doux); font-size: 20px; line-height: 1; }
 .menu-aide { padding: 10px 16px; margin: 0; border-top: 1px solid var(--bord); }
+
+/* ── Barre « Équipe » (mode éditeur seulement) ────────────── */
+.barre-equipe {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 0; padding: 10px 12px;
+  background: #fff; border: 2px dashed var(--bleu-clair); border-radius: var(--rayon);
+}
+.barre-equipe-titre { width: 100%; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--doux); }
+.btn-equipe { flex: 1 1 140px; border: 1.5px solid var(--bord); background: var(--fond); color: var(--bleu); border-radius: 12px; padding: 11px 12px; font-weight: 700; font-size: 15px; }
+.btn-equipe-rouge { background: var(--rouge); border-color: var(--rouge); color: #fff; }
+#programme-lecture > .barre-equipe { margin: 0 0 14px; }
+.axe-corps .btn-secondaire.large { margin-top: 14px; }
