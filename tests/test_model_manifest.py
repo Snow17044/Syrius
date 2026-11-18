@@ -21,6 +21,10 @@ def test_annonce_puis_lecture(make_client, monkeypatch):
     assert gh.post("/api/model/manifest", headers=H, json=GOOD).status_code == 401  # sans signature GitHub
     for bad in ({"file": "../../evil.litertlm"}, {"file": "syrius-1.5b-1-x.apk"}, {"sha256": "zz"}, {"size": 5}):
         assert gh.post("/api/model/manifest", headers=W, json={**GOOD, **bad}).status_code == 422
+    small = {**GOOD, "file": "syrius-0.5b-43700000001-dynamic_wi8_afp32.litertlm", "size": 620_000_000}
+    assert gh.post("/api/model/manifest", headers=W, json={**GOOD, "file": "syrius-3b-1234567-dynamic_wi8_afp32.litertlm"}
+                   ).status_code == 422  # taille de modèle non prévue
+    assert gh.post("/api/model/manifest", headers=W, json=small).status_code == 200  # petit modèle rapide
     r = gh.post("/api/model/manifest", headers=W, json=GOOD)
     assert r.status_code == 200
     m = owner.get("/api/model/manifest").json()

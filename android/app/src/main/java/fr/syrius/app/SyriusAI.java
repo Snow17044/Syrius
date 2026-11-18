@@ -41,7 +41,7 @@ class SyriusAI {
                     "06bf04fbfbaeee4dc867e8eb1c53cc8b7d4628f2f73cb86a9af177e6bab6d942", 1_567_653_904L),
     };
     static final String LABEL = "Syrius — notre IA (1,6 Go)";
-    private static final Pattern NAME = Pattern.compile("syrius-1\\.5b-[0-9]{6,15}-dynamic_wi[48]_afp32\\.litertlm");
+    private static final Pattern NAME = Pattern.compile("syrius-(0\\.5|1\\.5)b-[0-9]{6,15}-dynamic_wi[48]_afp32\\.litertlm");
 
     private final Context ctx;
     private final SharedPreferences prefs;

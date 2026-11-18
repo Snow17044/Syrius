@@ -792,7 +792,8 @@ document.querySelector('#packs .pack[data-pack="syrius"] .syrius-up').addEventLi
     alert("Mets à jour l'application Syrius pour profiter des nouvelles versions de notre IA.");
     return;
   }
-  if (!confirm("Télécharger la nouvelle version de Syrius (1,6 Go) ? Utilise de préférence le Wi-Fi.")) return;
+  const go = (modelManifest.size / 1e9).toFixed(1).replace(".", ",");
+  if (!confirm(`Télécharger la nouvelle version de Syrius (${go} Go) ? Utilise de préférence le Wi-Fi.`)) return;
   const r = window.SyriusAndroid.syriusUpdate(JSON.stringify(modelManifest));
   if (r !== "ok") alert(r);
   setTimeout(refreshLocalBox, 500);

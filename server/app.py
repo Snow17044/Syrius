@@ -51,7 +51,7 @@ MODEL_MANIFEST_KEY = "syrius_model_manifest_v1"
 
 
 class ModelManifestBody(BaseModel):
-    file: str = Field(pattern=r"^syrius-1\.5b-[0-9]{6,15}-dynamic_wi[48]_afp32\.litertlm$", max_length=80)
+    file: str = Field(pattern=r"^syrius-(0\.5|1\.5)b-[0-9]{6,15}-dynamic_wi[48]_afp32\.litertlm$", max_length=80)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size: int = Field(ge=300_000_000, le=2_500_000_000)
     run_id: str = Field(default="", pattern=r"^[0-9]{0,15}$")
