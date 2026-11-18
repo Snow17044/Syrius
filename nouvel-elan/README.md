@@ -7,13 +7,16 @@ Elle ne dépend d'aucun site existant, et il n'y a ni boutique d'applications ni
 
 | Écran | Contenu |
 |---|---|
-| 🏠 **Accueil** | L'article « À la une », les thèmes, les derniers articles |
+| 🏠 **Accueil** | Le slogan, « Découvrir notre programme », « Nous rejoindre », les grands axes, puis l'actualité |
+| 🚩 **Programme** | L'introduction et les grands axes, chacun avec sa présentation et ses propositions |
 | 📰 **Articles** | Tous les articles, avec recherche et filtre par thème |
-| ➕ **Ajouter** | On colle un lien → titre et image se remplissent tout seuls → « Publier » |
+| ➕ **Ajouter** | (équipe seulement) On colle un lien → titre et image se remplissent tout seuls → « Publier » |
 | 👥 **Association** | Présentation, réseaux sociaux, installer et partager l'appli |
 
 - **Ajouter un article en 2 secondes** : sur n'importe quel site, appuie sur **Partager → Nouvel Élan**
   (Android, une fois l'appli installée). Sinon, copie le lien et appuie sur **Coller** dans l'onglet Ajouter.
+- **Rédiger le programme** : onglet Association → **Mode éditeur** → onglet Programme → **Modifier le programme**.
+  On y écrit le slogan, l'introduction, le lien d'adhésion et les axes (une proposition par ligne).
 - **Code éditeur** : seules les personnes qui ont le code peuvent publier, épingler à la une ou supprimer.
   Tout le monde peut lire et partager.
 - **Hors connexion** : l'appli s'ouvre et affiche les derniers articles même sans réseau.

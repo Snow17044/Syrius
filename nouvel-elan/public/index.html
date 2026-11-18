@@ -23,19 +23,62 @@
     <!-- ACCUEIL -->
     <section class="page" id="page-accueil" data-titre="Accueil">
       <div class="banniere">
-        <p class="banniere-sur">Association politique jeune</p>
-        <h2>Bienvenue sur <span>Nouvel Élan</span></h2>
-        <p>Retrouve ici toute l'actualité de l'association : articles, événements et prises de position.</p>
+        <p class="banniere-sur">Mouvement politique jeune</p>
+        <h2 id="banniere-slogan">Une nouvelle génération <span>s'engage</span></h2>
+        <p id="banniere-texte">Découvre nos propositions et rejoins celles et ceux qui veulent changer les choses.</p>
+        <div class="banniere-actions">
+          <button class="btn-blanc" data-aller="programme" type="button">Découvrir notre programme</button>
+          <a class="btn-contour" id="btn-rejoindre-accueil" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
+        </div>
       </div>
-      <h3 class="section-titre">À la une</h3>
-      <div id="une"></div>
-      <h3 class="section-titre">Explorer par thème</h3>
-      <div class="puces" id="puces-accueil"></div>
+
       <div class="ligne-titre">
-        <h3 class="section-titre">Derniers articles</h3>
+        <h3 class="section-titre">Notre programme</h3>
+        <button class="lien-btn" data-aller="programme">Tout lire →</button>
+      </div>
+      <div class="axes-grille" id="axes-accueil"></div>
+
+      <div class="ligne-titre">
+        <h3 class="section-titre">L'actualité</h3>
         <button class="lien-btn" data-aller="articles">Tout voir →</button>
       </div>
-      <div class="liste" id="derniers"></div>
+      <div id="une"></div>
+      <div class="liste liste-suite" id="derniers"></div>
+    </section>
+
+    <!-- PROGRAMME -->
+    <section class="page" id="page-programme" data-titre="Programme" hidden>
+      <div id="programme-lecture">
+        <div class="programme-tete">
+          <p class="banniere-sur">Le programme de Nouvel Élan</p>
+          <h2 id="programme-slogan">Notre programme</h2>
+          <div id="programme-intro" class="texte-long"></div>
+          <p class="aide petite" id="programme-maj"></p>
+        </div>
+        <div id="programme-axes" class="axes-liste"></div>
+        <div class="programme-actions">
+          <a class="btn-principal lien-bouton" id="btn-rejoindre-programme" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
+          <button class="btn-secondaire large" id="btn-partager-programme" type="button">🔗 Partager le programme</button>
+          <button class="btn-secondaire large" id="btn-modifier-programme" type="button" hidden>✏️ Modifier le programme</button>
+        </div>
+      </div>
+
+      <form id="programme-edition" class="carte-form" hidden autocomplete="off">
+        <h2>Modifier le programme</h2>
+        <p class="aide">Les changements sont visibles par tout le monde dès que tu enregistres.</p>
+        <label class="etiquette" for="ed-slogan">Slogan (en haut de l'accueil)</label>
+        <input type="text" id="ed-slogan" maxlength="140" placeholder="Ex. : Une nouvelle génération s'engage">
+        <label class="etiquette" for="ed-intro">Introduction</label>
+        <textarea id="ed-intro" rows="5" maxlength="3000" placeholder="Qui sommes-nous, pourquoi nous nous engageons…"></textarea>
+        <label class="etiquette" for="ed-adhesion">Lien pour nous rejoindre (formulaire d'adhésion, HelloAsso…)</label>
+        <input type="url" id="ed-adhesion" inputmode="url" placeholder="https://…">
+        <h3 class="section-titre">Les grands axes</h3>
+        <div id="ed-axes"></div>
+        <button type="button" class="btn-secondaire large" id="ed-ajouter-axe">＋ Ajouter un axe</button>
+        <button type="submit" class="btn-principal" id="ed-enregistrer">Enregistrer le programme</button>
+        <button type="button" class="btn-secondaire large" id="ed-annuler">Annuler</button>
+        <p class="message" id="ed-message" role="status"></p>
+      </form>
     </section>
 
     <!-- ARTICLES -->
@@ -105,6 +148,10 @@
     <button data-aller="accueil" aria-current="page">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
       <span>Accueil</span>
+    </button>
+    <button data-aller="programme">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg>
+      <span>Programme</span>
     </button>
     <button data-aller="articles">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>

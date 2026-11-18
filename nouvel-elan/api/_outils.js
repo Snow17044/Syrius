@@ -70,6 +70,30 @@ export async function supprimerArticle(id) {
   else memoire.delete(id);
 }
 
+// Contenus uniques (le programme) : une valeur JSON par nom.
+const memoireContenu = new Map();
+let tableContenu = null;
+function pgContenu() {
+  tableContenu ??= sql`CREATE TABLE IF NOT EXISTS ne_contenu (cle text PRIMARY KEY, donnees jsonb NOT NULL)`
+    .catch((e) => { tableContenu = null; throw e; });
+  return tableContenu;
+}
+
+export async function lireContenu(nom) {
+  let v;
+  if (sql) { await pgContenu(); v = (await sql`SELECT donnees::text AS v FROM ne_contenu WHERE cle = ${nom}`)[0]?.v; }
+  else if (URL_REDIS && JETON_REDIS) v = await redis(["GET", `nouvel-elan:${nom}`]);
+  else v = memoireContenu.get(nom);
+  return v ? JSON.parse(v) : null;
+}
+
+export async function ecrireContenu(nom, valeur) {
+  const v = JSON.stringify(valeur);
+  if (sql) { await pgContenu(); await sql`INSERT INTO ne_contenu (cle, donnees) VALUES (${nom}, ${v}::jsonb) ON CONFLICT (cle) DO UPDATE SET donnees = EXCLUDED.donnees`; }
+  else if (URL_REDIS && JETON_REDIS) await redis(["SET", `nouvel-elan:${nom}`, v]);
+  else memoireContenu.set(nom, v);
+}
+
 // Vérifie le code éditeur sans révéler d'indice par le temps de réponse.
 export function codeValide(code) {
   const attendu = process.env.NE_CODE_EDITEUR || (process.env.NE_DEV === "1" ? "elan" : "");
@@ -92,7 +116,7 @@ export async function lireCorps(req) {
   let brut = "";
   for await (const morceau of req) {
     brut += morceau;
-    if (brut.length > 20000) throw new Error("Requête trop grosse");
+    if (brut.length > 100000) throw new Error("Requête trop grosse");
   }
   return brut ? JSON.parse(brut) : {};
 }

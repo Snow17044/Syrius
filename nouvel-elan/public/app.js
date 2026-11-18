@@ -16,7 +16,8 @@ const ASSOCIATION = {
 // ─────────────────────────────────────────────────────────────
 
 const $ = (s) => document.querySelector(s);
-const PAGES = ["accueil", "articles", "ajouter", "asso"];
+const PAGES = ["accueil", "programme", "articles", "ajouter", "asso"];
+const CLE_PROGRAMME = "ne-programme";
 const CLE_CACHE = "ne-articles";
 const CLE_CODE = "ne-code-editeur";
 
@@ -64,6 +65,7 @@ function aller(page, { historique = true } = {}) {
   if (historique && location.hash !== `#${page}`) history.pushState(null, "", `#${page}`);
   window.scrollTo(0, 0);
   if (page === "ajouter") majBlocCode();
+  if (page !== "programme" && !$("#programme-edition").hidden) fermerEdition();
 }
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-aller]");
@@ -159,9 +161,8 @@ function afficher() {
           el("span", { class: "article-theme" }, une.categorie),
           el("h4", {}, une.titre),
           une.resume ? el("p", {}, une.resume) : null))
-    : etatVide("Aucun article pour l'instant. Le premier, c'est toi ?"));
+    : etatVide("Aucune actualité pour l'instant.", Boolean(codeEditeur())));
   $("#derniers").replaceChildren(...tous.filter((a) => a !== une).slice(0, 5).map(carte));
-  puces($("#puces-accueil"), (c) => { etat.filtre = c; afficher(); aller("articles"); });
 
   // Page Articles : filtre + recherche
   puces($("#puces-articles"), (c) => { etat.filtre = c; afficher(); });
@@ -284,6 +285,144 @@ $("#form-ajout").addEventListener("submit", async (e) => {
   }
 });
 
+// ── Programme ────────────────────────────────────────────────
+let programme = { slogan: "", intro: "", lienAdhesion: "", axes: [], maj: null };
+
+function paragraphes(texte) {
+  return String(texte || "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+    .map((p) => el("p", {}, ...p.split("\n").flatMap((ligne, i) => (i ? [el("br"), ligne] : [ligne]))));
+}
+
+async function chargerProgramme() {
+  const cache = lire(CLE_PROGRAMME);
+  if (cache) { try { programme = JSON.parse(cache); afficherProgramme(); } catch {} }
+  try {
+    programme = (await api("/api/programme")).programme;
+    stocker(CLE_PROGRAMME, JSON.stringify(programme));
+  } catch {}
+  afficherProgramme();
+}
+
+function ouvrirAxe(id) {
+  aller("programme");
+  const d = document.getElementById(`axe-${id}`);
+  if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }
+}
+
+function afficherProgramme() {
+  const p = programme;
+  const vide = !p.axes.length && !p.intro;
+
+  // Bannière d'accueil
+  if (p.slogan) $("#banniere-slogan").textContent = p.slogan;
+  if (p.intro) $("#banniere-texte").textContent = p.intro.split("\n")[0].slice(0, 180) + (p.intro.split("\n")[0].length > 180 ? "…" : "");
+  for (const id of ["#btn-rejoindre-accueil", "#btn-rejoindre-programme"]) {
+    $(id).hidden = !p.lienAdhesion;
+    if (p.lienAdhesion) $(id).href = p.lienAdhesion;
+  }
+
+  // Tuiles des axes sur l'accueil
+  $("#axes-accueil").replaceChildren(...(p.axes.length
+    ? p.axes.map((a) => el("button", { class: "axe-tuile", type: "button", onclick: () => ouvrirAxe(a.id) },
+        el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"),
+        el("span", { class: "axe-tuile-titre" }, a.titre),
+        el("span", { class: "axe-tuile-nb" }, a.propositions.length ? `${a.propositions.length} proposition${a.propositions.length > 1 ? "s" : ""}` : "Lire →")))
+    : [el("div", { class: "vide-etat" },
+        el("p", {}, codeEditeur() ? "Le programme n'est pas encore rédigé." : "Notre programme arrive très bientôt !"),
+        codeEditeur() ? el("button", { class: "btn-secondaire", type: "button", onclick: () => { aller("programme"); ouvrirEdition(); } }, "✏️ Rédiger le programme") : null)]));
+
+  // Page programme
+  $("#programme-slogan").textContent = p.slogan || "Notre programme";
+  $("#programme-intro").replaceChildren(...(vide ? [el("p", {}, "Notre programme est en cours de rédaction. Reviens très vite !")] : paragraphes(p.intro)));
+  $("#programme-maj").textContent = p.maj ? `Mis à jour le ${new Date(p.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : "";
+  const fleche = '<path d="m6 9 6 6 6-6"/>';
+  $("#programme-axes").replaceChildren(...p.axes.map((a, i) => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("class", "axe-fleche"); svg.innerHTML = fleche;
+    return el("details", { class: "axe", id: `axe-${a.id}` },
+      el("summary", {},
+        el("span", { class: "axe-num", "aria-hidden": "true" }, a.icone || String(i + 1)),
+        el("span", { class: "axe-titre" }, a.titre), svg),
+      el("div", { class: "axe-corps" },
+        el("div", { class: "texte-long" }, paragraphes(a.resume)),
+        a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null));
+  }));
+  $("#btn-modifier-programme").hidden = !codeEditeur();
+}
+
+$("#btn-partager-programme").addEventListener("click", () => partager("Le programme de Nouvel Élan", `${location.origin}/#programme`));
+
+// Édition (mode éditeur)
+function blocAxe(a = { icone: "", titre: "", resume: "", propositions: [] }) {
+  const bloc = el("div", { class: "ed-axe" },
+    el("div", { class: "ed-axe-tete" },
+      el("input", { type: "text", class: "ed-icone", maxlength: "8", placeholder: "🎓", "aria-label": "Icône (emoji)", value: a.icone || "" }),
+      el("strong", { class: "ed-num" }, "")),
+    el("label", { class: "etiquette" }, "Titre de l'axe",
+      el("input", { type: "text", class: "ed-titre", maxlength: "120", placeholder: "Ex. : Éducation", value: a.titre || "" })),
+    el("label", { class: "etiquette" }, "Présentation",
+      el("textarea", { class: "ed-resume", rows: "3", maxlength: "1500", placeholder: "Notre vision sur ce sujet…" })),
+    el("label", { class: "etiquette" }, "Propositions (une par ligne)",
+      el("textarea", { class: "ed-props", rows: "4", placeholder: "Première proposition\nDeuxième proposition" })),
+    el("div", { class: "ed-boutons" },
+      el("button", { type: "button", onclick: () => { bloc.previousElementSibling?.before(bloc); numeroter(); } }, "↑ Monter"),
+      el("button", { type: "button", onclick: () => { bloc.nextElementSibling?.after(bloc); numeroter(); } }, "↓ Descendre"),
+      el("button", { type: "button", class: "danger", onclick: () => { if (confirm("Supprimer cet axe ?")) { bloc.remove(); numeroter(); } } }, "Supprimer")));
+  bloc.querySelector(".ed-resume").value = a.resume || "";
+  bloc.querySelector(".ed-props").value = (a.propositions || []).join("\n");
+  bloc.dataset.id = a.id || "";
+  return bloc;
+}
+function numeroter() { document.querySelectorAll("#ed-axes .ed-num").forEach((n, i) => (n.textContent = `Axe ${i + 1}`)); }
+
+function ouvrirEdition() {
+  $("#ed-slogan").value = programme.slogan || "";
+  $("#ed-intro").value = programme.intro || "";
+  $("#ed-adhesion").value = programme.lienAdhesion || "";
+  $("#ed-axes").replaceChildren(...(programme.axes.length ? programme.axes : [undefined]).map((a) => blocAxe(a)));
+  numeroter();
+  $("#ed-message").textContent = "";
+  $("#programme-lecture").hidden = true;
+  $("#programme-edition").hidden = false;
+  window.scrollTo(0, 0);
+}
+function fermerEdition() { $("#programme-edition").hidden = true; $("#programme-lecture").hidden = false; }
+
+$("#btn-modifier-programme").addEventListener("click", ouvrirEdition);
+$("#ed-annuler").addEventListener("click", () => { fermerEdition(); window.scrollTo(0, 0); });
+$("#ed-ajouter-axe").addEventListener("click", () => {
+  const b = blocAxe(); $("#ed-axes").append(b); numeroter(); b.querySelector(".ed-titre").focus();
+});
+
+$("#programme-edition").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#ed-message");
+  const axes = [...document.querySelectorAll("#ed-axes .ed-axe")].map((b, i) => ({
+    id: b.dataset.id || `axe-${Date.now().toString(36)}-${i}`,
+    icone: b.querySelector(".ed-icone").value.trim(),
+    titre: b.querySelector(".ed-titre").value.trim(),
+    resume: b.querySelector(".ed-resume").value.trim(),
+    propositions: b.querySelector(".ed-props").value.split("\n").map((x) => x.replace(/^\s*[-•*]\s*/, "").trim()).filter(Boolean),
+  })).filter((a) => a.titre || a.resume || a.propositions.length);
+  const sansTitre = axes.findIndex((a) => !a.titre);
+  if (sansTitre >= 0) { msg.className = "message erreur"; msg.textContent = `Donne un titre à l'axe ${sansTitre + 1}.`; return; }
+  const btn = $("#ed-enregistrer");
+  btn.disabled = true; btn.textContent = "Enregistrement…";
+  try {
+    const d = await api("/api/programme", { method: "PUT", body: JSON.stringify({
+      slogan: $("#ed-slogan").value, intro: $("#ed-intro").value, lienAdhesion: $("#ed-adhesion").value.trim(), axes }) });
+    programme = d.programme;
+    stocker(CLE_PROGRAMME, JSON.stringify(programme));
+    afficherProgramme();
+    fermerEdition();
+    window.scrollTo(0, 0);
+    toast("Programme enregistré ✅");
+  } catch (err) {
+    if (err.statut === 401) { stocker(CLE_CODE, null); majModeEditeur(); }
+    msg.className = "message erreur"; msg.textContent = err.message;
+  } finally { btn.disabled = false; btn.textContent = "Enregistrer le programme"; }
+});
+
 // ── Page association ─────────────────────────────────────────
 $("#asso-description").textContent = ASSOCIATION.description;
 $("#reseaux").replaceChildren(...ASSOCIATION.reseaux.map((r) =>
@@ -293,6 +432,9 @@ $("#btn-partager-app").addEventListener("click", () => partager("Nouvel Élan", 
 
 function majModeEditeur() {
   $("#txt-mode-editeur").textContent = codeEditeur() ? "Quitter le mode éditeur" : "Mode éditeur (bureau)";
+  $("#btn-modifier-programme").hidden = !codeEditeur();
+  // Le bouton « Ajouter » n'apparaît que pour l'équipe : les visiteurs voient d'abord le programme.
+  $(".barre-plus").hidden = !codeEditeur();
   majBlocCode();
 }
 $("#btn-mode-editeur").addEventListener("click", () => {
@@ -301,10 +443,11 @@ $("#btn-mode-editeur").addEventListener("click", () => {
     const code = prompt("Code éditeur :");
     if (!code) return;
     stocker(CLE_CODE, code.trim());
-    toast("Mode éditeur activé : tu peux épingler et supprimer");
+    toast("Mode éditeur activé : tu peux modifier le programme et les articles");
   }
   majModeEditeur();
   afficher();
+  afficherProgramme();
 });
 
 let invitationInstall = null;
@@ -334,5 +477,6 @@ if (lienRecu) {
   aller(location.hash.slice(1) || "accueil", { historique: false });
   chargerArticles();
 }
+chargerProgramme();
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

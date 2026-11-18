@@ -157,3 +157,61 @@ input:focus, select:focus { outline: 2px solid var(--bleu); outline-offset: 1px;
   max-width: calc(100% - 32px); text-align: center; pointer-events: none;
 }
 .vide-etat .btn-secondaire { padding: 10px 16px; }
+
+/* ── Programme ─────────────────────────────────────────────── */
+.banniere h2 span { font-style: italic; }
+.banniere-actions { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 18px; }
+.btn-blanc, .btn-contour {
+  border-radius: 12px; padding: 11px 16px; font-weight: 700; font-size: 15px; text-decoration: none; text-align: center;
+}
+.btn-blanc { background: #fff; color: var(--bleu); border: 0; }
+.btn-contour { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.75); }
+
+.axes-grille { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.axe-tuile {
+  background: var(--carte); border: 0; border-radius: var(--rayon); box-shadow: var(--ombre); padding: 14px;
+  text-align: left; display: flex; flex-direction: column; gap: 6px; min-height: 104px; border-top: 4px solid var(--bleu);
+}
+.axe-tuile:nth-child(even) { border-top-color: var(--rouge); }
+.axe-tuile-icone { font-size: 24px; line-height: 1; }
+.axe-tuile-titre { font-weight: 700; line-height: 1.25; color: var(--bleu); }
+.axe-tuile-nb { margin-top: auto; font-size: 12px; color: var(--doux); }
+.axes-grille .vide-etat { grid-column: 1 / -1; }
+.liste-suite { margin-top: 12px; }
+
+.programme-tete { background: linear-gradient(135deg, var(--bleu), var(--bleu-clair)); color: #fff; border-radius: var(--rayon); padding: 22px 20px; }
+.programme-tete h2 { margin: 4px 0 10px; font-size: 24px; line-height: 1.2; }
+.programme-tete .aide { color: rgba(255,255,255,.75); }
+.texte-long p { margin: 0 0 10px; }
+.texte-long p:last-child { margin-bottom: 0; }
+
+.axes-liste { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 16px; }
+.axe { background: var(--carte); border-radius: var(--rayon); box-shadow: var(--ombre); overflow: hidden; border-left: 5px solid var(--bleu); }
+.axe:nth-child(even) { border-left-color: var(--rouge); }
+.axe summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 16px; cursor: pointer; }
+.axe summary::-webkit-details-marker { display: none; }
+.axe-num { flex: none; width: 34px; height: 34px; border-radius: 999px; background: var(--fond); color: var(--bleu); font-weight: 800; display: grid; place-items: center; font-size: 18px; }
+.axe-titre { flex: 1; font-weight: 700; font-size: 17px; line-height: 1.3; }
+.axe-fleche { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--doux); stroke-width: 2; transition: transform .2s; }
+.axe[open] .axe-fleche { transform: rotate(180deg); }
+.axe-corps { padding: 0 16px 16px 62px; }
+.axe-corps ul { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.axe-corps li { position: relative; padding-left: 22px; }
+.axe-corps li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 10px; height: 10px; border-radius: 3px; background: var(--rouge); }
+
+.programme-actions { display: grid; gap: 10px; margin-top: 18px; }
+.programme-actions .btn-principal { margin-top: 0; }
+.lien-bouton { display: block; text-align: center; text-decoration: none; }
+.btn-secondaire.large { width: 100%; padding: 13px; margin-top: 10px; }
+.programme-actions .btn-secondaire.large { margin-top: 0; }
+
+textarea { width: 100%; border: 1.5px solid var(--bord); border-radius: 12px; padding: 12px; background: #fff; font: inherit; resize: vertical; }
+textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-color: var(--bleu); }
+.ed-axe { border: 1.5px solid var(--bord); border-radius: 14px; padding: 12px; margin-bottom: 12px; background: var(--fond); }
+.ed-axe-tete { display: flex; gap: 8px; align-items: center; }
+.ed-axe-tete .ed-icone { width: 58px; flex: none; text-align: center; }
+.ed-axe-tete strong { flex: 1; color: var(--bleu); }
+.ed-axe .etiquette { margin-top: 10px; }
+.ed-boutons { display: flex; gap: 6px; margin-top: 10px; }
+.ed-boutons button { flex: 1; background: #fff; border: 1.5px solid var(--bord); border-radius: 10px; padding: 8px; font-size: 14px; font-weight: 600; }
+.ed-boutons .danger { color: var(--rouge); }

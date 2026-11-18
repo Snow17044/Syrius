@@ -1,5 +1,5 @@
 // Permet à l'application de s'ouvrir même sans connexion.
-const VERSION = "nouvel-elan-v1";
+const VERSION = "nouvel-elan-v2";
 const COQUILLE = ["/", "/app.css", "/app.js", "/manifest.webmanifest", "/icons/logo.png", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
