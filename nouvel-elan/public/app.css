@@ -347,3 +347,18 @@ textarea:focus { outline: 2px solid var(--bleu); outline-offset: 1px; border-col
 .cadrage-apercu.banniere-format { aspect-ratio: 2 / 1; }
 .cadrage-apercu.large { aspect-ratio: 3 / 2; }
 .cadrage-centre { justify-self: start; padding: 2px 0; font-size: 14px; }
+
+/* ── Ordinateur et tablette : exactement la même appli que sur téléphone ──
+   L'appli reste une colonne de la largeur d'un téléphone, centrée, avec le même
+   en-tête, la même barre du bas et les mêmes tailles. */
+:root { --largeur-app: 460px; }
+@media (min-width: 520px) {
+  html { background: linear-gradient(160deg, #00246A 0%, #1d3f8f 55%, #6b1b3d 100%) fixed; min-height: 100%; }
+  body { max-width: var(--largeur-app); margin: 0 auto; min-height: 100vh; box-shadow: 0 0 60px rgba(0, 0, 0, .35); }
+  .barre { left: 50%; right: auto; width: var(--largeur-app); transform: translateX(-50%); }
+  .annulation { left: 50%; right: auto; width: calc(var(--largeur-app) - 24px); transform: translateX(-50%); margin: 0; }
+  .toast { max-width: calc(var(--largeur-app) - 32px); }
+  .modale-fond { align-items: center; }
+  .modale { max-width: calc(var(--largeur-app) - 32px); }
+  main { max-width: none; }
+}

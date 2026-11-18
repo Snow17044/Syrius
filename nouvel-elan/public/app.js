@@ -19,7 +19,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "8 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "9 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -226,6 +226,13 @@ function construireRubriques() {
     el("button", { type: "button", "data-aller": "asso" }, "Qui sommes-nous"));
   majNavigation();
 }
+
+// Avec une souris, la molette fait défiler les rubriques de gauche à droite (comme le doigt sur téléphone).
+$("#rubriques").addEventListener("wheel", (e) => {
+  if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+  e.preventDefault();
+  $("#rubriques").scrollLeft += e.deltaY;
+}, { passive: false });
 
 document.addEventListener("click", (e) => {
   if (e.target.closest('[data-action="modifier-programme"]')) { etat.organiser = false; aller("programme"); return ouvrirEdition(); }
