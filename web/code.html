@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr" data-theme="syrius">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0d0f16" id="c-theme-color">
+  <title>Syrius Code</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/code.css">
+  <script src="/static/icons.js" defer></script>
+  <script src="/static/markdown.js" defer></script>
+  <script src="/static/code.js" defer></script>
+</head>
+<body class="code-body">
+  <!-- Connexion (réservé au propriétaire) -->
+  <div id="c-login" class="screen c-login hidden">
+    <form id="c-login-form" class="c-login-card" autocomplete="on">
+      <div class="c-logo" data-icon="code"></div>
+      <h1>Syrius Code</h1>
+      <p class="muted small">Le laboratoire d'essai de Syrius, avec Aurore. Réservé au propriétaire.</p>
+      <input id="c-login-name" type="text" placeholder="Ton prénom (si tu en as un)" autocomplete="username" maxlength="60">
+      <input id="c-login-password" type="password" placeholder="Mot de passe" autocomplete="current-password" required>
+      <button type="submit" class="primary wide">Entrer</button>
+      <p id="c-login-error" class="error small"></p>
+    </form>
+  </div>
+
+  <div id="c-app" class="screen c-app hidden">
+    <header class="c-head">
+      <div class="c-brand">
+        <span class="c-mark" data-icon="code"></span>
+        <div><strong>Syrius Code</strong><span class="c-sub small muted">Aurore · IA pro · laboratoire</span></div>
+      </div>
+      <div class="c-head-actions">
+        <button type="button" id="c-theme" class="icon-btn" aria-label="Changer de thème" data-icon="palette"></button>
+        <button type="button" id="c-menu" class="icon-btn" aria-label="Mes discussions" data-icon="menu"></button>
+      </div>
+    </header>
+
+    <main class="c-main">
+      <!-- Aurore : discussion -->
+      <section id="tab-aurore" class="c-tab on" data-tab="aurore">
+        <div id="c-messages" class="c-messages" aria-live="polite">
+          <div id="c-empty" class="c-empty">
+            <div class="c-empty-mark" data-icon="sparkle"></div>
+            <h2>Bonjour, je suis Aurore</h2>
+            <p class="muted">Code, tableaux de bord, emails pro, sites et sécurité : dis-moi ce qu'il faut faire.</p>
+            <div id="c-starters" class="c-chips"></div>
+          </div>
+        </div>
+        <form id="c-form" class="c-composer">
+          <textarea id="c-input" rows="1" maxlength="20000" placeholder="Écris à Aurore…" aria-label="Message pour Aurore"></textarea>
+          <button type="submit" id="c-send" class="c-send" aria-label="Envoyer" data-icon="send"></button>
+        </form>
+      </section>
+
+      <!-- Sites : gestion et scanner -->
+      <section id="tab-sites" class="c-tab" data-tab="sites">
+        <div class="c-page">
+          <h2 data-icon="shield"><span>Mes sites</span></h2>
+          <p class="muted small">Aurore lit tes sites comme un visiteur et repère les erreurs de sécurité courantes (en-têtes
+            absents, fichiers sensibles exposés, clés secrètes visibles, cookies mal protégés…). Elle n'attaque rien, ne teste
+            aucun mot de passe et ne scanne <b>que les sites dont tu prouves être le propriétaire</b>. Ce n'est pas un test
+            d'intrusion complet.</p>
+          <div class="c-inline">
+            <input id="c-site-new" type="text" maxlength="120" placeholder="monsite.fr" autocomplete="off" autocapitalize="none">
+            <button type="button" id="c-site-add" class="ghost" data-icon="plus"><span>Ajouter</span></button>
+          </div>
+          <p id="c-site-msg" class="small"></p>
+          <ul id="c-sites" class="c-cards"></ul>
+          <div id="c-scan-result"></div>
+        </div>
+      </section>
+
+      <!-- Tableaux de bord -->
+      <section id="tab-tableaux" class="c-tab" data-tab="tableaux">
+        <div class="c-page">
+          <h2 data-icon="chart"><span>Tableaux de bord</span></h2>
+          <p class="muted small">Colle tes chiffres dans la discussion avec Aurore : elle en fait des indicateurs, des graphiques
+            et un tableau. Enregistre ceux que tu veux garder.</p>
+          <div id="c-dash-starters" class="c-chips"></div>
+          <ul id="c-dashboards" class="c-cards"></ul>
+          <div id="c-dash-view"></div>
+        </div>
+      </section>
+
+      <!-- Emails pro -->
+      <section id="tab-emails" class="c-tab" data-tab="emails">
+        <div class="c-page">
+          <h2 data-icon="mail"><span>Emails pro</span></h2>
+          <p class="muted small">Aurore trie, résume et prépare des brouillons de réponse. Elle n'envoie jamais rien toute seule :
+            tu confirmes toi-même. Les emails se connectent dans l'application Syrius (Réglages → Services).</p>
+          <div id="c-mail-starters" class="c-chips"></div>
+        </div>
+      </section>
+
+      <!-- Code -->
+      <section id="tab-code" class="c-tab" data-tab="code">
+        <div class="c-page">
+          <h2 data-icon="code"><span>Code</span></h2>
+          <p class="muted small">Aurore écrit, relit et corrige du code. Pour la programmation, elle utilise l'IA spécialisée
+            Codestral quand elle est disponible. Ne colle jamais de mot de passe ni de clé secrète.</p>
+          <div id="c-code-starters" class="c-chips"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="c-nav" id="c-nav" aria-label="Sections">
+      <button type="button" data-go="aurore" class="on" data-icon="sparkle"><span>Aurore</span></button>
+      <button type="button" data-go="sites" data-icon="shield"><span>Sites</span></button>
+      <button type="button" data-go="tableaux" data-icon="chart"><span>Tableaux</span></button>
+      <button type="button" data-go="emails" data-icon="mail"><span>Emails</span></button>
+      <button type="button" data-go="code" data-icon="code"><span>Code</span></button>
+    </nav>
+  </div>
+
+  <!-- Mes discussions -->
+  <dialog id="c-convs">
+    <div class="sheet">
+      <header class="sheet-head"><h3>Discussions</h3><button type="button" id="c-convs-close" class="icon-btn" aria-label="Fermer" data-icon="close"></button></header>
+      <button type="button" id="c-new" class="primary wide" data-icon="plus"><span>Nouvelle discussion</span></button>
+      <ul id="c-conv-list" class="c-cards"></ul>
+      <button type="button" id="c-logout" class="ghost wide" data-icon="logout"><span>Se déconnecter</span></button>
+    </div>
+  </dialog>
+</body>
+</html>
