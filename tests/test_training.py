@@ -1,4 +1,6 @@
 """Tableau de bord de l'entraînement : exemples du propriétaire, suivi en direct protégé par une clé."""
+import time
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import H, login
@@ -145,3 +147,27 @@ def test_notes_du_controle_qualite_dans_le_bilan(make_client):
     training.report(base, {"run": "123456789", "type": "start", "model": "Qwen", "examples": 10, "steps_total": 5})
     training.report(base, {"run": "123456789", "type": "eval", "passed": 27, "total": 32})
     assert training.state(base)["stats"]["evals"][0]["pct"] == 84
+
+
+def test_bilan_de_la_semaine(make_client):
+    from server import training
+    c = make_client()
+    login(c)
+    for q, a, src, wrong in (("Capitale de l'Australie ?", "Canberra.", "correction", "Sydney, bien sûr."),
+                             ("Qui es-tu ?", "Syrius.", "pouce", ""), ("Un test", "Réponse.", None, "")):
+        body = {"question": q, "answer": a, **({"source": src} if src else {}), "wrong": wrong}
+        assert c.post("/api/training/examples", headers=H, json=body).status_code == 200
+    base = c.app.state.db.base
+    training.report(base, {"run": "111", "type": "start", "model": "Qwen", "examples": 5, "steps_total": 3})
+    training.report(base, {"run": "111", "type": "eval", "passed": 20, "total": 32,
+                           "fails": [{"q": "Appelle Papa", "why": "pas d'action"}]})
+    training.report(base, {"run": "111", "type": "done"})
+    training.report(base, {"run": "222", "type": "start", "model": "Qwen", "examples": 5, "steps_total": 3})
+    training.report(base, {"run": "222", "type": "eval", "passed": 26, "total": 32, "fails": [{"q": "Ouvre WhatsApp", "why": "mauvais outil"}]})
+    w = c.get("/api/training").json()["week"]
+    assert (w["pouce"], w["correction"], w["manuel"]) == (1, 1, 1)
+    assert w["corrections"][0]["wrong"] == "Sydney, bien sûr." and w["corrections"][0]["a"] == "Canberra."
+    assert (w["eval_first"], w["eval_last"], w["nights"]) == (62, 81, 2)
+    assert w["fails"] == [{"q": "Ouvre WhatsApp", "why": "mauvais outil"}]
+    # une semaine plus tard, plus rien à bilan
+    assert training.week(base, [], now=time.time() + 8 * 86400)["correction"] == 0

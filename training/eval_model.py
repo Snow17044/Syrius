@@ -82,7 +82,8 @@ def main() -> None:
         import os
         import urllib.request
         body = json.dumps({"run": os.environ.get("GITHUB_RUN_ID", ""), "type": "eval", "score": res["score"],
-                           "passed": res["passed"], "total": res["total"]}).encode()
+                           "passed": res["passed"], "total": res["total"],
+                           "fails": [{"q": f["q"], "why": f["why"]} for f in res["fails"]][:10]}).encode()
         req = urllib.request.Request(os.environ["SYRIUS_URL"].rstrip("/") + "/api/training/worker/report", data=body,
                                      method="POST", headers={"Authorization": f"Bearer {syrius_auth.token()}",
                                                              "Content-Type": "application/json", "X-Syrius": "1",

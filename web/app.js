@@ -582,9 +582,9 @@ function addFeedbackButtons(view) {
   };
   const plain = () => view.bubble.children.length === 2 && !view.tools.childElementCount  // ni carte ni image ni action
     && !view.body.querySelector("img, canvas, video, iframe");
-  const send = async (q, a, btn, done, source) => {
+  const send = async (q, a, btn, done, source, wrong) => {
     try {
-      await api("/api/training/examples", { method: "POST", body: JSON.stringify({ question: q.slice(0, 500), answer: a.slice(0, 2000), source }) });
+      await api("/api/training/examples", { method: "POST", body: JSON.stringify({ question: q.slice(0, 500), answer: a.slice(0, 2000), source, wrong: wrong || "" }) });
       up.disabled = down.disabled = true;
       Icons.set(btn, "check", done);
     } catch (err) { alert("Non ajouté : " + err.message); }
@@ -599,7 +599,7 @@ function addFeedbackButtons(view) {
     const q = question();
     if (!q) return;
     const fix = prompt("Quelle aurait dû être la bonne réponse de Syrius ?\n(elle sera apprise cette nuit)");
-    if (fix && fix.trim()) send(q, fix.trim(), down, "Correction ajoutée", "correction");
+    if (fix && fix.trim()) send(q, fix.trim(), down, "Correction ajoutée", "correction", (view.text || "").slice(0, 600));
   });
   view.actions.append(up, down);
 }
@@ -2315,6 +2315,38 @@ function drawLossChart(box, points) {
   box.append(svg);
 }
 
+function renderWeek(w) {
+  const box = $("#t-week");
+  box.classList.toggle("hidden", !w);
+  if (!w) return;
+  const ev = w.eval_last == null ? "pas encore de note de qualité"
+    : w.nights > 1 ? `qualité ${w.eval_first} % → ${w.eval_last} % (${w.nights} nuits)` : `qualité ${w.eval_last} %`;
+  $("#t-week-text").textContent = `Cette semaine : ${w.pouce} réponse(s) validée(s) 👍, ${w.correction} correction(s) 👎, ` +
+    `${w.manuel} exemple(s) écrit(s) par toi, ${w.auto} créé(s) par Syrius — ${ev}.`;
+  const fill = (sel, rows) => {
+    const ul = $(sel);
+    ul.replaceChildren();
+    for (const [title, sub] of rows) {
+      const li = document.createElement("li");
+      li.className = "diag";
+      const t = document.createElement("strong");
+      t.textContent = title;
+      li.appendChild(t);
+      for (const s of sub.filter(Boolean)) {
+        const sp = document.createElement("span");
+        sp.className = "small muted";
+        sp.textContent = s;
+        li.appendChild(sp);
+      }
+      ul.appendChild(li);
+    }
+  };
+  $("#t-week-corr-title").textContent = w.corrections.length ? "Ce que tu as corrigé (là où Syrius se trompe) :" : "";
+  fill("#t-week-corr", w.corrections.map((c) => ["« " + c.q + " »", [c.wrong ? "Syrius disait : " + c.wrong : "", "Tu as écrit : " + c.a]]));
+  $("#t-week-fails-title").textContent = w.fails.length ? "Questions du contrôle qualité ratées à la dernière note :" : "";
+  fill("#t-week-fails", w.fails.map((f) => ["« " + f.q + " »", [f.why]]));
+}
+
 function renderTraining(d) {
   TRAIN.data = d;
   const run = d.runs[0];
@@ -2323,6 +2355,7 @@ function renderTraining(d) {
   badge.textContent = run ? labels[run.status] || run.status : "Aucun entraînement suivi";
   badge.className = "t-badge " + (run ? run.status : "none");
   $("#t-phase").textContent = run ? run.phase || "" : "Branche le suivi en direct (en bas) pour voir le prochain.";
+  renderWeek(d.week);
   const st = d.stats || {};
   const ev = (st.evals || []).map((e) => e.pct + " %");
   $("#t-stats").textContent = `Ce que tu lui as appris : ${st.pouce || 0} réponse(s) validée(s) 👍, ${st.correction || 0} correction(s) 👎, ` +

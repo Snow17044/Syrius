@@ -65,7 +65,7 @@ def examples(base) -> list[dict]:
 SOURCES = ("manuel", "pouce", "correction")
 
 
-def add_example(base, question: str, answer: str, source: str = "manuel") -> dict:
+def add_example(base, question: str, answer: str, source: str = "manuel", wrong: str = "") -> dict:
     q, a = " ".join(str(question).split()), str(answer).strip()
     if not 2 <= len(q) <= 500 or not 1 <= len(a) <= 2000:
         raise TrainingError("Question (2 à 500 caractères) et réponse (1 à 2000) obligatoires.")
@@ -76,6 +76,8 @@ def add_example(base, question: str, answer: str, source: str = "manuel") -> dic
         raise TrainingError(f"Maximum {MAX_EXAMPLES} exemples : supprime-en avant d'en ajouter.")
     item = {"id": secrets.token_hex(4), "q": q, "a": a, "at": int(time.time()),
             "src": source if source in SOURCES else "manuel"}
+    if source == "correction" and wrong.strip():
+        item["wrong"] = " ".join(wrong.split())[:600]  # ce que Syrius avait répondu : sert au bilan de la semaine
     items.append(item)
     _save(base, EXAMPLES_KEY, items)
     return item
@@ -144,7 +146,9 @@ def report(base, event: dict) -> None:
         total = int(_num(event.get("total"), 1, 1000) or 0)
         passed = int(_num(event.get("passed"), 0, 1000) or 0)
         if total and passed <= total:
-            run["eval"] = {"passed": passed, "total": total}
+            fails = [{"q": _txt(f.get("q"), 150), "why": _txt(f.get("why"), 80)}
+                     for f in (event.get("fails") if isinstance(event.get("fails"), list) else [])[:10] if isinstance(f, dict)]
+            run["eval"] = {"passed": passed, "total": total, "fails": fails}
             run["phase"] = f"Contrôle qualité : {passed}/{total} ({round(100 * passed / total)} %)"
     elif kind == "done":
         run["status"] = "done"
@@ -167,6 +171,21 @@ def should_train(base) -> bool:
     """Entraînement de nuit : seulement si tes exemples ont changé depuis le dernier entraînement réussi."""
     done = [r for r in runs(base) if r.get("status") == "done"]
     return not done or done[-1].get("examples_hash") != examples_hash(base)
+
+
+def week(base, auto: list[dict], now: float | None = None) -> dict:
+    """Bilan des 7 derniers jours : ce que tu as validé ou corrigé, ce que Syrius a créé, la note de qualité."""
+    since = (now if now is not None else time.time()) - 7 * 86400
+    mine = [e for e in examples(base) if e.get("at", 0) >= since]
+    corr = [e for e in mine if e.get("src") == "correction"]
+    ev = [r for r in runs(base) if r.get("eval", {}).get("total") and (r.get("finished") or r.get("updated", 0)) >= since]
+    pct = lambda r: round(100 * r["eval"]["passed"] / r["eval"]["total"])  # noqa: E731
+    return {"pouce": sum(1 for e in mine if e.get("src") == "pouce"), "correction": len(corr),
+            "manuel": sum(1 for e in mine if e.get("src", "manuel") == "manuel"),
+            "auto": sum(1 for e in auto if e.get("at", 0) >= since), "nights": len(ev),
+            "eval_first": pct(ev[0]) if ev else None, "eval_last": pct(ev[-1]) if ev else None,
+            "corrections": [{"q": e["q"][:160], "wrong": e.get("wrong", "")[:200], "a": e["a"][:200]} for e in corr[::-1][:5]],
+            "fails": (ev[-1]["eval"].get("fails") or [])[:8] if ev else []}
 
 
 def state(base) -> dict:

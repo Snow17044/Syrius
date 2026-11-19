@@ -138,6 +138,7 @@ class ExampleBody(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     answer: str = Field(min_length=1, max_length=2000)
     source: str = Field(default="manuel", pattern=r"^(manuel|pouce|correction)$")
+    wrong: str = Field(default="", max_length=2000)
 
 
 class ReportBody(BaseModel):
@@ -562,6 +563,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         auto = autogen.stored(db.base)
         st["auto"] = {"total": len(auto), "recent": [{"i": n, "q": e["q"], "a": e["a"][:400]}
                                                     for n, e in enumerate(reversed(auto[-15:]))]}
+        st["week"] = training.week(db.base, auto)
         return st
 
     @app.delete("/api/training/auto/{i}", dependencies=[Depends(require_auth), Depends(require_owner)])
@@ -581,7 +583,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/training/examples", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_add(body: ExampleBody):
         try:
-            return training.add_example(db.base, body.question, body.answer, body.source)
+            return training.add_example(db.base, body.question, body.answer, body.source, body.wrong)
         except training.TrainingError as e:
             raise HTTPException(400, str(e)) from None
 
