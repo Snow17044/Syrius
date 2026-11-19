@@ -20,7 +20,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso", "rejoindre", "adhesions", "confidentialite"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "16 — 19 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "17 — 19 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
@@ -157,6 +157,102 @@ function dateCourte(iso) {
   if (jours < 7) return `Il y a ${jours} jours`;
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
+
+// ── Mise en forme des longs textes du programme ──────────────
+// Le texte est écrit librement (copier-coller) ; on reconnaît seulement :
+//   « 1. TITRE EN MAJUSCULES » → mesure numérotée (reprise dans le sommaire)
+//   « TITRE EN MAJUSCULES »    → intertitre
+//   « - élément »              → liste à puces
+// Le texte enregistré n'est jamais modifié : c'est seulement l'affichage.
+const majuscules = (t) => { const l = t.replace(/[^A-Za-zÀ-ÿ]/g, ""); return l.length >= 3 && l.replace(/[^A-ZÀ-ÖØ-Þ]/g, "").length / l.length > 0.8; };
+
+function texteRiche(texte, { prefixe = "", sommaire = false } = {}) {
+  const lignes = String(texte || "").replace(/\r/g, "").split("\n");
+  const blocs = [];
+  const reperes = { mesures: [], parties: [] }; // pour le sommaire
+  let liste = null, para = [], tableau = null;
+  const finPara = () => { if (para.length) { blocs.push(el("p", {}, ...para.flatMap((l, i) => (i ? [el("br"), l] : [l])))); para = []; } };
+  const finListe = () => { if (liste) { blocs.push(liste); liste = null; } };
+  const finTableau = () => {
+    if (!tableau) return;
+    const [tete, ...corps] = tableau;
+    blocs.push(el("div", { class: "texte-tableau" }, el("table", {},
+      el("thead", {}, el("tr", {}, tete.map((c) => el("th", {}, c)))),
+      el("tbody", {}, corps.map((r) => el("tr", {}, r.map((c) => el("td", {}, c))))))));
+    tableau = null;
+  };
+  const titre = (balise, classe, texteTitre, liste_, numero) => {
+    const id = `${prefixe}-${liste_ === reperes.mesures ? "m" : "p"}${liste_.length + 1}`;
+    liste_.push({ id, numero, titre: texteTitre, indexBloc: blocs.length });
+    blocs.push(el(balise, { class: classe, id }, numero ? el("span", { class: "texte-mesure-num" }, numero) : null, texteTitre));
+  };
+  for (const brute of lignes) {
+    const l = brute.trim();
+    if (!l) { finPara(); finListe(); continue; } // une ligne vide ne coupe pas un tableau
+    if (l.startsWith("|")) {
+      finPara(); finListe();
+      const cellules = l.split("|").map((c) => c.trim()).filter((c, i, t) => !(c === "" && (i === 0 || i === t.length - 1)));
+      if (cellules.every((c) => /^:?-{2,}:?$/.test(c))) continue; // ligne de séparation « |---|---| »
+      (tableau ||= []).push(cellules);
+      continue;
+    }
+    finTableau();
+    const puce = l.match(/^[-•–*·]\s+(.+)$/);
+    if (puce) { finPara(); (liste ||= el("ul", { class: "texte-liste" })).append(el("li", {}, puce[1])); continue; }
+    finListe();
+    const mesure = l.match(/^(\d{1,2})\s*[.)]\s+(.+)$/);
+    if (mesure && l.length < 220 && (majuscules(mesure[2]) || !/[.;,]$/.test(mesure[2]))) {
+      finPara(); titre("h4", "texte-mesure", mesure[2], reperes.mesures, mesure[1]); continue;
+    }
+    const finSansPoint = !/[.:;!?,]$/.test(l);
+    if (majuscules(l) && l.length < 160 && finSansPoint) {
+      finPara();
+      if (/^TH[ÈE]ME\s*\d/i.test(l)) blocs.push(el("h5", { class: "texte-intertitre" }, l));
+      else titre("h5", "texte-intertitre", l, reperes.parties);
+      continue;
+    }
+    // Ligne courte, sans point final, qui commence par une majuscule : un sous-titre
+    if (finSansPoint && l.length >= 8 && l.length <= 110 && l.split(/\s+/).length <= 16 && /^[A-ZÀ-ÖØ-Þ0-9«"]/.test(l)) {
+      finPara(); blocs.push(el("h5", { class: "texte-soustitre" }, l)); continue;
+    }
+    para.push(l);
+  }
+  finPara(); finListe(); finTableau();
+  // Sommaire : les mesures numérotées, sinon les grandes parties
+  const entrees = reperes.mesures.length >= 2 ? reperes.mesures : reperes.parties.length >= 2 ? reperes.parties : [];
+  if (sommaire && entrees.length) {
+    for (const r of [...entrees].slice(1).reverse()) blocs.splice(r.indexBloc, 0, lienSommaire(prefixe));
+    blocs.push(lienSommaire(prefixe));
+    const mot = entrees === reperes.mesures ? "mesures" : "parties";
+    blocs.unshift(el("nav", { class: "sommaire", id: `${prefixe}-sommaire`, "aria-label": "Sommaire" },
+      el("p", { class: "sommaire-titre" }, `Les ${entrees.length} ${mot}`),
+      el("ol", {}, entrees.map((m, i) => el("li", {}, el("button", { type: "button", onclick: () => allerA(m.id) },
+        el("span", { class: "sommaire-num" }, m.numero || String(i + 1)), m.titre))))));
+  }
+  return blocs;
+}
+function lienSommaire(prefixe) {
+  return el("button", { type: "button", class: "lien-btn retour-sommaire", onclick: () => allerA(`${prefixe}-sommaire`) }, "↑ Retour au sommaire");
+}
+function allerA(id) {
+  const cible = document.getElementById(id);
+  if (!cible) return;
+  window.scrollTo({ top: cible.getBoundingClientRect().top + scrollY - 140, behavior: "smooth" });
+}
+const tempsLecture = (t) => Math.max(1, Math.round(String(t || "").split(/\s+/).filter(Boolean).length / 220));
+
+// Titre d'un thème : « THÈME 2 — SOUVERAINETÉ… » → numéro « Thème 2 » + titre plus lisible.
+const SIGLES = new Set(["UE", "IA", "PIB", "TVA", "RSA", "SMIC", "OTAN", "ONU", "EDF", "SNCF", "CNIL", "BAC", "BTS", "CAP", "PME", "TPE", "ETI", "CSG", "RER", "BUT", "OQTF", "ZFE", "DOM", "TOM", "UNEF", "CROUS", "STAPS", "CPGE"]);
+function titreTheme(a, i) {
+  const m = String(a.titre || "").match(/^\s*TH[ÈE]ME\s*(\d+)\s*[-–—:.]*\s*(.+)$/i);
+  let titre = (m ? m[2] : a.titre || "").trim();
+  if (majuscules(titre)) {
+    titre = titre.toLowerCase().replace(/[\p{L}']+/gu, (mot) => (SIGLES.has(mot.toUpperCase()) ? mot.toUpperCase() : mot));
+    titre = titre.charAt(0).toUpperCase() + titre.slice(1);
+  }
+  return { numero: m ? m[1] : String(i + 1), titre };
+}
+const themeVide = (a) => !String(a.resume || "").trim() && !a.propositions.length;
 
 function paragraphes(texte) {
   return String(texte || "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
@@ -617,6 +713,9 @@ $("#form-ajout").addEventListener("submit", async (e) => {
   if (!apercuActuel && !texte && !photoPublication.valeur) return erreur("Ajoute un lien, une photo ou un texte.");
   if (!$("#champ-titre").value.trim()) { $("#champ-titre").focus(); return erreur("Donne un titre à la publication."); }
   if (!(await demanderCode())) { $("#champ-code").focus(); return erreur("Entre le code éditeur."); }
+  const corrige = await verifierOrthographe({ titre: $("#champ-titre").value, texte: $("#champ-texte").value });
+  $("#champ-titre").value = corrige.titre;
+  $("#champ-texte").value = corrige.texte;
 
   const btn = $("#btn-publier");
   btn.disabled = true;
@@ -628,7 +727,7 @@ $("#form-ajout").addEventListener("submit", async (e) => {
         ...(apercuActuel || {}),
         titre: $("#champ-titre").value,
         categorie: $("#champ-categorie").value,
-        texte,
+        texte: corrige.texte.trim(),
         image: photoPublication.valeur || apercuActuel?.image || "",
         imagePos: photoPublication.valeur ? photoPublication.position : "",
       }),
@@ -674,8 +773,10 @@ function afficherProgramme() {
   // Bannière d'accueil (la photo de couverture passe en fond si elle existe)
   if (p.slogan) $("#banniere-slogan").textContent = p.slogan;
   if (p.intro) {
-    const ligne = p.intro.split("\n")[0];
-    $("#banniere-texte").textContent = ligne.length > 180 ? `${ligne.slice(0, 180)}…` : ligne;
+    // Première vraie phrase (on saute les titres comme « Qui sommes-nous ? »)
+    const lignes = p.intro.split("\n").map((l) => l.trim()).filter(Boolean);
+    const ligne = lignes.find((l) => l.length >= 40 && !l.endsWith("?")) || lignes[0] || "";
+    $("#banniere-texte").textContent = ligne.length > 180 ? `${ligne.slice(0, 180).replace(/\s+\S*$/, "")}…` : ligne;
   }
   $("#banniere").classList.toggle("avec-photo", Boolean(p.photo));
   $("#banniere").style.backgroundImage = p.photo ? `linear-gradient(180deg, rgba(0,36,106,.45), rgba(0,36,106,.92)), url("${p.photo}")` : "";
@@ -686,11 +787,13 @@ function afficherProgramme() {
 
   // Tuiles des axes sur l'accueil
   $("#axes-accueil").replaceChildren(...(p.axes.length
-    ? p.axes.map((a) => el("button", { class: `axe-tuile${a.photo ? " avec-photo" : ""}`, type: "button", onclick: () => ouvrirAxe(a.id) },
+    ? p.axes.map((a, i) => el("button", { class: `axe-tuile${a.photo ? " avec-photo" : ""}${themeVide(a) ? " bientot" : ""}`, type: "button", onclick: () => ouvrirAxe(a.id) },
         a.photo ? photoTheme(a, "axe-tuile-photo", () => el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"))
           : el("span", { class: "axe-tuile-icone", "aria-hidden": "true" }, a.icone || "🔹"),
-        el("span", { class: "axe-tuile-titre" }, a.titre),
-        el("span", { class: "axe-tuile-nb" }, a.propositions.length ? `${a.propositions.length} proposition${a.propositions.length > 1 ? "s" : ""}` : "Lire →")))
+        el("span", { class: "axe-tuile-numero" }, `Thème ${titreTheme(a, i).numero}`),
+        el("span", { class: "axe-tuile-titre" }, titreTheme(a, i).titre),
+        el("span", { class: "axe-tuile-nb" }, themeVide(a) ? "Bientôt disponible"
+          : a.resume ? `Lire · ${tempsLecture(a.resume)} min` : `${a.propositions.length} proposition${a.propositions.length > 1 ? "s" : ""}`)))
     : [el("div", { class: "vide-etat" },
         el("p", {}, peutModifierProgramme() ? "Le programme n'est pas encore rédigé." : "Notre programme arrive très bientôt !"),
         peutModifierProgramme() ? el("button", { class: "btn-secondaire", type: "button", onclick: () => { aller("programme"); ouvrirEdition(); } }, "✏️ Rédiger le programme") : null)]));
@@ -699,18 +802,21 @@ function afficherProgramme() {
   $("#programme-photo").hidden = !p.photo;
   if (p.photo) cadrer($("#programme-photo"), p.photoPos).src = p.photo;
   $("#programme-slogan").textContent = p.slogan || "Notre programme";
-  $("#programme-intro").replaceChildren(...(vide ? [el("p", {}, "Notre programme est en cours de rédaction. Reviens très vite !")] : paragraphes(p.intro)));
+  $("#programme-intro").replaceChildren(...(vide ? [el("p", {}, "Notre programme est en cours de rédaction. Reviens très vite !")] : texteRiche(p.intro)));
   $("#programme-maj").textContent = p.maj ? `Mis à jour le ${new Date(p.maj).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : "";
   if (etat.organiser && peutModifierProgramme()) afficherOrganiser();
   else $("#programme-axes").replaceChildren(...p.axes.map((a, i) => el("details", { class: "axe", id: `axe-${a.id}` },
     el("summary", { class: a.photo ? "avec-photo" : null },
       a.photo ? photoTheme(a, "axe-photo", () => el("span", { hidden: true })) : null,
       el("span", { class: "axe-ligne" },
-        el("span", { class: "axe-num", "aria-hidden": "true" }, a.icone || String(i + 1)),
-        el("span", { class: "axe-titre" }, a.titre),
+        el("span", { class: "axe-num", "aria-hidden": "true" }, a.icone || titreTheme(a, i).numero),
+        el("span", { class: "axe-titre" },
+          el("span", { class: "axe-titre-numero" }, `Thème ${titreTheme(a, i).numero}${themeVide(a) ? " · bientôt disponible" : a.resume ? ` · ${tempsLecture(a.resume)} min de lecture` : ""}`),
+          titreTheme(a, i).titre),
         svgIcone('<path d="m6 9 6 6 6-6"/>', "axe-fleche"))),
     el("div", { class: "axe-corps" },
-      el("div", { class: "texte-long" }, paragraphes(a.resume)),
+      themeVide(a) ? el("p", { class: "aide" }, "Ce thème sera bientôt publié. Reviens très vite !") : null,
+      el("div", { class: "texte-long texte-programme" }, texteRiche(a.resume, { prefixe: `t-${a.id}`, sommaire: true })),
       a.propositions.length ? el("ul", {}, a.propositions.map((x) => el("li", {}, x))) : null,
       peutModifierProgramme() ? el("button", { type: "button", class: "btn-secondaire large", onclick: () => ouvrirEdition(a.id) }, "✏️ Modifier cet axe") : null))));
   $(".programme-actions").hidden = etat.organiser && peutModifierProgramme();
@@ -853,6 +959,10 @@ function ouvrirEdition(axeId) {
 function fermerEdition() { $("#programme-edition").hidden = true; $("#programme-lecture").hidden = false; }
 
 $("#btn-modifier-programme").addEventListener("click", ouvrirEdition);
+$("#ed-orthographe").addEventListener("click", async () => {
+  remettreProgramme(await verifierOrthographe(champsProgramme({ seulementModifies: false })));
+  $("#ed-message").className = "message"; $("#ed-message").textContent = "Pense à enregistrer pour garder les corrections.";
+});
 $("#ed-annuler").addEventListener("click", () => { fermerEdition(); window.scrollTo(0, 0); });
 $("#ed-ajouter-axe").addEventListener("click", () => {
   const b = blocAxe(); $("#ed-axes").append(b); numeroter(); b.querySelector(".ed-titre").focus();
@@ -862,6 +972,7 @@ $("#programme-edition").addEventListener("submit", async (e) => {
   e.preventDefault();
   terminerAnnulation();
   const msg = $("#ed-message");
+  remettreProgramme(await verifierOrthographe(champsProgramme({ seulementModifies: true })));
   const axes = [...document.querySelectorAll("#ed-axes .ed-axe")].map((b, i) => ({
     id: b.dataset.id || `axe-${Date.now().toString(36)}-${i}`,
     icone: b.querySelector(".ed-icone").value.trim(),
@@ -909,7 +1020,7 @@ function construireMenu() {
   const sections = [
     ["Le programme", [
       ligneMenu("🚩", "Le programme complet", () => aller("programme")),
-      ...p.axes.map((a, i) => ligneMenu(a.icone || String(i + 1), a.titre, () => ouvrirAxe(a.id))),
+      ...p.axes.map((a, i) => ligneMenu(a.icone || titreTheme(a, i).numero, titreTheme(a, i).titre + (themeVide(a) ? " (bientôt)" : ""), () => ouvrirAxe(a.id))),
     ]],
     ["L'actualité", [
       ligneMenu("📰", "Toute l'actualité", () => allerRubrique("Tous")),
@@ -1108,6 +1219,78 @@ function afficherConfidentialite() {
 }
 afficherConfidentialite();
 
+// ── Correcteur d'orthographe ─────────────────────────────────
+// Avant d'enregistrer, les textes sont vérifiés ; l'équipe choisit les corrections à appliquer.
+// champs : { cle: texte }  →  renvoie { cle: texte corrigé } (ou null si on annule)
+async function verifierOrthographe(champs, { forcer = false } = {}) {
+  const aVerifier = Object.fromEntries(Object.entries(champs).filter(([, t]) => String(t || "").trim()));
+  if (!Object.keys(aVerifier).length) return champs;
+  toast("✍️ Vérification de l'orthographe…");
+  let r;
+  try { r = await api("/api/corriger", { method: "POST", body: JSON.stringify({ textes: aVerifier }) }); }
+  catch { toast("Correcteur indisponible : enregistrement sans vérification."); return champs; }
+  const liste = Object.entries(r.corrections || {}).flatMap(([cle, cs]) => cs.map((c) => ({ ...c, cle })));
+  if (!liste.length) {
+    toast(r.indisponible || r.partiel ? "Correcteur indisponible pour le moment : vérification incomplète." : "Aucune faute trouvée ✅");
+    return champs;
+  }
+  const choix = await new Promise((resolve) => {
+    const fond = el("div", { class: "modale-fond galerie-fond" });
+    const cases = liste.map(() => el("input", { type: "checkbox", checked: true }));
+    const fermer = (v) => { fond.remove(); resolve(v); };
+    fond.append(el("div", { class: "modale galerie", role: "dialog", "aria-modal": "true", "aria-label": "Corrections proposées" },
+      el("h3", {}, `✍️ ${liste.length} correction${liste.length > 1 ? "s" : ""} proposée${liste.length > 1 ? "s" : ""}`),
+      el("p", {}, "Décoche celles qui ne conviennent pas (noms propres, choix volontaires…)." + (r.partiel ? " Vérification partielle : le correcteur gratuit a atteint sa limite." : "")),
+      el("div", { class: "corrections" }, liste.map((c, i) => {
+        const texte = champs[c.cle];
+        const avant = texte.slice(Math.max(0, c.debut - 35), c.debut).replace(/^\S*\s/, "…");
+        const apres = texte.slice(c.debut + c.longueur, c.debut + c.longueur + 35).replace(/\s\S*$/, "…");
+        return el("label", { class: "correction" }, cases[i],
+          el("span", {}, el("span", { class: "correction-contexte" }, avant, el("del", {}, c.original), el("ins", {}, c.suggestion), apres),
+            el("span", { class: "correction-raison" }, c.message)));
+      })),
+      el("div", { class: "modale-boutons" },
+        el("button", { type: "button", class: "btn-secondaire", onclick: () => fermer([]) }, "Ignorer"),
+        el("button", { type: "button", class: "btn-principal", onclick: () => fermer(liste.filter((_, i) => cases[i].checked)) }, "✅ Corriger"))));
+    document.body.append(fond);
+  });
+  const corrige = { ...champs };
+  for (const cle of new Set(choix.map((c) => c.cle))) {
+    let t = corrige[cle];
+    for (const c of choix.filter((x) => x.cle === cle).sort((a, b) => b.debut - a.debut)) {
+      if (t.slice(c.debut, c.debut + c.longueur) === c.original) t = t.slice(0, c.debut) + c.suggestion + t.slice(c.debut + c.longueur);
+    }
+    corrige[cle] = t;
+  }
+  if (choix.length) toast(`${choix.length} correction${choix.length > 1 ? "s" : ""} appliquée${choix.length > 1 ? "s" : ""} ✅`);
+  return corrige;
+}
+
+// Champs du formulaire de programme, sous forme { cle: texte } (pour la vérification) et retour dans le formulaire.
+function champsProgramme({ seulementModifies }) {
+  const champs = {};
+  const change = (cle, t, avant) => { if (!seulementModifies || String(t).trim() !== String(avant || "").trim()) champs[cle] = t; };
+  change("slogan", $("#ed-slogan").value, programme.slogan);
+  change("intro", $("#ed-intro").value, programme.intro);
+  document.querySelectorAll("#ed-axes .ed-axe").forEach((b, i) => {
+    const avant = programme.axes.find((a) => a.id && a.id === b.dataset.id) || {};
+    change(`axe${i}-titre`, b.querySelector(".ed-titre").value, avant.titre);
+    change(`axe${i}-resume`, b.querySelector(".ed-resume").value, avant.resume);
+    change(`axe${i}-props`, b.querySelector(".ed-props").value, (avant.propositions || []).join("\n"));
+  });
+  return champs;
+}
+function remettreProgramme(champs) {
+  if ("slogan" in champs) $("#ed-slogan").value = champs.slogan;
+  if ("intro" in champs) $("#ed-intro").value = champs.intro;
+  document.querySelectorAll("#ed-axes .ed-axe").forEach((b, i) => {
+    if (`axe${i}-titre` in champs) b.querySelector(".ed-titre").value = champs[`axe${i}-titre`];
+    if (`axe${i}-resume` in champs) b.querySelector(".ed-resume").value = champs[`axe${i}-resume`];
+    if (`axe${i}-props` in champs) b.querySelector(".ed-props").value = champs[`axe${i}-props`];
+  });
+  ajusterTextes($("#programme-edition"));
+}
+
 // ── Écran de bienvenue ───────────────────────────────────────
 // À la première visite (site ou appli non installée) : présentation + proposition d'installer.
 // « Plus tard » le cache pendant 2 semaines ; jamais affiché si l'appli est déjà installée.
@@ -1124,7 +1307,7 @@ function bienvenueAMontrer() {
 function afficherBienvenue() {
   const fond = el("div", { class: "bienvenue-fond", role: "dialog", "aria-modal": "true", "aria-labelledby": "bienvenue-titre" });
   const fermer = () => { stocker(CLE_BIENVENUE, String(Date.now())); fond.remove(); };
-  const themes = programme.axes.slice(0, 4).map((a) => el("li", {}, el("span", { "aria-hidden": "true" }, a.icone || "🚩"), a.titre));
+  const themes = programme.axes.filter((a) => !themeVide(a)).slice(0, 4).map((a) => el("li", {}, el("span", { "aria-hidden": "true" }, a.icone || "🚩"), titreTheme(a, programme.axes.indexOf(a)).titre));
   fond.append(el("div", { class: "bienvenue" },
     el("img", { src: "/icons/logo.png", alt: "Nouvel Élan", class: "bienvenue-logo" }),
     el("h2", { id: "bienvenue-titre" }, "Bienvenue !"),

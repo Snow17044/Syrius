@@ -38,5 +38,10 @@
       "source": "/reparer",
       "destination": "/reparer.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/corriger.js": {
+      "maxDuration": 60
+    }
+  }
 }
