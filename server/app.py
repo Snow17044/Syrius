@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, autogen, diagnostic, family, github_oidc, hfspace, safety, selfcode, training, voicebot
+from . import auth, autogen, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -48,6 +48,10 @@ ANDROID_CERTS: list[str] = [
 
 
 MODEL_MANIFEST_KEY = "syrius_model_manifest_v1"
+
+
+class MemoryBody(BaseModel):
+    fact: str = Field(min_length=1, max_length=600)
 
 
 class ModelManifestBody(BaseModel):
@@ -1013,6 +1017,14 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/api/memories", dependencies=[Depends(require_auth)])
     async def list_memories():
         return db.list_memories()
+
+    @app.post("/api/memories", dependencies=[Depends(require_auth)])
+    async def add_memory(body: MemoryBody):
+        try:
+            mid, new = memory.add(db, body.fact)
+        except memory.MemoryError_ as e:
+            raise HTTPException(400, str(e)) from None
+        return {"id": mid, "new": new}
 
     @app.delete("/api/memories/{mid}", dependencies=[Depends(require_auth)])
     async def delete_memory(mid: int):

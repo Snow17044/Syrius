@@ -7,7 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import Config
-from .. import family
+from .. import family, memory
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
@@ -201,10 +201,13 @@ class ToolExecutor:
         if name == "remember":
             a = _check(args, {"fact": str}, ["fact"])
             fact = a["fact"].strip()
-            if not fact:
-                raise InvalidInput("souvenir vide")
-            mid = self.db.add_memory(fact)
-            return f"Souvenir n°{mid} enregistré.", False, {"type": "memory", "id": mid, "content": fact[:500]}
+            try:
+                mid, new = memory.add(self.db, fact)
+            except memory.MemoryError_ as e:
+                return str(e), True, None
+            if not new:
+                return f"Je le savais déjà (souvenir n°{mid}).", False, None
+            return f"Souvenir n°{mid} enregistré.", False, {"type": "memory", "id": mid, "content": fact[:300]}
 
         if name == "forget":
             a = _check(args, {"memory_id": int}, ["memory_id"])
