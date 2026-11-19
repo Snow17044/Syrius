@@ -1876,7 +1876,7 @@ function spokenText(text) {
   return String(text || "").replace(/<tool_call>[\s\S]*?(<\/tool_call>|$)/g, " ").replace(/```[\s\S]*?```/g, " ")
     .replace(/\p{Extended_Pictographic}|\p{Emoji_Modifier}|\uFE0F|\u200D/gu, "").replace(/https?:\/\/\S+/g, "lien")
     .replace(/^\s*[-*•]\s+/gm, "").replace(/[`*#>_\[\]()|~]/g, "").replace(/([^.!?:;,\s])[ \t]*\n\s*/g, "$1. ").replace(/\s*\n\s*/g, " ")
-    .replace(/\s+/g, " ").trim().slice(0, 1500);
+    .replace(/\s+/g, " ").trim().slice(0, 6000);
 }
 // Meilleure voix française du navigateur : les voix « naturelles » / réseau d'abord, la voix par défaut sinon.
 function bestFrenchVoice() {
