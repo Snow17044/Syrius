@@ -17,7 +17,7 @@ def local_ask(path: str):
         ids = tok.apply_chat_template([{"role": "system", "content": system}, {"role": "user", "content": prompt}],
                                       add_generation_prompt=True, return_tensors="pt")
         with torch.no_grad():
-            out = model.generate(ids, max_new_tokens=400, do_sample=False)
+            out = model.generate(ids, max_new_tokens=400, do_sample=False, pad_token_id=tok.eos_token_id)
         return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True)
     return ask
 

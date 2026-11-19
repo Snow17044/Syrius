@@ -36,7 +36,7 @@ jobs:
         run: .venv/bin/python -m coder.make_data 120
       - name: Score de la grande IA sur le banc d'essai (référence)
         continue-on-error: true
-        run: .venv/bin/python -m coder.bench_run teacher 8 | tee /tmp/teacher.json
+        run: .venv/bin/python -m coder.bench_run teacher 10 | tee /tmp/teacher.json
       - name: Publier
         run: |
           gh release upload coder-data training/data/coder.jsonl --clobber
