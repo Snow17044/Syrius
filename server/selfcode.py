@@ -15,6 +15,7 @@ import json
 import re
 import secrets
 import time
+import urllib.request
 
 from . import safety
 
@@ -174,3 +175,24 @@ def report(base, body: dict) -> None:
             _save(base, data)
             return
     raise SelfCodeError("demande inconnue")
+
+
+WORKFLOW = "selfcode.yml"
+_REPO = re.compile(r"[\w.-]+/[\w.-]+")
+
+
+def dispatch(token: str, repo: str) -> bool:
+    """Démarre tout de suite « Améliorer Syrius » (sinon GitHub ne le lance qu'environ une fois par heure).
+    Jamais d'erreur : sans jeton ou en cas d'échec, la demande reste simplement en attente."""
+    if not token or not _REPO.fullmatch(repo or ""):
+        return False
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/workflows/{WORKFLOW}/dispatches",
+                                 data=json.dumps({"ref": "main"}).encode(), method="POST", headers={
+                                     "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+                                     "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Syrius/1.0",
+                                     "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310 (adresse officielle de GitHub)
+            return 200 <= r.status < 300
+    except (OSError, ValueError):
+        return False
