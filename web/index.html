@@ -289,14 +289,41 @@
 
   <dialog id="settings">
     <form method="dialog" class="sheet" id="settings-form">
-      <header class="sheet-head"><h3>Réglages</h3><button class="icon-btn" value="close" aria-label="Fermer" data-icon="close"></button></header>
+      <div class="set-top">
+        <header class="sheet-head"><h3>Réglages</h3><button class="icon-btn" value="close" aria-label="Fermer" data-icon="close"></button></header>
+        <nav class="set-tabs" id="set-tabs" role="tablist" aria-label="Catégories de réglages">
+        <button type="button" role="tab" data-tab="profil" data-icon="user"><span>Profil</span></button>
+        <button type="button" role="tab" data-tab="ia" data-icon="sparkle"><span>IA</span></button>
+        <button type="button" role="tab" data-tab="voix" data-icon="wave"><span>Voix</span></button>
+        <button type="button" role="tab" data-tab="services" data-icon="mail"><span>Services</span></button>
+        <button type="button" role="tab" data-tab="famille" data-icon="user"><span>Famille</span></button>
+        <button type="button" role="tab" data-tab="securite" data-icon="shield"><span>Sécurité</span></button>
+        </nav>
+      </div>
 
+      <div class="set-panel" data-panel="profil" role="tabpanel">
+<section class="set-card">
       <h4 data-icon="user"><span>Profil</span></h4>
       <p id="s-account" class="small muted"></p>
       <label>Ton prénom<input id="s-name" type="text" maxlength="60" autocomplete="given-name"></label>
       <label>Ce que Syrius doit savoir / comment il doit répondre
         <textarea id="s-custom" rows="3" maxlength="2000" placeholder="Ex. : Je suis étudiant(e), réponds-moi en bref, vouvoie-moi…"></textarea></label>
+</section>
 
+<section class="set-card">
+      <h4 data-icon="bulb"><span>Mémoire</span></h4>
+      <p class="muted small">Ce que Syrius a retenu sur toi. Supprime ce que tu veux.</p>
+      <ul id="memory-list"></ul>
+      <div class="inline-form">
+        <input id="memory-new" type="text" maxlength="300" placeholder="Ajouter un souvenir (ex. : J'aime le thé, pas le café)" autocomplete="off">
+        <button type="button" id="memory-add" class="ghost" data-icon="plus"><span>Ajouter</span></button>
+      </div>
+      <p id="memory-msg" class="small"></p>
+</section>
+      </div>
+
+      <div class="set-panel" data-panel="ia" role="tabpanel">
+<section class="set-card">
       <h4 data-icon="sparkle"><span>Intelligence</span></h4>
       <label>Style de réponse
         <select id="s-effort">
@@ -309,56 +336,9 @@
       <label class="switch"><input id="s-web" type="checkbox"><span>Recherche sur le web</span></label>
       <p class="muted small" id="s-web-note"></p>
       <label class="switch"><input id="s-location" type="checkbox"><span>Partager ma position approximative (cartes « près de moi »)</span></label>
-      <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
+</section>
 
-      <div id="wake-box" class="hidden">
-        <h4 data-icon="mic"><span>« Hey Syrius » (même app fermée)</span></h4>
-        <p class="muted small">Dis « Hey Syrius » : un bip, tu parles, il répond à voix haute, même écran éteint.
-          Le mot-clé est reconnu sur ton téléphone, rien n'est envoyé avant. Consomme un peu plus de batterie ;
-          une notification « Syrius vous écoute » reste affichée.</p>
-        <button type="button" id="wake-download" class="ghost wide" data-icon="download"><span>Installer la reconnaissance vocale (42 Mo)</span></button>
-        <div id="wake-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
-        <label class="switch"><input id="wake-on" type="checkbox"><span>Écouter « Hey Syrius » en permanence</span></label>
-        <button type="button" id="wake-battery" class="ghost wide" data-icon="battery"><span>Ne pas couper Syrius (réglage batterie)</span></button>
-        <button type="button" id="wake-overlay" class="ghost wide" data-icon="music"><span>Lancer la musique app fermée (autoriser)</span></button>
-        <p id="wake-status" class="small"></p>
-        <div id="wake-live" class="wake-live hidden">
-          <div class="small muted" data-icon="ear"><span>Dernière chose entendue</span></div>
-          <div id="wake-heard" class="wake-heard">—</div>
-          <button type="button" id="wake-learn" class="ghost wide" data-icon="learn"><span>Apprendre ma façon de dire « Hey Syrius »</span></button>
-          <p id="wake-learn-msg" class="small"></p>
-        </div>
-      </div>
-
-      <div id="voice-box" class="hidden">
-        <h4 data-icon="wave"><span>Voix de Syrius</span></h4>
-        <p id="voice-status" class="small"></p>
-        <label>Voix <select id="voice-select"></select></label>
-        <label>Vitesse <input id="voice-rate" type="range" min="0.7" max="1.5" step="0.05" value="1.05"></label>
-        <div class="local-actions">
-          <button type="button" id="voice-test" class="ghost" data-icon="play"><span>Écouter</span></button>
-          <button type="button" id="voice-google" class="ghost hidden" data-icon="download"><span>Installer la voix Google</span></button>
-          <button type="button" id="voice-settings" class="ghost" data-icon="settings"><span>Moteur et voix du téléphone</span></button>
-          <button type="button" id="voice-refresh" class="ghost" data-icon="refresh"><span>Actualiser</span></button>
-        </div>
-        <p class="muted small">Les voix « très haute qualité » sont les plus naturelles. Si la liste est courte, ouvre
-          « Moteur et voix du téléphone » : choisis le moteur Synthèse vocale Google, puis télécharge une voix française.</p>
-      </div>
-
-      <div id="briefing-box" class="hidden">
-        <h4 data-icon="sun"><span>Briefing du matin</span></h4>
-        <p class="muted small">Chaque jour, une notification : touche-la et Syrius te fait ton briefing. Pour les anniversaires, dis-lui par exemple « Retiens que l'anniversaire de Maman est le 12 mars ».</p>
-        <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le briefing</span></label>
-        <p class="muted small">Ce qu'il contient :</p>
-        <label class="switch"><input type="checkbox" data-bopt="meteo" checked><span>Météo et pluie</span></label>
-        <label class="switch"><input type="checkbox" data-bopt="rappels" checked><span>Mes rappels du jour</span></label>
-        <label class="switch"><input type="checkbox" data-bopt="anniv" checked><span>Anniversaires et événements</span></label>
-        <label class="switch"><input type="checkbox" data-bopt="actus" checked><span>3 actualités</span></label>
-        <label>Heure <input id="briefing-time" type="time" value="07:30"></label>
-        <p id="briefing-msg" class="small"></p>
-      </div>
-
-      <div id="local-box" class="hidden">
+      <div id="local-box" class="set-card hidden">
         <h4 data-icon="chip"><span>IA hors ligne (sur ce téléphone)</span></h4>
         <div id="local-update" class="hidden">
           <p class="small">Ton application Syrius est une <b>ancienne version</b> : l'IA hors ligne n'y est pas.
@@ -419,30 +399,78 @@
         </div>
         </div>
       </div>
-
-      <div id="family-box" class="hidden">
-        <h4 data-icon="user"><span>Famille</span></h4>
-        <p class="muted small">Jusqu'à 10 comptes en tout (famille + tests), chacun avec ses discussions privées.
-          Envoie le lien d'invitation : la personne l'ouvre et crée son compte. Tu n'as rien d'autre à faire.</p>
-        <p id="family-full" class="small hidden">Famille complète (10 comptes) : plus aucun lien ne peut être créé.
-          Retire un compte pour libérer une place.</p>
-        <div id="family-invite" class="invite">
-          <div id="family-code" class="invite-code">—</div>
-          <div class="local-actions">
-            <button type="button" id="family-share" class="ghost" data-icon="link"><span>Partager</span></button>
-            <button type="button" id="family-renew" class="ghost" data-icon="refresh"><span>Nouveau code</span></button>
-          </div>
-        </div>
-        <div id="family-testbox">
-          <p class="muted small">Lien de test : la personne essaie Syrius sans créer de compte. Après 24 h, le lien
-            ne marche plus et ses données sont effacées.</p>
-          <button type="button" id="family-test" class="ghost" data-icon="clock"><span>Créer un lien de test (24 h)</span></button>
-        </div>
-        <ul id="family-list" class="family-list"></ul>
-        <p id="family-msg" class="small"></p>
       </div>
 
-      <div id="discord-box" class="hidden">
+      <div class="set-panel" data-panel="voix" role="tabpanel">
+<section class="set-card">
+      <h4 data-icon="wave"><span>Lecture à voix haute</span></h4>
+      <label class="switch"><input id="s-voice" type="checkbox"><span>Lire les réponses à voix haute</span></label>
+      <p class="muted small">Syrius lit ses réponses à voix haute. Le réglage de la voix est juste en dessous (application Android).</p>
+</section>
+
+      <div id="voice-box" class="set-card hidden">
+        <h4 data-icon="wave"><span>Voix de Syrius</span></h4>
+        <p id="tts-status" class="small"></p>
+        <label>Voix <select id="voice-select"></select></label>
+        <label>Vitesse <input id="voice-rate" type="range" min="0.7" max="1.5" step="0.05" value="1.05"></label>
+        <div class="local-actions">
+          <button type="button" id="voice-test" class="ghost" data-icon="play"><span>Écouter</span></button>
+          <button type="button" id="voice-google" class="ghost hidden" data-icon="download"><span>Installer la voix Google</span></button>
+          <button type="button" id="voice-settings" class="ghost" data-icon="settings"><span>Voix du téléphone</span></button>
+          <button type="button" id="voice-refresh" class="ghost" data-icon="refresh"><span>Actualiser</span></button>
+        </div>
+        <p class="muted small">Les voix « très haute qualité » sont les plus naturelles. Si la liste est courte, ouvre
+          « Voix du téléphone » : choisis le moteur Synthèse vocale Google, puis télécharge une voix française.</p>
+      </div>
+
+      <div id="wake-box" class="set-card hidden">
+        <h4 data-icon="mic"><span>« Hey Syrius » (même app fermée)</span></h4>
+        <p class="muted small">Dis « Hey Syrius » : un bip, tu parles, il répond à voix haute, même écran éteint.
+          Le mot-clé est reconnu sur ton téléphone, rien n'est envoyé avant. Consomme un peu plus de batterie ;
+          une notification « Syrius vous écoute » reste affichée.</p>
+        <button type="button" id="wake-download" class="ghost wide" data-icon="download"><span>Installer la reconnaissance vocale (42 Mo)</span></button>
+        <div id="wake-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
+        <label class="switch"><input id="wake-on" type="checkbox"><span>Écouter « Hey Syrius » en permanence</span></label>
+        <button type="button" id="wake-battery" class="ghost wide" data-icon="battery"><span>Ne pas couper Syrius (réglage batterie)</span></button>
+        <button type="button" id="wake-overlay" class="ghost wide" data-icon="music"><span>Lancer la musique app fermée (autoriser)</span></button>
+        <p id="wake-status" class="small"></p>
+        <div id="wake-live" class="wake-live hidden">
+          <div class="small muted" data-icon="ear"><span>Dernière chose entendue</span></div>
+          <div id="wake-heard" class="wake-heard">—</div>
+          <button type="button" id="wake-learn" class="ghost wide" data-icon="learn"><span>Apprendre ma façon de dire « Hey Syrius »</span></button>
+          <p id="wake-learn-msg" class="small"></p>
+        </div>
+      </div>
+
+      <div id="briefing-box" class="set-card hidden">
+        <h4 data-icon="sun"><span>Briefing du matin</span></h4>
+        <p class="muted small">Chaque jour, une notification : touche-la et Syrius te fait ton briefing. Pour les anniversaires, dis-lui par exemple « Retiens que l'anniversaire de Maman est le 12 mars ».</p>
+        <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le briefing</span></label>
+        <p class="muted small">Ce qu'il contient :</p>
+        <label class="switch"><input type="checkbox" data-bopt="meteo" checked><span>Météo et pluie</span></label>
+        <label class="switch"><input type="checkbox" data-bopt="rappels" checked><span>Mes rappels du jour</span></label>
+        <label class="switch"><input type="checkbox" data-bopt="anniv" checked><span>Anniversaires et événements</span></label>
+        <label class="switch"><input type="checkbox" data-bopt="actus" checked><span>3 actualités</span></label>
+        <label>Heure <input id="briefing-time" type="time" value="07:30"></label>
+        <p id="briefing-msg" class="small"></p>
+      </div>
+      </div>
+
+      <div class="set-panel" data-panel="services" role="tabpanel">
+<section class="set-card">
+      <h4 data-icon="mail"><span>Emails</span></h4>
+      <p id="s-email" class="muted small"></p>
+      <div id="google-box" class="hidden">
+        <button type="button" id="google-connect" class="ghost wide">Connecter Gmail</button>
+        <p id="google-msg" class="small"></p>
+      </div>
+      <div id="outlook-box" class="hidden">
+        <button type="button" id="outlook-connect" class="ghost wide">Connecter Outlook / Hotmail</button>
+        <p id="outlook-msg" class="small"></p>
+      </div>
+</section>
+
+      <div id="discord-box" class="set-card hidden">
         <h4 data-icon="mic"><span>Syrius sur Discord</span></h4>
         <p class="muted small">Parle à Syrius dans un salon vocal Discord, même en jouant sur ta console. Il ne répond
           qu'à toi, et seulement si ta phrase commence par « Syrius ».</p>
@@ -466,20 +494,34 @@
         <button type="button" id="dc-space" class="primary wide" data-icon="send"><span>Créer et lancer le bot</span></button>
         <p id="dc-space-msg" class="small"></p>
       </div>
-
-      <div id="diag-box" class="hidden">
-        <h4 data-icon="shield"><span>Vérifier les services</span></h4>
-        <p class="muted small">Teste en direct la création d'images, la lecture des photos et les maquettes 3D
-          (environ 30 secondes). Si quelque chose ne marche pas, envoie une capture de ce résultat.</p>
-        <button type="button" id="diag-run" class="ghost" data-icon="refresh"><span>Tester les services</span></button>
-        <ul id="diag-list" class="family-list"></ul>
-        <h4 data-icon="alert"><span>Signalements</span></h4>
-        <p class="muted small">Réponses ou images de l'IA signalées par toi ou ta famille.</p>
-        <ul id="report-list" class="family-list"></ul>
-        <button type="button" id="report-clear" class="ghost subtle hidden">Tout effacer</button>
       </div>
 
-      <div id="scan-box" class="hidden">
+      <div class="set-panel" data-panel="famille" role="tabpanel">
+      <div id="family-box" class="set-card hidden">
+        <h4 data-icon="user"><span>Famille</span></h4>
+        <p class="muted small">Jusqu'à 10 comptes en tout (famille + tests), chacun avec ses discussions privées.
+          Envoie le lien d'invitation : la personne l'ouvre et crée son compte. Tu n'as rien d'autre à faire.</p>
+        <p id="family-full" class="small hidden">Famille complète (10 comptes) : plus aucun lien ne peut être créé.
+          Retire un compte pour libérer une place.</p>
+        <div id="family-invite" class="invite">
+          <div id="family-code" class="invite-code">—</div>
+          <div class="local-actions">
+            <button type="button" id="family-share" class="ghost" data-icon="link"><span>Partager</span></button>
+            <button type="button" id="family-renew" class="ghost" data-icon="refresh"><span>Nouveau code</span></button>
+          </div>
+        </div>
+        <div id="family-testbox">
+          <p class="muted small">Lien de test : la personne essaie Syrius sans créer de compte. Après 24 h, le lien
+            ne marche plus et ses données sont effacées.</p>
+          <button type="button" id="family-test" class="ghost" data-icon="clock"><span>Créer un lien de test (24 h)</span></button>
+        </div>
+        <ul id="family-list" class="family-list"></ul>
+        <p id="family-msg" class="small"></p>
+      </div>
+      </div>
+
+      <div class="set-panel" data-panel="securite" role="tabpanel">
+      <div id="scan-box" class="set-card hidden">
         <h4 data-icon="shield"><span>Sécurité de mes sites</span></h4>
         <p class="muted small">Syrius lit tes sites comme un visiteur et repère les erreurs de sécurité courantes (en-têtes
           absents, fichiers sensibles exposés, clés secrètes visibles, cookies mal protégés…). Il n'attaque rien, ne teste
@@ -494,26 +536,19 @@
         <div id="scan-result"></div>
       </div>
 
-      <h4 data-icon="mail"><span>Emails</span></h4>
-      <p id="s-email" class="muted small"></p>
-      <div id="google-box" class="hidden">
-        <button type="button" id="google-connect" class="ghost wide">Connecter Gmail</button>
-        <p id="google-msg" class="small"></p>
-      </div>
-      <div id="outlook-box" class="hidden">
-        <button type="button" id="outlook-connect" class="ghost wide">Connecter Outlook / Hotmail</button>
-        <p id="outlook-msg" class="small"></p>
+      <div id="diag-box" class="set-card hidden">
+        <h4 data-icon="shield"><span>Vérifier les services</span></h4>
+        <p class="muted small">Teste en direct la création d'images, la lecture des photos et les maquettes 3D
+          (environ 30 secondes). Si quelque chose ne marche pas, envoie une capture de ce résultat.</p>
+        <button type="button" id="diag-run" class="ghost" data-icon="refresh"><span>Tester les services</span></button>
+        <ul id="diag-list" class="family-list"></ul>
+        <h4 data-icon="alert"><span>Signalements</span></h4>
+        <p class="muted small">Réponses ou images de l'IA signalées par toi ou ta famille.</p>
+        <ul id="report-list" class="family-list"></ul>
+        <button type="button" id="report-clear" class="ghost subtle hidden">Tout effacer</button>
       </div>
 
-      <h4 data-icon="bulb"><span>Mémoire</span></h4>
-      <p class="muted small">Ce que Syrius a retenu sur toi. Supprime ce que tu veux.</p>
-      <ul id="memory-list"></ul>
-      <div class="inline-form">
-        <input id="memory-new" type="text" maxlength="300" placeholder="Ajouter un souvenir (ex. : J'aime le thé, pas le café)" autocomplete="off">
-        <button type="button" id="memory-add" class="ghost" data-icon="plus"><span>Ajouter</span></button>
-      </div>
-      <p id="memory-msg" class="small"></p>
-
+<section class="set-card">
       <h4 data-icon="shield"><span>Sécurité</span></h4>
       <details id="pw-box">
         <summary>Changer le mot de passe</summary>
@@ -531,9 +566,13 @@
         <p id="del-msg" class="small"></p>
       </details>
       <p class="small"><a href="/confidentialite" target="_blank" rel="noopener">Politique de confidentialité</a></p>
+</section>
+      </div>
 
-      <button type="button" id="settings-save" class="primary wide">Enregistrer</button>
-      <p id="settings-msg" class="small"></p>
+      <div class="set-save">
+        <button type="button" id="settings-save" class="primary wide">Enregistrer</button>
+        <p id="settings-msg" class="small"></p>
+      </div>
     </form>
   </dialog>
 

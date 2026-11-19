@@ -1766,6 +1766,34 @@ $("#wake-on").addEventListener("change", (e) => {
 $("#wake-battery").addEventListener("click", () => Native.batterySettings());
 $("#wake-overlay").addEventListener("click", () => Native.overlaySettings());
 
+// ------------------------------------------------------------------ réglages en onglets
+const SET_TABS = ["profil", "ia", "voix", "services", "famille", "securite"];
+const settingsPanel = (k) => document.querySelector(`.set-panel[data-panel="${k}"]`);
+// Un onglet n'apparaît que s'il contient au moins une carte visible (ex. « Famille » : propriétaire seulement).
+const settingsTabVisible = (k) => { const p = settingsPanel(k); return !!p && [...p.children].some((c) => !c.classList.contains("hidden")); };
+function showSettingsTab(k, remember = true) {
+  if (!SET_TABS.includes(k) || !settingsTabVisible(k)) k = SET_TABS.find(settingsTabVisible) || "profil";
+  document.querySelectorAll(".set-panel").forEach((p) => p.classList.toggle("on", p.dataset.panel === k));
+  document.querySelectorAll("#set-tabs button").forEach((b) => {
+    const on = b.dataset.tab === k;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-selected", String(on));
+    if (on && remember) b.scrollIntoView({ inline: "center", block: "nearest" });
+  });
+  if (remember) { store.set("syrius:settings:tab", k); $("#settings-form").scrollTop = 0; }
+}
+let settingsTabsTimer = 0;
+function updateSettingsTabs() {
+  document.querySelectorAll("#set-tabs button").forEach((b) => b.classList.toggle("hidden", !settingsTabVisible(b.dataset.tab)));
+  const cur = document.querySelector("#set-tabs button.on");
+  if (!cur || cur.classList.contains("hidden")) showSettingsTab(store.get("syrius:settings:tab") || "profil", false);
+}
+document.querySelectorAll("#set-tabs button").forEach((b) => b.addEventListener("click", () => showSettingsTab(b.dataset.tab)));
+new MutationObserver(() => {
+  cancelAnimationFrame(settingsTabsTimer);
+  settingsTabsTimer = requestAnimationFrame(updateSettingsTabs);
+}).observe($("#settings-form"), { subtree: true, attributes: true, attributeFilter: ["class"] });
+
 // ------------------------------------------------------------------ voix de Syrius (moteur, voix, vitesse)
 function refreshVoiceBox() {
   const ok = Native && appFeatures().includes("voicepick");
@@ -1789,7 +1817,7 @@ function refreshVoiceBox() {
   }
   $("#voice-rate").value = v.rate || 1.05;
   $("#voice-google").classList.toggle("hidden", !!v.google);
-  $("#voice-status").textContent = v.google
+  $("#tts-status").textContent = v.google
     ? "✅ Moteur « Synthèse vocale Google » actif : voix neuronales, naturelles."
     : "⚠ Le moteur Google n'est pas installé : tu entends la voix du constructeur du téléphone, souvent robotique. " +
       "Installe « Synthèse vocale Google » (gratuit) pour une voix bien plus naturelle.";
@@ -1945,6 +1973,8 @@ $("#open-settings").addEventListener("click", async () => {
   refreshBriefingBox();
   refreshVoiceBox();
   refreshWakeBox();
+  showSettingsTab(store.get("syrius:settings:tab") || "profil", false);
+  updateSettingsTabs();
   $("#settings").showModal();
 });
 
