@@ -25,3 +25,15 @@ def test_le_systeme_du_telephone_suit_celui_de_l_entrainement():
     assert "Tu es Nova, l'assistant personnel" in read("web/local.js")
     assert "Tu es Nova, l'assistant personnel" in read("training/make_dataset.py")
     assert '"Nova"' in read("training/eval_set.py")
+
+
+def test_une_seule_identite_malgre_plusieurs_modeles():
+    for p, nom in (("server/persona.md", "Nova"), ("server/aurore.md", "Aurora")):
+        t = read(p)
+        assert f"Tu es toujours **{nom}**" in t and "plusieurs" in t and "jamais comme" in t
+        assert "ne mens jamais sur le fait d'être une IA" in t or "ne mens jamais sur le fait d'être une IA" in t.replace("’", "'")
+
+
+def test_les_consignes_sont_envoyees_au_modele():
+    from server.agent import build_aurore_system
+    assert "Tu es toujours **Aurora**" in build_aurore_system({}, "")
