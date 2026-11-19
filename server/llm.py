@@ -6,6 +6,7 @@ ou en panne, Syrius passe automatiquement au suivant.
 import asyncio
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import AsyncIterator
@@ -62,10 +63,23 @@ def _http_error_message(provider: Provider, code: int, detail: str) -> LLMError:
     return LLMError(f"{provider.label} a refusé la demande ({code}) : {detail[:150]}")
 
 
+SLOW_TTFT = 8.0      # secondes avant le premier mot : au-delà, l'IA passe derrière les plus rapides
+FAIL_MEMORY = 300    # une IA en échec est mise derrière les autres pendant 5 minutes
+
+
 class ChatClient:
-    def __init__(self, providers: list[Provider], timeout: float = 120):
+    # 25 s sans un seul octet = l'IA est bloquée : on passe tout de suite à la suivante (avant : 120 s d'attente).
+    def __init__(self, providers: list[Provider], timeout: float = 25):
         self.providers = providers
         self.timeout = timeout
+        self.stats: dict[str, dict] = {}  # nom -> {"ttft": délai moyen avant le premier mot, "fail_at": dernier échec}
+
+    def _record(self, name: str, ttft: float) -> None:
+        st = self.stats.setdefault(name, {})
+        st["ttft"] = ttft if "ttft" not in st else 0.6 * st["ttft"] + 0.4 * ttft
+
+    def _fail(self, name: str) -> None:
+        self.stats.setdefault(name, {})["fail_at"] = time.time()
 
     def _open(self, provider: Provider, path: str, body: dict | None):
         headers = {"Content-Type": "application/json", "User-Agent": "Syrius/1.0"}
@@ -87,8 +101,21 @@ class ChatClient:
         except (urllib.error.URLError, TimeoutError, ConnectionError):
             raise RetryableError(f"{provider.label} ne répond pas.") from None
 
-    def ordered(self, preferred: str = "", photo: bool = False) -> list[Provider]:
-        pool = [p for p in self.providers if photo or not p.photos_only]
+    def _rank(self, p: Provider, fast: bool) -> int:
+        st = self.stats.get(p.name, {})
+        rank = 0
+        if fast and p.name.startswith("openrouter"):
+            rank += 1  # les IA gratuites d'OpenRouter sont puissantes mais souvent lentes : après les rapides
+        if st.get("ttft", 0) > SLOW_TTFT:
+            rank += 1
+        if time.time() - st.get("fail_at", 0) < FAIL_MEMORY:
+            rank += 2
+        return rank
+
+    def ordered(self, preferred: str = "", photo: bool = False, fast: bool = True) -> list[Provider]:
+        """Ordre d'essai. fast=True : les IA rapides d'abord ; fast=False (« réflexion poussée ») : les plus
+        puissantes d'abord. Dans les deux cas, une IA récemment en échec ou lente passe derrière les autres."""
+        pool = sorted((p for p in self.providers if photo or not p.photos_only), key=lambda p: self._rank(p, fast))
         special = [p for p in pool if p.coding_only]
         pool = [p for p in pool if not p.coding_only]
         if preferred and any(p.name == preferred for p in special):
@@ -110,6 +137,8 @@ class ChatClient:
                 stop.set()
 
         def worker():
+            t0 = time.monotonic()
+            first = True
             try:
                 with self._open(provider, "/chat/completions", payload) as resp:
                     for raw in resp:
@@ -121,10 +150,16 @@ class ChatClient:
                         data = line[5:].strip()
                         if data == "[DONE]":
                             break
+                        if first:
+                            first = False
+                            self._record(provider.name, time.monotonic() - t0)
                         put(json.loads(data))
             except LLMError as e:
+                if isinstance(e, RetryableError):
+                    self._fail(provider.name)
                 put(e)
             except (ValueError, OSError):
+                self._fail(provider.name)
                 put(RetryableError(f"Réponse illisible de {provider.label}."))
             finally:
                 put(done)

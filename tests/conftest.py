@@ -44,7 +44,7 @@ class FakeLLM:
                           for n in names]
         self.fail: dict[str, Exception] = {}  # nom du cerveau -> erreur à lever
 
-    def ordered(self, preferred="", photo=False):
+    def ordered(self, preferred="", photo=False, fast=True):
         return sorted(self.providers, key=lambda p: p.name != preferred) if preferred else list(self.providers)
 
     async def stream_chat(self, provider, body):

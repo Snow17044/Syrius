@@ -330,6 +330,21 @@
         </div>
       </div>
 
+      <div id="voice-box" class="hidden">
+        <h4 data-icon="wave"><span>Voix de Syrius</span></h4>
+        <p id="voice-status" class="small"></p>
+        <label>Voix <select id="voice-select"></select></label>
+        <label>Vitesse <input id="voice-rate" type="range" min="0.7" max="1.5" step="0.05" value="1.05"></label>
+        <div class="local-actions">
+          <button type="button" id="voice-test" class="ghost" data-icon="play"><span>Écouter</span></button>
+          <button type="button" id="voice-google" class="ghost hidden" data-icon="download"><span>Installer la voix Google</span></button>
+          <button type="button" id="voice-settings" class="ghost" data-icon="settings"><span>Moteur et voix du téléphone</span></button>
+          <button type="button" id="voice-refresh" class="ghost" data-icon="refresh"><span>Actualiser</span></button>
+        </div>
+        <p class="muted small">Les voix « très haute qualité » sont les plus naturelles. Si la liste est courte, ouvre
+          « Moteur et voix du téléphone » : choisis le moteur Synthèse vocale Google, puis télécharge une voix française.</p>
+      </div>
+
       <div id="briefing-box" class="hidden">
         <h4 data-icon="sun"><span>Briefing du matin</span></h4>
         <p class="muted small">Chaque jour, une notification : touche-la et Syrius te fait ton briefing. Pour les anniversaires, dis-lui par exemple « Retiens que l'anniversaire de Maman est le 12 mars ».</p>

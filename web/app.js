@@ -128,6 +128,12 @@ async function showApp() {
   else newConversationView();
   flushMemories();
   refreshMemoryCache();
+  // Préchauffage de l'IA du téléphone : le premier ordre de la journée n'attend plus le chargement du modèle.
+  setTimeout(() => {
+    const l = L();
+    if (window.SyriusAndroid && typeof window.SyriusAndroid.syriusWarmUp === "function" && l && l.syriusReady() && l.prefs.hybrid)
+      window.SyriusAndroid.syriusWarmUp();
+  }, 4000);
   if (briefingWaiting) { briefingWaiting = false; window.syriusBriefing(); }
 }
 
@@ -1760,6 +1766,43 @@ $("#wake-on").addEventListener("change", (e) => {
 $("#wake-battery").addEventListener("click", () => Native.batterySettings());
 $("#wake-overlay").addEventListener("click", () => Native.overlaySettings());
 
+// ------------------------------------------------------------------ voix de Syrius (moteur, voix, vitesse)
+function refreshVoiceBox() {
+  const ok = Native && appFeatures().includes("voicepick");
+  $("#voice-box").classList.toggle("hidden", !ok);
+  if (!ok) return;
+  let v = {};
+  try { v = JSON.parse(Native.ttsInfo()); } catch (_) { /* */ }
+  const sel = $("#voice-select");
+  sel.replaceChildren();
+  for (const x of v.voices || []) {
+    const o = document.createElement("option");
+    o.value = x.name;
+    o.textContent = x.label;
+    if (x.name === v.current) o.selected = true;
+    sel.appendChild(o);
+  }
+  if (!(v.voices || []).length) {
+    const o = document.createElement("option");
+    o.textContent = "Aucune voix française trouvée";
+    sel.appendChild(o);
+  }
+  $("#voice-rate").value = v.rate || 1.05;
+  $("#voice-google").classList.toggle("hidden", !!v.google);
+  $("#voice-status").textContent = v.google
+    ? "✅ Moteur « Synthèse vocale Google » actif : voix neuronales, naturelles."
+    : "⚠ Le moteur Google n'est pas installé : tu entends la voix du constructeur du téléphone, souvent robotique. " +
+      "Installe « Synthèse vocale Google » (gratuit) pour une voix bien plus naturelle.";
+}
+$("#voice-select").addEventListener("change", (e) => { if (Native) Native.ttsSetVoice(e.target.value); });
+$("#voice-rate").addEventListener("change", (e) => { if (Native) Native.ttsSetRate(parseFloat(e.target.value)); });
+$("#voice-test").addEventListener("click", () => {
+  if (Native) Native.speak("Bonjour, je suis Syrius. Voilà ma voix. Dis-moi si elle te plaît.");
+});
+$("#voice-google").addEventListener("click", () => { if (Native) alert(Native.ttsInstallGoogle() === "ok" ? "Installe l'application, reviens ici puis touche « Actualiser »." : "Impossible d'ouvrir le Play Store."); });
+$("#voice-settings").addEventListener("click", () => { if (Native) Native.ttsOpenSettings(); });
+$("#voice-refresh").addEventListener("click", () => setTimeout(refreshVoiceBox, 600));
+
 function refreshBriefingBox() {
   const ok = Native && appFeatures().includes("briefing");
   $("#briefing-box").classList.toggle("hidden", !ok);
@@ -1900,6 +1943,7 @@ $("#open-settings").addEventListener("click", async () => {
   closeDrawer();
   refreshLocalBox();
   refreshBriefingBox();
+  refreshVoiceBox();
   refreshWakeBox();
   $("#settings").showModal();
 });

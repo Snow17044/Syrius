@@ -1,6 +1,7 @@
 """Outils que Syrius peut utiliser, et leur exécution sécurisée."""
 import asyncio
 import json
+import re
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -147,6 +148,40 @@ SCAN_SITE_TOOL = _tool(
     "propriétaire a ajouté dans ses réglages et dont il a prouvé la propriété : n'essaie jamais un autre site. "
     "Résume ensuite les problèmes par ordre de gravité, avec le correctif, en langage simple.",
     {"domain": {"type": "string", "description": "Nom du site, par exemple monsite.fr"}}, ["domain"])
+
+
+# Groupes d'outils : on n'envoie à l'IA que ceux dont la demande a besoin (≈ 3 000 jetons de moins par question,
+# donc des réponses plus rapides et moins de limites gratuites atteintes).
+_PHONE_RX = re.compile(
+    r"minuteur|chrono|compte [àa] rebours|r[ée]veil|alarme|rappel|penser [àa]|appel|t[ée]l[ée]phon|sms|texto|message|"
+    r"\bmail|musique|chanson|morceau|playlist|\bjou(?:e|er)\b|lampe|torche|flash|volume|ouvre|ouvrir|lance|application|"
+    r"\bappli|itin[ée]raire|emm[èe]ne|navigu|agenda|calendrier|rendez-vous|\brdv|[ée]v[ée]nement|photo|image|dessin|"
+    r"dessine|g[ée]n[èe]re|illustration|logo|pr[ée]viens|dis [àa]|envoie|\bdemain\b|ce soir|dans \d+|[àa] \d{1,2} ?h", re.I)
+_DIAGRAM_RX = re.compile(
+    r"sch[ée]ma|diagramme|organigramme|carte mentale|mind ?map|plan\b|plan d'action|[ée]tapes|organis|projet|objectif|"
+    r"strat[ée]gie|roadmap|id[ée]e|maquette|\b3 ?d\b|mod[èe]le|hologramme|en relief|structure|comment (?:faire|r[ée]ussir)", re.I)
+_MAIL_RX = re.compile(r"mail|courriel|bo[iî]te|brouillon|exp[ée]diteur|inbox|message", re.I)
+_SCAN_RX = re.compile(r"scan|s[ée]curit|faille|vuln[ée]rab|site|domaine", re.I)
+_PHONE_TOOLS = {t["function"]["name"] for t in DEVICE_TOOLS}
+_DIAGRAM_TOOLS = {"show_diagram", "show_model"}
+_MAIL_TOOLS = {"list_emails", "search_emails", "read_email", "draft_email"}
+
+
+def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[dict]:
+    """Garde le cœur (mémoire, heure, rappels, web, météo, lieux) + les groupes que la demande évoque.
+    `text` = demande + fin de la réponse précédente (pour « oui », « vas-y »…). `keep_all` : suite d'une action."""
+    if keep_all:
+        return tools
+    drop = set()
+    if not _PHONE_RX.search(text):
+        drop |= _PHONE_TOOLS
+    if not _DIAGRAM_RX.search(text):
+        drop |= _DIAGRAM_TOOLS
+    if not _MAIL_RX.search(text):
+        drop |= _MAIL_TOOLS
+    if not _SCAN_RX.search(text):
+        drop.add("scan_site")
+    return [t for t in tools if t["function"]["name"] not in drop]
 
 
 def build_tools(cfg: Config, settings: dict) -> list[dict]:
