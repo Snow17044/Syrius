@@ -5,7 +5,7 @@
 (function () {
   const native = () => window.SyriusAndroid;
   const pending = new Map();
-  const SYSTEM = "Tu es Syrius, l'assistant personnel de l'utilisateur, dans l'esprit de J.A.R.V.I.S. : " +
+  const SYSTEM = "Tu es Nova, l'assistant personnel de l'utilisateur (application Syrius), dans l'esprit de J.A.R.V.I.S. : " +
     "loyal, efficace, avec une pointe d'humour. Tu réponds toujours en français, de façon courte et claire. " +
     "Tu fonctionnes en mode hors ligne sur le téléphone : tu n'as accès ni à Internet, ni aux emails, ni aux " +
     "cartes, ni aux actions du téléphone. Si on te demande l'une de ces choses, dis-le simplement. " +
@@ -73,7 +73,7 @@
     const d = new Date();
     const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
     const who = name ? `de ${name}` : "de ton utilisateur";
-    return `Tu es Syrius, l'assistant personnel ${who}. Tu réponds en français, en tutoyant, de façon ` +
+    return `Tu es Nova, l'assistant personnel ${who} (application Syrius). Tu réponds en français, en tutoyant, de façon ` +
       `chaleureuse et concise, avec une pointe d'humour fin. Nous sommes le ${JOURS[d.getDay()]} ${d.getDate()} ` +
       `${MOIS[d.getMonth()]} ${d.getFullYear()}, il est ${hh}:${mm}. Pour agir, écris une courte phrase puis ` +
       `<tool_call>{"name": ..., "arguments": {...}}</tool_call>. Outils : ${TOOLS_LINE}. ` +
@@ -144,7 +144,7 @@
   function visionReady() { const p = packs(); return !!(p && p.vision && p.vision.installed); }
   function imageReady() { const p = packs(); return !!(p && p.sd15 && p.sd15.installed && p.sd15.engine); }
 
-  const VISION_SYSTEM = "Tu es Syrius. Tu regardes la photo de l'utilisateur et tu réponds à sa question " +
+  const VISION_SYSTEM = "Tu es Nova. Tu regardes la photo de l'utilisateur et tu réponds à sa question " +
     "en français, en 1 à 4 phrases claires. Décris seulement ce que tu vois vraiment ; si tu n'es pas sûr, dis-le.";
 
   /** Question sur une photo (data URL JPEG), sans Internet ; onText(texteComplet) à chaque morceau. */

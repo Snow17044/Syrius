@@ -810,7 +810,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         await asyncio.to_thread(auth.set_password, db, body.new)
         return {"ok": True, "detail": "Mot de passe changé. Reconnecte-toi."}
 
-    # ------------------------------------------------------------------ Syrius Code : Aurore (propriétaire seulement)
+    # ------------------------------------------------------------------ Syrius Code : Aurora (propriétaire seulement)
     CODE_CONVS, CODE_DASH, MAX_CODE_CONVS, MAX_DASHBOARDS = "code_convs_v1", "code_dashboards_v1", 100, 30
 
     def _code_load(key: str) -> list:
@@ -858,7 +858,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def code_send(cid: str, body: CodeMessageBody):
         conv = _code_conv(cid)
         if cid in busy:
-            raise HTTPException(409, "Aurore répond déjà dans cette discussion.")
+            raise HTTPException(409, "Aurora répond déjà dans cette discussion.")
         first = not db.get_messages(cid)
         busy.add(cid)
 
@@ -871,7 +871,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                     db.update_conversation(cid, title=title)
                     yield sse({"type": "title", "title": title})
             except Exception:
-                logging.getLogger("syrius").exception("Erreur pendant la réponse d'Aurore")
+                logging.getLogger("syrius").exception("Erreur pendant la réponse d'Aurora")
                 yield sse({"type": "error", "message": "Erreur interne."})
             finally:
                 busy.discard(cid)
@@ -900,7 +900,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.delete("/api/code/skills/{name}", dependencies=owner_only)
     async def code_skill_delete(name: str):
         if not skills.delete(db.base, name):
-            raise HTTPException(404, "Compétence introuvable (les compétences d'Aurore ne se suppriment pas).")
+            raise HTTPException(404, "Compétence introuvable (les compétences d'Aurora ne se suppriment pas).")
         return {"ok": True}
 
     @app.get("/api/code/dashboards", dependencies=owner_only)
@@ -929,7 +929,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     # ------------------------------------------------------------------ discussions
     @app.get("/api/conversations", dependencies=[Depends(require_auth)])
     async def list_conversations(q: str = ""):
-        code = set(_code_ids())  # les discussions d'Aurore (Syrius Code) restent hors de l'application Syrius
+        code = set(_code_ids())  # les discussions d'Aurora (Syrius Code) restent hors de l'application Syrius
         return [c for c in db.list_conversations(q[:100]) if c["id"] not in code]
 
     @app.post("/api/conversations", dependencies=[Depends(require_auth)])
@@ -1130,7 +1130,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         uid = request.state.uid
         return {**db.get_settings(), "account": family.account(db.base, uid), "web_search_available": True}
 
-    # Emails : gérés par Aurore dans Syrius Code (propriétaire seulement)
+    # Emails : gérés par Aurora dans Syrius Code (propriétaire seulement)
     @app.get("/api/code/email", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def code_email_state():
         return {"enabled": family.email_allowed(cfg), "mode": cfg.email_mode,
@@ -1167,7 +1167,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                     raise EmailError("Compte introuvable.")
                 family.CURRENT.set(uid)  # retour de Google : on revient dans l'espace de la bonne personne
                 await asyncio.to_thread(gmail.finish, cfg, db, code[:1000], state[:200], google_redirect_uri(request))
-                ok, text = True, "Gmail est connecté à Syrius Code (Aurore)."
+                ok, text = True, "Gmail est connecté à Syrius Code (Aurora)."
             except EmailError as e:
                 ok, text = False, str(e)
         page = ("<!doctype html><html lang=fr><meta charset=utf-8><meta name=viewport content='width=device-width'>"

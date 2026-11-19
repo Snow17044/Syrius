@@ -35,7 +35,7 @@ def test_les_groupes_reviennent_quand_la_demande_les_evoque():
     assert "show_diagram" in tools_for("Fais-moi un schéma pour mon projet")
     assert "show_model" in tools_for("Montre-moi une maquette 3D d'un phare")
     assert "phone_sms" in tools_for("Préviens Julie que j'arrive")
-    assert "scan_site" not in tools_for("Scanne mon site monsite.fr")  # le scanner est dans Syrius Code (Aurore)
+    assert "scan_site" not in tools_for("Scanne mon site monsite.fr")  # le scanner est dans Syrius Code (Aurora)
     aurore = registry.build_tools(Config(), {"internet": True}, "aurore")
     assert "scan_site" in names(registry.select_tools(aurore, "Scanne mon site monsite.fr"))
     assert "scan_site" not in names(registry.select_tools(aurore, "Raconte une blague"))

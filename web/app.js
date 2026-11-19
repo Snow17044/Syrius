@@ -1803,7 +1803,7 @@ function refreshVoiceBox() {
 $("#voice-select").addEventListener("change", (e) => { if (Native) Native.ttsSetVoice(e.target.value); });
 $("#voice-rate").addEventListener("change", (e) => { if (Native) Native.ttsSetRate(parseFloat(e.target.value)); });
 $("#voice-test").addEventListener("click", () => {
-  if (Native) Native.speak("Bonjour, je suis Syrius. Voilà ma voix. Dis-moi si elle te plaît.");
+  if (Native) Native.speak("Bonjour, je suis Nova. Voilà ma voix. Dis-moi si elle te plaît.");
 });
 $("#voice-google").addEventListener("click", () => { if (Native) alert(Native.ttsInstallGoogle() === "ok" ? "Installe l'application, reviens ici puis touche « Actualiser »." : "Impossible d'ouvrir le Play Store."); });
 $("#voice-settings").addEventListener("click", () => { if (Native) Native.ttsOpenSettings(); });

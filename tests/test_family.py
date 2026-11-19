@@ -173,7 +173,7 @@ def test_portee_des_donnees(make_client):
 
 
 def test_boite_mail_du_proprietaire_reservee(make_client):
-    """Les emails sont gérés par Aurore (Syrius Code) : réservés au propriétaire, absents de Syrius pour tous."""
+    """Les emails sont gérés par Aurora (Syrius Code) : réservés au propriétaire, absents de Syrius pour tous."""
     owner = make_client()
     cfg = owner.agent.cfg
     cfg.imap_host, cfg.email_user, cfg.email_password = "imap.example.com", "moi@example.com", "x"
@@ -188,10 +188,10 @@ def test_boite_mail_du_proprietaire_reservee(make_client):
     from server.tools.registry import build_tools
     mail = {"list_emails", "search_emails", "read_email", "draft_email"}
     names = lambda p: {t["function"]["name"] for t in build_tools(cfg, {}, p)}  # noqa: E731
-    assert mail <= names("aurore") and not (mail & names("syrius"))  # outils d'emails : Aurore seulement
+    assert mail <= names("aurore") and not (mail & names("syrius"))  # outils d'emails : Aurora seulement
     family.CURRENT.set("abcdefabcdef")
     try:
-        assert not (mail & names("aurore"))  # même Aurore ne les donne pas à un proche
+        assert not (mail & names("aurore"))  # même Aurora ne les donne pas à un proche
         assert not family.email_allowed(cfg)
     finally:
         family.CURRENT.set("")

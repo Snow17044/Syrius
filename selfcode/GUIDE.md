@@ -3,7 +3,7 @@
 Ce dépôt contient DEUX applications qui partagent le même serveur (FastAPI sur Vercel) et existent en application
 Android (une WebView qui affiche le site) :
 - **Syrius** : l'assistant personnel d'une famille (discussion, téléphone, mémoire, IA hors ligne) ;
-- **Syrius Code** : le laboratoire d'essai du propriétaire, avec Aurore, son IA professionnelle (code, tableaux de bord,
+- **Syrius Code** : le laboratoire d'essai du propriétaire, avec Aurora, son IA professionnelle (code, tableaux de bord,
   emails pro, sites et sécurité). Réservé au propriétaire.
 Une demande commence par « [Application Syrius] » ou « [Application Syrius Code] » : ne modifie que l'application
 demandée, sauf si le changement est partagé.
@@ -21,7 +21,7 @@ demandée, sauf si le changement est partagé.
 | Caractère et consignes de l'IA de discussion | `server/persona.md` |
 | Outils de l'IA (définitions et exécution) | `server/tools/registry.py`, `server/tools/*.py` |
 | Syrius Code : page, comportement, styles (deux thèmes : syrius et nature) | `web/code.html`, `web/code.js`, `web/code.css` |
-| Syrius Code : personnalité d'Aurore et compétences (fiches de méthode) | `server/aurore.md`, `server/skills/*.md` |
+| Syrius Code : personnalité d'Aurora et compétences (fiches de méthode) | `server/aurore.md`, `server/skills/*.md` |
 | Syrius Code : routes (tout `/api/code/…` est réservé au propriétaire) | `server/app.py` |
 | Actions sur le téléphone | `server/tools/device.py` (serveur) et `android/app/src/main/java/fr/syrius/app/*.java` |
 | Tests automatiques | `tests/test_*.py` (pytest, client `TestClient` de FastAPI) |

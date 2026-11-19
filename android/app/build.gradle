@@ -38,7 +38,7 @@ android {
 
     // Deux applications construites à partir du même code :
     //  - « syrius » : Syrius (discussion, téléphone, IA hors ligne) ;
-    //  - « code »   : Syrius Code, le laboratoire d'essai du propriétaire (Aurore : code, tableaux de bord,
+    //  - « code »   : Syrius Code, le laboratoire d'essai du propriétaire (Aurora : code, tableaux de bord,
     //                 emails pro, sites et sécurité). Même serveur, page d'accueil différente (/code),
     //                 aucun lien d'invitation, pas d'accès aux appels ni aux contacts.
     flavorDimensions = ["app"]

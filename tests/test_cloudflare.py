@@ -1,4 +1,4 @@
-"""Cloudflare Workers AI : IA de secours gratuite (10 000 neurones par jour) pour Syrius, Aurore et l'IA programmeuse."""
+"""Cloudflare Workers AI : IA de secours gratuite (10 000 neurones par jour) pour Syrius, Aurora et l'IA programmeuse."""
 import importlib.util
 import io
 import json

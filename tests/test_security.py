@@ -245,7 +245,7 @@ def test_l_ia_ne_peut_pas_envoyer_un_email_seule(make_client, monkeypatch):
     c = make_client(responses, email=True)
     monkeypatch.setattr(c.agent.executor.email, "send_email", lambda *a: sent.append(a))
     login(c)
-    cid = c.post("/api/code/conversations", headers=H).json()["id"]  # les emails sont chez Aurore (Syrius Code)
+    cid = c.post("/api/code/conversations", headers=H).json()["id"]  # les emails sont chez Aurora (Syrius Code)
     body = c.post(f"/api/code/conversations/{cid}/messages", json={"text": "lis mes mails"}, headers=H).text
     events = [json.loads(line[6:]) for line in body.split("\n\n") if line.startswith("data: ")]
     action = next(e for e in events if e["type"] == "action")

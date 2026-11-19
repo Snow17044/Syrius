@@ -40,7 +40,7 @@ AURORE_FILE = Path(__file__).with_name("aurore.md")
 
 
 def build_aurore_system(settings: dict, skills_text: str = "") -> str:
-    """Consigne d'Aurore (Syrius Code) : personnalité pro, pas de souvenirs personnels de Syrius."""
+    """Consigne d'Aurora (Syrius Code) : personnalité pro, pas de souvenirs personnels de Syrius."""
     now = datetime.now(TIMEZONE)
     parts = [AURORE_FILE.read_text(encoding="utf-8").strip(),
              f"Nous sommes le {JOURS[now.weekday()]} {now.day} {MOIS[now.month - 1]} {now.year}."]
@@ -184,6 +184,7 @@ class Agent:
         self.executor = ToolExecutor(cfg, db)
 
     def brains(self) -> list[dict]:
+        self.llm.prune_groq()  # les modèles Groq supprimés disparaissent de la liste
         return [{"name": p.name, "label": p.label, "model": p.model} for p in self.llm.providers
                 if not getattr(p, "photos_only", False) and not getattr(p, "coding_only", False)]  # le code = Syrius Code
 
@@ -238,9 +239,9 @@ class Agent:
         base_db = getattr(self.db, "base", self.db)
         preferred = "" if aurore else settings.get("brain", "")
         if preferred == "codestral":
-            preferred = ""  # l'IA spécialisée code appartient à Aurore (Syrius Code), plus à Syrius
+            preferred = ""  # l'IA spécialisée code appartient à Aurora (Syrius Code), plus à Syrius
         if aurore and not image and _WANTS_CODE.search(user_text):
-            preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation, réservé à Aurore
+            preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation, réservé à Aurora
         providers = self.llm.ordered(preferred, photo=bool(image), fast=settings.get("effort") != "high")
         if image:  # seules les IA qui « voient » peuvent répondre
             providers = [p for p in providers if p.vision]

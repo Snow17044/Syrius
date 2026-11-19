@@ -331,7 +331,7 @@ def is_owner() -> bool:
 
 
 def email_allowed(cfg) -> bool:
-    """Les emails sont gérés par Aurore (Syrius Code) : réservés au propriétaire. Ni les proches, ni les comptes de
+    """Les emails sont gérés par Aurora (Syrius Code) : réservés au propriétaire. Ni les proches, ni les comptes de
     test, ni l'application Syrius n'y ont accès."""
     return not GUEST.get() and not CURRENT.get() and bool(cfg.email_enabled)
 

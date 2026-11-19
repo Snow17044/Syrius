@@ -75,6 +75,34 @@ class ChatClient:
         self.timeout = timeout
         self.stats: dict[str, dict] = {}  # nom -> {"ttft": délai moyen avant le premier mot, "fail_at": dernier échec}
 
+    GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
+    GROQ_CHECK_EVERY, GROQ_RETRY_AFTER = 3600, 600
+
+    def prune_groq(self, now: float | None = None) -> list[str]:
+        """Retire les modèles Groq qui n'existent plus (Groq en retire régulièrement). Liste officielle lue au
+        plus une fois par heure ; si elle est illisible ou vide, on ne touche à rien."""
+        now = time.time() if now is None else now
+        groq = [p for p in self.providers if "api.groq.com" in p.base_url and p.api_key]
+        if not groq or now < getattr(self, "_groq_next", 0):
+            return []
+        self._groq_next = now + self.GROQ_RETRY_AFTER
+        req = urllib.request.Request(self.GROQ_MODELS_URL, headers={
+            "Authorization": f"Bearer {groq[0].api_key}", "User-Agent": "Syrius/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=6) as r:  # nosec B310 (adresse officielle fixe)
+                ids = {m.get("id") for m in json.loads(r.read(500_000)).get("data", []) if isinstance(m, dict)}
+        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+            return []
+        ids.discard(None)
+        if not ids:
+            return []
+        self._groq_next = now + self.GROQ_CHECK_EVERY
+        gone = [p for p in groq if p.model not in ids]
+        if gone and len(gone) < len(self.providers):  # on ne vide jamais toute la liste
+            self.providers = [p for p in self.providers if p not in gone]
+            return [p.model for p in gone]
+        return []
+
     def _record(self, name: str, ttft: float) -> None:
         st = self.stats.setdefault(name, {})
         st["ttft"] = ttft if "ttft" not in st else 0.6 * st["ttft"] + 0.4 * ttft
@@ -116,6 +144,7 @@ class ChatClient:
     def ordered(self, preferred: str = "", photo: bool = False, fast: bool = True) -> list[Provider]:
         """Ordre d'essai. fast=True : les IA rapides d'abord ; fast=False (« réflexion poussée ») : les plus
         puissantes d'abord. Dans les deux cas, une IA récemment en échec ou lente passe derrière les autres."""
+        self.prune_groq()
         pool = sorted((p for p in self.providers if photo or not p.photos_only), key=lambda p: self._rank(p, fast))
         special = [p for p in pool if p.coding_only]
         pool = [p for p in pool if not p.coding_only]

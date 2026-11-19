@@ -30,7 +30,7 @@ CASES = [
     ("Ajoute un rendez-vous chez le dentiste lundi à 14h", "tool", "phone_calendar"),
     ("Quelle est la capitale de l'Italie ?", "none", "Rome"),
     ("Combien font 15 fois 12 ?", "none", "180"),
-    ("Présente-toi en une phrase", "none", "Syrius"),
+    ("Présente-toi en une phrase", "none", "Nova"),
     ("Comment dit-on merci en anglais ?", "none", "thank"),
     ("Donne-moi une idée de dessert rapide", "none", ""),
     ("Raconte-moi une blague courte", "none", ""),

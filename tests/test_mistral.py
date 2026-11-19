@@ -47,9 +47,10 @@ def test_plusieurs_modeles_groq(monkeypatch):
     monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
     monkeypatch.setenv("GROQ_API_KEY", "cle-groq")
     ps = providers_from_config(Config())
-    assert [p.name for p in ps][:3] == ["groq", "groq2", "groq3"] and len(ps) == 4
+    assert [p.name for p in ps][:2] == ["groq", "groq2"] and len(ps) == 2
     assert ps[0].model == "openai/gpt-oss-120b" and ps[0].reasoning
-    assert ps[1].model == "llama-3.3-70b-versatile" and not ps[1].reasoning and ps[1].label == "Groq · Llama 3.3"
+    assert ps[1].model == "openai/gpt-oss-20b" and ps[1].label == "Groq · GPT-OSS 20B"
+    assert not any("llama-3.3" in p.model or "qwen3-32b" in p.model for p in ps)  # retirés par Groq
     assert all(p.api_key == "cle-groq" for p in ps)
 
 
@@ -102,3 +103,43 @@ def test_relais_github_et_openrouter(monkeypatch):
     gh = ps[-2]
     assert gh.base_url == "https://models.github.ai/inference" and gh.model == "openai/gpt-4.1-mini" and gh.api_key == "gh"
     assert not any(p.reasoning for p in ps[:2] + ps[-2:])
+
+
+def test_modeles_groq_supprimes_disparaissent(monkeypatch):
+    """La liste officielle de Groq sert de référence : un modèle qui n'y est plus est retiré (Syrius et Syrius Code)."""
+    import io
+    import json
+    from server import llm
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    monkeypatch.setenv("SYRIUS_GROQ_MODELS", "llama-3.3-70b-versatile,openai/gpt-oss-20b")
+    client = llm.ChatClient(providers_from_config(Config()))
+    assert [p.model for p in client.providers] == ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"]
+
+    def fake(ids):
+        return lambda req, timeout=0: io.BytesIO(json.dumps({"data": [{"id": i} for i in ids]}).encode())
+    monkeypatch.setattr(llm.urllib.request, "urlopen", fake(["openai/gpt-oss-120b", "openai/gpt-oss-20b"]))
+    assert client.prune_groq(now=1000) == ["llama-3.3-70b-versatile"]
+    assert [p.model for p in client.providers] == ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+    assert [b["model"] for b in __import__("server.agent", fromlist=["Agent"]).Agent.brains(type("A", (), {"llm": client})())] == [
+        "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+
+
+def test_liste_groq_illisible_ou_vide_ne_retire_rien(monkeypatch):
+    import io
+    import json
+    from server import llm
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    client = llm.ChatClient(providers_from_config(Config()))
+    n = len(client.providers)
+
+    def boom(req, timeout=0):
+        raise OSError("réseau")
+    monkeypatch.setattr(llm.urllib.request, "urlopen", boom)
+    assert client.prune_groq(now=1000) == [] and len(client.providers) == n
+    monkeypatch.setattr(llm.urllib.request, "urlopen", lambda r, timeout=0: io.BytesIO(json.dumps({"data": []}).encode()))
+    assert client.prune_groq(now=5000) == [] and len(client.providers) == n  # liste vide : on ne touche à rien
+    # liste officielle sans aucun de nos modèles : on garde au moins un cerveau plutôt que d'en laisser zéro
+    monkeypatch.setattr(llm.urllib.request, "urlopen", lambda r, timeout=0: io.BytesIO(json.dumps({"data": [{"id": "x"}]}).encode()))
+    client.providers = [p for p in client.providers if "api.groq.com" in p.base_url]
+    client.prune_groq(now=9000)
+    assert client.providers  # jamais une liste vide

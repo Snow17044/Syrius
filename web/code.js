@@ -1,4 +1,4 @@
-// Syrius Code — le laboratoire d'essai de Syrius, avec Aurore. Réservé au propriétaire (le serveur le vérifie à chaque requête).
+// Syrius Code — le laboratoire d'essai de Syrius, avec Aurora. Réservé au propriétaire (le serveur le vérifie à chaque requête).
 "use strict";
 
 (function () {
@@ -159,7 +159,7 @@
     }
   }
 
-  // ------------------------------------------------------------------ discussion avec Aurore
+  // ------------------------------------------------------------------ discussion avec Aurora
   const messages = $("#c-messages");
   function scrollDown(force) {
     const near = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 140;
@@ -227,7 +227,7 @@
     return conv;
   }
 
-  // Une carte pour un tableau de bord ou un schéma reçu d'Aurore
+  // Une carte pour un tableau de bord ou un schéma reçu d'Aurora
   function addCard(view, ev) {
     if (ev.type === "dashboard") {
       const card = renderDashboard(ev);
@@ -519,7 +519,7 @@
     try { list = await api("/api/code/dashboards"); } catch (_) { return; }
     const ul = $("#c-dashboards");
     ul.replaceChildren();
-    if (!list.length) ul.appendChild(el("li", "c-card muted small", "Aucun tableau enregistré. Demande-en un à Aurore, puis touche « Enregistrer »."));
+    if (!list.length) ul.appendChild(el("li", "c-card muted small", "Aucun tableau enregistré. Demande-en un à Aurora, puis touche « Enregistrer »."));
     for (const d of list) {
       const li = el("li", "c-card c-row");
       const open = el("button", "c-link", d.spec.title + " · " + ago(d.at));
@@ -557,7 +557,7 @@
       const run = btn("Scanner", "search", () => runScan(s.domain, run), "primary");
       row.appendChild(run);
       if (s.last) row.appendChild(btn("Dernier résultat", "chart", () => showScan(s.domain, s.last)));
-      row.appendChild(btn("Demander à Aurore", "sparkle", () => {
+      row.appendChild(btn("Demander à Aurora", "sparkle", () => {
         go("aurore");
         $("#c-input").value = `Analyse le dernier scan de ${s.domain} et dis-moi par quoi commencer pour le sécuriser.`;
         autoGrow();
@@ -625,7 +625,7 @@
     } catch (err) { $("#c-site-msg").textContent = "⚠ " + err.message; }
   });
 
-  // ------------------------------------------------------------------ code : demandes à l'IA programmeuse + compétences d'Aurore
+  // ------------------------------------------------------------------ code : demandes à l'IA programmeuse + compétences d'Aurora
   const CR_LABEL = { pending: "En attente (démarre sous 15 min)", running: "L'IA programme…", proposed: "Proposition prête", failed: "Échec", refused: "Annulée" };
   function codeMsg(sel, text) { $(sel).textContent = text; }
   async function renderCodeTab() {
@@ -731,7 +731,7 @@
     try {
       await api("/api/code/skills", { method: "POST", body: JSON.stringify({ name: $("#c-sk-name").value, description: $("#c-sk-desc").value, body: $("#c-sk-body").value }) });
       for (const id of ["#c-sk-name", "#c-sk-desc", "#c-sk-body"]) $(id).value = "";
-      codeMsg("#c-sk-msg", "✅ Compétence enregistrée : Aurore s'en servira.");
+      codeMsg("#c-sk-msg", "✅ Compétence enregistrée : Aurora s'en servira.");
       renderSkills();
     } catch (err) { codeMsg("#c-sk-msg", "⚠ " + err.message); }
   });
