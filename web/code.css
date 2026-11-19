@@ -142,5 +142,16 @@
 .c-finding.sev-moyenne { border-left-color: var(--amber); }
 .c-finding.sev-faible { border-left-color: var(--c3); }
 .c-inline + .small { margin: 4px 0; }
+.c-h3 { display: flex; align-items: center; gap: .5em; margin: 26px 0 6px; font-size: 1.05rem; }
+.c-h3 .ic { color: var(--accent); }
+.c-field { display: block; margin: 10px 0; font-size: .9rem; color: var(--text-2); }
+.c-field > input, .c-field > textarea, .c-field > select { display: block; width: 100%; margin-top: 6px; color: var(--text); }
+.c-details { margin: 12px 0; padding: 10px 14px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); }
+.c-details summary { cursor: pointer; font-weight: 600; }
+.c-linkbtn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 14px; text-decoration: none; color: var(--accent); flex: 1 1 100%; }
+.c-status.proposed { background: var(--grad-soft); color: var(--mint); }
+.c-status.failed { color: var(--danger); }
+.c-status.running { color: var(--amber); }
+.c-skill-body { white-space: pre-wrap; font-size: .82rem; background: var(--surface-2); padding: 10px 12px; border-radius: 12px; margin: 6px 0 0; }
 
 @media (min-width: 820px) { .c-app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }

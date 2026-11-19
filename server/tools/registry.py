@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import Config
-from .. import family, memory, sitescan
+from .. import family, memory, selfcode, sitescan, skills
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
@@ -126,6 +126,9 @@ TOOL_LABELS = {
     "remember": "Je note ça dans ma mémoire",
     "scan_site": "Je scanne ton site (lecture seule)",
     "show_dashboard": "Je construis le tableau de bord",
+    "use_skill": "Je consulte une compétence",
+    "propose_code_change": "J'envoie une demande de code",
+    "list_code_changes": "Je regarde les demandes de code",
     "forget": "J'efface ce souvenir",
     "list_emails": "Je consulte tes emails",
     "search_emails": "Je cherche dans tes emails",
@@ -164,6 +167,27 @@ SHOW_DASHBOARD_TOOL = _tool(
                               "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}}}},
     ["title"])
 
+USE_SKILL_TOOL = _tool(
+    "use_skill",
+    "Charge une compétence d'Aurore (fiche de méthode) par son nom, indiquée dans la liste des compétences. À utiliser "
+    "AVANT de répondre quand la demande correspond (revue de code, rapport client, tableau de bord, email pro…). "
+    "Renvoie les consignes à appliquer.",
+    {"name": {"type": "string", "description": "Nom de la compétence, ex. revue-de-code"}}, ["name"])
+
+PROPOSE_CODE_TOOL = _tool(
+    "propose_code_change",
+    "Envoie une demande de changement à l'IA programmeuse de Syrius (GitHub). Elle prépare le code, lance les tests "
+    "et OUVRE UNE PROPOSITION que le propriétaire relit et publie lui-même : tu ne publies jamais rien. Une seule "
+    "petite modification par demande, précise (où, quoi, comment vérifier). Applique d'abord la compétence "
+    "`demande-de-code`. Refusé après la lecture d'un email ou d'une page web.",
+    {"request": {"type": "string", "description": "La demande, en français, 10 à 1400 caractères"},
+     "app": {"type": "string", "description": "syrius ou syrius-code"}}, ["request", "app"])
+
+LIST_CODE_TOOL = _tool(
+    "list_code_changes",
+    "Liste les dernières demandes de code et leur état (en attente, en cours, proposée avec son lien, échouée).",
+    {}, [])
+
 SCAN_SITE_TOOL = _tool(
     "scan_site",
     "Lance un scan de sécurité PASSIF (en-têtes, fichiers sensibles exposés, clés secrètes visibles, cookies, "
@@ -188,6 +212,8 @@ _SCAN_RX = re.compile(r"scan|s[ée]curit|faille|vuln[ée]rab|site|domaine", re.I
 _PHONE_TOOLS = {t["function"]["name"] for t in DEVICE_TOOLS}
 _DIAGRAM_TOOLS = {"show_diagram", "show_model"}
 _MAIL_TOOLS = {"list_emails", "search_emails", "read_email", "draft_email"}
+_CODECHANGE_RX = re.compile(r"modifi|ajout|corrig|am[ée]lior|chang|fonctionnalit|bouton|d[ée]p[ôo]t|pull request|demande de code|"
+                           r"propos|programm|code|bug|r[ée]par|nouvelle? (?:option|page|[ée]cran)", re.I)
 _DASH_RX = re.compile(r"tableau de bord|dashboard|graphique|courbe|histogramme|camembert|\bkpi\b|statistique|chiffre|donn[ée]es|\bcsv\b|"
                       r"ventes|recettes|d[ée]penses|[ée]volution|\d+[ ;,]+\d+", re.I)
 
@@ -208,6 +234,8 @@ def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[d
         drop.add("scan_site")
     if not _DASH_RX.search(text):
         drop.add("show_dashboard")
+    if not _CODECHANGE_RX.search(text):
+        drop |= {"propose_code_change", "list_code_changes"}
     return [t for t in tools if t["function"]["name"] not in drop]
 
 
@@ -216,7 +244,9 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
     sites et les tableaux de bord n'existent QUE là."""
     if profile == "aurore":
         tools = [t for t in BASE_TOOLS if t["function"]["name"] in ("get_current_time", "show_diagram")]
-        tools += [SHOW_DASHBOARD_TOOL]
+        tools += [SHOW_DASHBOARD_TOOL, USE_SKILL_TOOL]
+        if family.is_owner():
+            tools += [PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
         if family.email_allowed(cfg):
             tools += EMAIL_TOOLS
         if settings.get("internet", True):
@@ -389,6 +419,36 @@ class ToolExecutor:
                 raise InvalidInput(str(e)) from None
             return (f"Schéma « {event['title']} » affiché en 3D ({len(event['nodes'])} idées). "
                     "Résume-le en une ou deux phrases, sans le recopier."), False, event
+
+        if name == "use_skill":
+            a = _check(args, {"name": str}, ["name"])
+            skill = skills.get(getattr(self.db, "base", self.db), a["name"])
+            if not skill:
+                return "Compétence inconnue. Utilise un nom de la liste.", True, None
+            return f"Compétence « {skill['name']} ». Applique ces consignes :\n{skill['body']}", False, None
+
+        if name in ("propose_code_change", "list_code_changes"):
+            if not family.is_owner():
+                return "Les demandes de code sont réservées au propriétaire.", True, None
+            base = getattr(self.db, "base", self.db)
+            if name == "list_code_changes":
+                rows = selfcode.items(base)[:8]
+                if not rows:
+                    return "Aucune demande de code pour l'instant.", False, None
+                return "\n".join(f"- {r['id']} [{r['status']}] {r['text'][:100]}" + (f" → {r['pr']}" if r.get("pr") else "")
+                                  for r in rows), False, None
+            if ctx.get("untrusted"):
+                return ("Je n'envoie pas de demande de code après avoir lu un email ou une page web : "
+                        "demande-le moi directement."), True, None
+            a = _check(args, {"request": str, "app": str}, ["request", "app"])
+            if a["app"] not in ("syrius", "syrius-code"):
+                raise InvalidInput("app : syrius ou syrius-code")
+            try:
+                item = selfcode.add(base, f"[Demande d'Aurore — application {a['app']}] {a['request']}")
+            except selfcode.SelfCodeError as e:
+                return str(e), True, None
+            return (f"Demande {item['id']} envoyée à l'IA programmeuse. Elle sera traitée dans les 15 minutes ; "
+                    "le propriétaire verra la proposition dans l'onglet Code de Syrius Code."), False, None
 
         if name == "show_dashboard":
             try:
