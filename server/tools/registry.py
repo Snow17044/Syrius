@@ -481,7 +481,7 @@ class ToolExecutor:
             except selfcode.SelfCodeError as e:
                 return str(e), True, None
             started = selfcode.dispatch(self.cfg.github_dispatch_token, self.cfg.github_repo)
-            when = "Elle démarre maintenant" if started else "Elle démarrera au prochain passage de GitHub (environ une heure au plus)"
+            when = "Elle démarre maintenant" if started else "Elle est vérifiée toutes les 15 minutes (GitHub est parfois en retard, jusqu'à 1 h)"
             return (f"Demande {item['id']} envoyée à l'IA programmeuse. {when} ; "
                     "le propriétaire verra la proposition dans l'onglet Code de Syrius Code."), False, None
 

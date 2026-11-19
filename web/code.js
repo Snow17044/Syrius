@@ -626,7 +626,7 @@
   });
 
   // ------------------------------------------------------------------ code : demandes à l'IA programmeuse + compétences d'Aurora
-  const CR_LABEL = { pending: "En attente (GitHub la prend en moins d'1 h)", running: "L'IA programme…", proposed: "Proposition prête", failed: "Échec", refused: "Annulée" };
+  const CR_LABEL = { pending: "En attente (vérifiée toutes les 15 min, parfois plus tard)", running: "L'IA programme…", proposed: "Proposition prête", failed: "Échec", refused: "Annulée" };
   function codeMsg(sel, text) { $(sel).textContent = text; }
   async function renderCodeTab() {
     renderChangeRequests();
@@ -692,7 +692,7 @@
       const res = await api("/api/selfcode", { method: "POST", body: JSON.stringify({ text: `[Application ${app}] ${text}`.slice(0, 1500) }) });
       $("#c-cr-text").value = "";
       codeMsg("#c-cr-msg", res.started ? "✅ Demande envoyée : l'IA programmeuse démarre maintenant."
-        : "✅ Demande envoyée. GitHub la prend au prochain passage (jusqu'à 1 h). Pour démarrer tout de suite, utilise « Lancer maintenant » ci-dessous.");
+        : "✅ Demande envoyée. Elle est vérifiée toutes les 15 min (GitHub est parfois en retard, jusqu'à 1 h). Pour démarrer tout de suite, utilise « Lancer maintenant » ci-dessous.");
       renderChangeRequests();
     } catch (err) { codeMsg("#c-cr-msg", "⚠ " + err.message); }
   });

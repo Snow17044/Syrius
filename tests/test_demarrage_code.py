@@ -57,5 +57,5 @@ def test_interface_honnete_sur_le_delai():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     js, html = (root / "web/code.js").read_text(), (root / "web/code.html").read_text()
-    assert "15 min" not in js and "1 h" in js and "Lancer maintenant" in html
+    assert "toutes les 15 min" in js and "parfois" in js and "Lancer maintenant" in html  # 15 min, mais sans promettre l'impossible
     assert 'rel="noopener"' in html
