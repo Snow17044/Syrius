@@ -33,7 +33,9 @@ jobs:
         id: check
         run: |
           mkdir -p training/data
-          gh release download coder-data --pattern coder.jsonl --dir training/data --clobber || true
+          gh release download coder-data --pattern coder.jsonl --pattern real.jsonl --dir training/data --clobber || true
+          # les vrais changements que tu as acceptés comptent triple
+          if [ -f training/data/real.jsonl ]; then cat training/data/real.jsonl training/data/real.jsonl training/data/real.jsonl >> training/data/coder.jsonl; fi
           n=$( [ -f training/data/coder.jsonl ] && wc -l < training/data/coder.jsonl || echo 0 )
           echo "Exemples vérifiés : $n (minimum 300)"
           if [ "$n" -ge 300 ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
@@ -57,11 +59,20 @@ jobs:
           .venv/bin/python training/train.py --coder --model "${{ inputs.model || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}" \
             --data training/data/coder.jsonl --max-len 2048 --epochs 3 --minutes "${{ inputs.minutes || '240' }}" --out build/coder
       - name: Banc d'essai (bugs réels, tests exécutés)
+        id: bench
         if: steps.check.outputs.go == 'true'
         run: .venv/bin/python -m coder.bench_run local build/coder 31 | tee build/bench-apres.json
-          .venv/bin/python -m coder.compare build/bench-avant.json build/bench-apres.json | tee build/verdict.txt || true
+          if .venv/bin/python -m coder.compare build/bench-avant.json build/bench-apres.json | tee build/verdict.txt; then
+            echo "better=true" >> "$GITHUB_OUTPUT"; else echo "better=false" >> "$GITHUB_OUTPUT"; fi
           { echo "## IA programmeuse"; cat build/verdict.txt; } >> "$GITHUB_STEP_SUMMARY"
           gh release upload coder-data build/bench-apres.json build/verdict.txt --clobber || true
+      - name: Garder le modèle SEULEMENT s'il est meilleur
+        if: steps.check.outputs.go == 'true' && steps.bench.outputs.better == 'true'
+        run: |
+          gh release view coder-model >/dev/null 2>&1 || gh release create coder-model --title "IA programmeuse (modèle)" \
+            --notes "Dernier modèle ayant battu son point de départ sur le banc d'essai." --prerelease
+          tar -C build/coder -czf build/coder-model.tgz .
+          gh release upload coder-model build/coder-model.tgz build/bench-apres.json build/verdict.txt --clobber
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.check.outputs.go == 'true'
         with:
