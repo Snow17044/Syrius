@@ -5,6 +5,7 @@ ou en panne, Syrius passe automatiquement au suivant.
 """
 import asyncio
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -234,6 +235,12 @@ def providers_from_config(cfg) -> list[Provider]:
     if cfg.gemini_api_key:
         out.append(Provider("gemini", "Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
                             cfg.gemini_model, cfg.gemini_api_key, vision=True))
+    if cfg.cloudflare_api_key and re.fullmatch(r"[0-9a-f]{32}", cfg.cloudflare_account_id or ""):
+        # Cloudflare Workers AI (adresse compatible OpenAI) : modèles gratuits dans la limite de 10 000 neurones par jour
+        for i, model in enumerate(cfg.cloudflare_models):
+            out.append(Provider("cloudflare" if i == 0 else f"cloudflare{i + 1}", f"Cloudflare · {model.split('/')[-1][:24]}",
+                                f"https://api.cloudflare.com/client/v4/accounts/{cfg.cloudflare_account_id}/ai/v1", model,
+                                cfg.cloudflare_api_key, reasoning=False))
     if cfg.openrouter_api_key:  # relais réservés aux photos, en dernier
         known = set(cfg.openrouter_models)
         for i, model in enumerate(m for m in getattr(cfg, "openrouter_vision_models", []) if m not in known):

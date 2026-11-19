@@ -54,6 +54,8 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}  # facultatif : Devstral/Codestral en priorité
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}  # facultatif : Cloudflare Workers AI (gratuit)
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AIDER_ANALYTICS: "false"
         run: |
           git config user.name "Syrius (IA programmeuse)"

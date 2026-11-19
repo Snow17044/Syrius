@@ -14,6 +14,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -103,12 +104,25 @@ def mistral_model() -> str:
     return next((i for i in ids if "devstral" in i or "codestral" in i), "")
 
 
+CLOUDFLARE_MODEL = os.environ.get("SYRIUS_CLOUDFLARE_CODER", "@cf/zai-org/glm-4.7-flash")
+
+
+def cloudflare_model() -> str:
+    """Cloudflare Workers AI (gratuit, ~120 appels par jour) : modèle « openai/@cf/… » via l'adresse compatible OpenAI."""
+    key, acc = os.environ.get("CLOUDFLARE_API_KEY", ""), os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+    return f"openai/{CLOUDFLARE_MODEL}" if key and re.fullmatch(r"[0-9a-f]{32}", acc) else ""
+
+
 def pick_model(preferred: str = "") -> str:
     """Modèle pour aider, avec son fournisseur : « mistral/… » si la clé Mistral existe, sinon « openrouter/… »."""
     if not (preferred and not preferred.startswith("mistral")):
         m = mistral_model()
         if m:
             return f"mistral/{m}"
+    if not preferred:  # Cloudflare avant OpenRouter : ~120 appels gratuits par jour contre 50
+        cf = cloudflare_model()
+        if cf:
+            return cf
     try:
         with urllib.request.urlopen("https://openrouter.ai/api/v1/models", timeout=30) as r:  # nosec B310
             ids = {m["id"] for m in json.loads(r.read())["data"]}
@@ -123,10 +137,14 @@ def pick_model(preferred: str = "") -> str:
 def aider(model: str, message: str) -> None:
     msg = WORK / "message.txt"
     msg.write_text(message, encoding="utf-8")
+    env = dict(os.environ)
+    if model.startswith("openai/@cf/"):  # Cloudflare : adresse compatible OpenAI, clé du compte Cloudflare
+        env["OPENAI_API_BASE"] = f"https://api.cloudflare.com/client/v4/accounts/{os.environ['CLOUDFLARE_ACCOUNT_ID']}/ai/v1"
+        env["OPENAI_API_KEY"] = os.environ["CLOUDFLARE_API_KEY"]
     subprocess.run([str(WORK / "avenv" / "bin" / "aider"), "--model", model, "--message-file", str(msg),
                     "--yes-always", "--no-auto-commits", "--no-dirty-commits", "--no-suggest-shell-commands",
                     "--no-check-update", "--analytics-disable", "--no-show-model-warnings", "--no-gitignore",
-                    "--map-tokens", "2048", "--no-stream"], cwd=ROOT, timeout=1200, check=False)
+                    "--map-tokens", "2048", "--no-stream"], cwd=ROOT, timeout=1200, check=False, env=env)
 
 
 def cmd_next() -> None:

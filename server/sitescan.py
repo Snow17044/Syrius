@@ -516,6 +516,18 @@ def run(base, raw: str, own_hosts: tuple = (), fetcher=None, now: float | None =
     return result
 
 
+def ensure_access(base, raw: str, fetcher=None):
+    """Site ajouté par le propriétaire ET preuve de propriété retrouvée sur le site : renvoie (domaine, accès)."""
+    dom = clean_domain(raw)
+    entry = _load(base).get(dom)
+    if not entry or not entry.get("token"):
+        raise ScanError("Ajoute d'abord ce site dans Syrius Code (onglet Sites) et prouve qu'il est à toi.")
+    f = fetcher or Fetcher(dom)
+    if not verify(dom, entry["token"], f):
+        raise ScanError("Preuve de propriété introuvable sur ce site. " + instructions(dom, entry["token"]))
+    return dom, f
+
+
 def chat_summary(res: dict) -> str:
     """Résumé court pour l'IA (qui le reformule pour l'utilisateur)."""
     c = res["counts"]

@@ -18,8 +18,10 @@ from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, se
 log = logging.getLogger("syrius.agent")
 
 UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read", "show_places",
-                   "get_weather"}
+                   "get_weather", "list_site_files", "read_site_file", "scan_site"}
 WEB_TOOLS = {"web_search", "web_read", "show_places", "get_weather"}
+SITE_TOOLS = {"list_site_files", "read_site_file"}
+MAX_SITE_CALLS = 14  # fichiers de site lus au maximum par réponse
 MAX_WEB_CALLS = 8  # pages / recherches web maximum par réponse
 MAX_STEPS = 8          # allers-retours max avec les outils pour une seule question
 MAX_HISTORY = 40       # messages gardés en contexte (au-delà, les plus anciens sont oubliés)
@@ -258,6 +260,7 @@ class Agent:
         keep_all = any(b.get("type") == "tool_use" for m in history[-6:] for b in m["content"])  # conversation d'action
         untrusted_seen = False
         web_calls = 0
+        site_calls = 0
 
         for _step in range(MAX_STEPS):
             system = (build_aurore_system(settings, skills.prompt_list(base_db)) if aurore
@@ -361,9 +364,14 @@ class Agent:
             if any(c["name"] in UNTRUSTED_TOOLS for c in state["calls"]):
                 untrusted_seen = True  # même si l'action téléphone est demandée dans le même lot
             for call in state["calls"]:
+                if call["name"] in SITE_TOOLS:
+                    site_calls += 1
                 if call["name"] in WEB_TOOLS:
                     web_calls += 1
-                if call["name"] in WEB_TOOLS and web_calls > MAX_WEB_CALLS:
+                if call["name"] in SITE_TOOLS and site_calls > MAX_SITE_CALLS:
+                    result, is_error, ui_event = ("Limite de fichiers lus pour cette réponse : fais le point sur ce que tu as "
+                                                  "lu, puis continue dans un nouveau message."), True, None
+                elif call["name"] in WEB_TOOLS and web_calls > MAX_WEB_CALLS:
                     result, is_error, ui_event = "Limite de pages web atteinte pour cette réponse.", True, None
                 else:
                     result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
