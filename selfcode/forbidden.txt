@@ -34,3 +34,5 @@ training/eval_gate.py
 training/eval_set.py
 training/eval_model.py
 server/skills.py
+server/coderask.py
+coder/
