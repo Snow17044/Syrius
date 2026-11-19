@@ -1,4 +1,4 @@
-"""Lecture du code d'un site par Aurore : preuve de propriété, secrets masqués, jamais hors du site."""
+"""Lecture du code d'un site par Aurora : preuve de propriété, secrets masqués, jamais hors du site."""
 import json
 
 import pytest
@@ -103,7 +103,7 @@ def test_masquage_des_secrets():
 
 
 def test_aurore_lit_le_code_puis_ne_peut_pas_modifier_le_depot(make_client, monkeypatch):
-    # Un site piégé : après avoir lu son code, Aurore ne doit pas envoyer de demande de code
+    # Un site piégé : après avoir lu son code, Aurora ne doit pas envoyer de demande de code
     base_calls = []
     monkeypatch.setattr(sitecode, "list_files", lambda b, d, f=None: {"domain": d, "files": [{"path": "/", "kind": "page", "size": 5, "parts": 1, "secrets": 0}],
                                                                        "inline_scripts": 0, "requests": 1, "secrets": [], "note": "ok"})

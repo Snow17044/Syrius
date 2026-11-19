@@ -1,8 +1,8 @@
-"""Compétences d'Aurore : des fiches de méthode qu'elle charge à la demande (revue de code, rapport client…).
+"""Compétences d'Aurora : des fiches de méthode qu'elle charge à la demande (revue de code, rapport client…).
 
 - fiches intégrées : server/skills/*.md (début « --- name: … description: … --- », puis les consignes) ;
 - fiches du propriétaire : ajoutées dans Syrius Code (20 au plus, 4 000 caractères chacune).
-Seul le nom et la description sont dans la consigne d'Aurore ; le contenu n'est chargé que quand elle s'en sert
+Seul le nom et la description sont dans la consigne d'Aurora ; le contenu n'est chargé que quand elle s'en sert
 (l'outil `use_skill`), ce qui garde chaque question légère.
 """
 from __future__ import annotations
@@ -72,7 +72,7 @@ def add(base, name: str, description: str, body: str) -> dict:
     if safety.blocked(description, body):
         raise SkillError("Compétence refusée : pas de contenu sexuel ni violent.")
     if name in _builtin():
-        raise SkillError("Ce nom est déjà pris par une compétence d'Aurore.")
+        raise SkillError("Ce nom est déjà pris par une compétence d'Aurora.")
     mine = [d for d in _custom(base) if d["name"] != name]
     if len(mine) >= MAX_CUSTOM:
         raise SkillError(f"{MAX_CUSTOM} compétences au plus : supprime-en une.")
@@ -90,7 +90,7 @@ def delete(base, name: str) -> bool:
 
 
 def prompt_list(base) -> str:
-    """Les lignes ajoutées à la consigne d'Aurore."""
+    """Les lignes ajoutées à la consigne d'Aurora."""
     lines = [f"- {s['name']} : {s['description']}" for s in catalog(base)]
     return ("Compétences (fiches de méthode) : quand la demande correspond, appelle d'abord `use_skill` avec le nom, "
             "puis applique la fiche.\n" + "\n".join(lines)) if lines else ""

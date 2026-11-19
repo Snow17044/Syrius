@@ -1,4 +1,4 @@
-"""Lire tout le code d'un site (pages HTML, scripts, styles, sources) pour qu'Aurore l'analyse.
+"""Lire tout le code d'un site (pages HTML, scripts, styles, sources) pour qu'Aurora l'analyse.
 
 Mêmes garde-fous que le scanner de sécurité (server/sitescan.py) :
 - uniquement les sites que le propriétaire a ajoutés ET dont il a prouvé la propriété (revérifiée à chaque appel) ;

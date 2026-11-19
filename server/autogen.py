@@ -162,7 +162,7 @@ def check(q: str, a: str) -> bool:
 def _prompt(theme: str, tool: str | None, n: int) -> str:
     now = time.strftime("%Y-%m-%dT%H:%M")
     return (
-        "Tu écris des exemples d'entraînement pour « Syrius », un assistant personnel francophone : chaleureux, "
+        "Tu écris des exemples d'entraînement pour « Nova » (l'assistant de l'application Syrius), un assistant personnel francophone : chaleureux, "
         "concis, tutoie, pointe d'humour fin, n'invente jamais un fait. "
         f"Écris {n} conversations courtes et VARIÉES sur ce thème : {theme}. "
         "Quand l'assistant agit, sa réponse = une courte phrase en français, puis un retour à la ligne, puis "
@@ -171,7 +171,7 @@ def _prompt(theme: str, tool: str | None, n: int) -> str:
         f"Date actuelle : {now}. "
         + (f"Utilise surtout l'outil {tool}. " if tool else "")
         + "Réponds UNIQUEMENT avec un tableau JSON : "
-        '[{"q": "message de l\'utilisateur", "a": "réponse idéale de Syrius"}, ...]. Rien d\'autre.')
+        '[{"q": "message de l\'utilisateur", "a": "réponse idéale de Nova"}, ...]. Rien d\'autre.')
 
 
 def _ask(provider, prompt: str, temperature: float = 0.9, max_tokens: int = 3500) -> str:
@@ -201,7 +201,7 @@ def _parse(text: str) -> list[dict]:
 
 
 _JUDGE = (
-    "Tu es un relecteur EXIGEANT d'exemples d'entraînement pour « Syrius », un assistant personnel francophone. "
+    "Tu es un relecteur EXIGEANT d'exemples d'entraînement pour « Nova » (l'assistant de l'application Syrius), un assistant personnel francophone. "
     "Pour chaque exemple (question de l'utilisateur, réponse de l'assistant), réponds ok=false si : un fait est inexact "
     "ou douteux ; un calcul est faux ; la réponse est hors sujet, trop longue ou bavarde, ou pas en français ; elle invente "
     "une adresse, un numéro, une source ou un résultat ; le conseil est dangereux ; ou l'action <tool_call> ne correspond "

@@ -171,7 +171,7 @@ SHOW_DASHBOARD_TOOL = _tool(
 
 USE_SKILL_TOOL = _tool(
     "use_skill",
-    "Charge une compétence d'Aurore (fiche de méthode) par son nom, indiquée dans la liste des compétences. À utiliser "
+    "Charge une compétence d'Aurora (fiche de méthode) par son nom, indiquée dans la liste des compétences. À utiliser "
     "AVANT de répondre quand la demande correspond (revue de code, rapport client, tableau de bord, email pro…). "
     "Renvoie les consignes à appliquer.",
     {"name": {"type": "string", "description": "Nom de la compétence, ex. revue-de-code"}}, ["name"])
@@ -257,7 +257,7 @@ def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[d
 
 
 def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[dict]:
-    """Liste triée et stable (important pour le cache). Aurore (Syrius Code) a ses propres outils ; le scan de
+    """Liste triée et stable (important pour le cache). Aurora (Syrius Code) a ses propres outils ; le scan de
     sites et les tableaux de bord n'existent QUE là."""
     if profile == "aurore":
         tools = [t for t in BASE_TOOLS if t["function"]["name"] in ("get_current_time", "show_diagram")]
@@ -271,7 +271,7 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
         if family.is_owner():
             tools += [SCAN_SITE_TOOL, LIST_SITE_FILES_TOOL, READ_SITE_FILE_TOOL]
         return tools
-    tools = list(BASE_TOOLS) + DEVICE_TOOLS  # Syrius : plus d'emails (ils sont chez Aurore, dans Syrius Code)
+    tools = list(BASE_TOOLS) + DEVICE_TOOLS  # Syrius : plus d'emails (ils sont chez Aurora, dans Syrius Code)
     if settings.get("internet", True):
         tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL, WEATHER_TOOL]
     return tools
@@ -369,7 +369,7 @@ class ToolExecutor:
 
         if name in {"list_emails", "search_emails", "read_email", "draft_email"}:
             if ctx.get("profile") != "aurore":
-                return "Les emails se gèrent dans Syrius Code, avec Aurore.", True, None
+                return "Les emails se gèrent dans Syrius Code, avec Aurora.", True, None
             if not family.email_allowed(self.cfg):
                 return "Les emails ne sont pas configurés.", True, None
 
@@ -477,7 +477,7 @@ class ToolExecutor:
             if a["app"] not in ("syrius", "syrius-code"):
                 raise InvalidInput("app : syrius ou syrius-code")
             try:
-                item = selfcode.add(base, f"[Demande d'Aurore — application {a['app']}] {a['request']}")
+                item = selfcode.add(base, f"[Demande d'Aurora — application {a['app']}] {a['request']}")
             except selfcode.SelfCodeError as e:
                 return str(e), True, None
             return (f"Demande {item['id']} envoyée à l'IA programmeuse. Elle sera traitée dans les 15 minutes ; "

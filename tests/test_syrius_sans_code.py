@@ -29,7 +29,7 @@ def test_syrius_n_envoie_plus_les_demandes_de_code_a_codestral(make_client):
     cid2 = c.post("/api/conversations", headers=H).json()["id"]
     c.post(f"/api/conversations/{cid2}/messages", json={"text": "Salut"}, headers=H)
     assert asked[-1] == ""
-    # Aurore, elle, passe bien par l'IA de code
+    # Aurora, elle, passe bien par l'IA de code
     code_cid = c.post("/api/code/conversations", headers=H).json()["id"]
     c.fake.responses.append(reply("Voici."))
     c.post(f"/api/code/conversations/{code_cid}/messages", json={"text": "Écris une fonction Python qui trie une liste"}, headers=H)

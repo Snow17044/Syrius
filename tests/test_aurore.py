@@ -1,4 +1,4 @@
-"""Syrius Code : Aurore (IA pro), tableaux de bord, discussions séparées, réservé au propriétaire."""
+"""Syrius Code : Aurora (IA pro), tableaux de bord, discussions séparées, réservé au propriétaire."""
 import json
 
 import pytest
@@ -47,14 +47,14 @@ def test_validation_des_tableaux_de_bord():
 
 
 def test_aurore_repond_avec_sa_consigne_et_ses_outils(make_client):
-    c = make_client([reply("Bonjour, je suis Aurore.")])
+    c = make_client([reply("Bonjour, je suis Aurora.")])
     login(c)
     cid = c.post("/api/code/conversations", headers=H).json()["id"]
     ev = events_of(c.post(f"/api/code/conversations/{cid}/messages", json={"text": "Salut"}, headers=H).text)
     assert any(e["type"] == "text" for e in ev) and any(e["type"] == "done" for e in ev)
     req = c.fake.requests[0]
     sysmsg = req["messages"][0]["content"]
-    assert "Aurore" in sysmsg and "Souvenirs" not in sysmsg  # pas de souvenirs personnels de Syrius
+    assert "Aurora" in sysmsg and "Souvenirs" not in sysmsg  # pas de souvenirs personnels de Syrius
     assert not any(t["function"]["name"].startswith("phone_") for t in req.get("tools", []))
 
 
@@ -76,7 +76,7 @@ def test_discussions_separees_de_syrius(make_client):
     code_id = c.post("/api/code/conversations", headers=H).json()["id"]
     syr_id = c.post("/api/conversations", headers=H).json()["id"]
     assert [x["id"] for x in c.get("/api/code/conversations").json()] == [code_id]
-    assert [x["id"] for x in c.get("/api/conversations").json()] == [syr_id]  # Aurore n'apparaît pas dans Syrius
+    assert [x["id"] for x in c.get("/api/conversations").json()] == [syr_id]  # Aurora n'apparaît pas dans Syrius
     assert c.get(f"/api/code/conversations/{syr_id}").status_code == 404  # et réciproquement
     assert c.delete(f"/api/code/conversations/{code_id}", headers=H).status_code == 200
     assert c.get("/api/code/conversations").json() == []

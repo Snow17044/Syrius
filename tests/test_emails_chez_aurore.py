@@ -1,4 +1,4 @@
-"""Les emails ne sont plus dans Syrius : ils se gèrent dans Syrius Code (Aurore), propriétaire seulement."""
+"""Les emails ne sont plus dans Syrius : ils se gèrent dans Syrius Code (Aurora), propriétaire seulement."""
 import json
 from pathlib import Path
 

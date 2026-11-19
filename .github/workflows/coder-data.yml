@@ -1,6 +1,6 @@
 # Chaque nuit : une grande IA gratuite aide à fabriquer des exemples de code VÉRIFIÉS (les tests doivent passer),
 # puis on mesure combien de bugs du banc d'essai elle répare. Les exemples sont gardés dans la publication « coder-data ».
-name: Exemples de code pour Aurore
+name: Exemples de code pour Aurora
 
 on:
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
           .venv/bin/pip install --quiet pytest
       - name: Récupérer les exemples déjà fabriqués
         run: |
-          gh release view coder-data >/dev/null 2>&1 || gh release create coder-data --title "Exemples de code (Aurore)" \
+          gh release view coder-data >/dev/null 2>&1 || gh release create coder-data --title "Exemples de code (Aurora)" \
             --notes "Fichiers créés automatiquement chaque nuit. Ne rien modifier à la main." --prerelease
           mkdir -p training/data
           gh release download coder-data --pattern coder.jsonl --dir training/data --clobber || true

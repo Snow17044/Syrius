@@ -1,4 +1,4 @@
-"""Tableaux de bord créés par Aurore : un descriptif strict (KPI, graphiques, tableau) vérifié avant affichage.
+"""Tableaux de bord créés par Aurora : un descriptif strict (KPI, graphiques, tableau) vérifié avant affichage.
 
 Rien n'est exécuté : l'application dessine elle-même les graphiques à partir de ces données (nombres et textes courts).
 """

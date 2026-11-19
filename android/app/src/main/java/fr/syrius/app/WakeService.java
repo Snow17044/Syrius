@@ -443,7 +443,7 @@ public class WakeService extends Service {
         final boolean[] done = {false};
         try {
             JSONObject req = new JSONObject()
-                    .put("system", "Tu es Syrius, assistant personnel. Réponds en français, en 1 à 3 phrases "
+                    .put("system", "Tu es Nova, assistant personnel (application Syrius). Réponds en français, en 1 à 3 phrases "
                             + "simples, car ta réponse sera lue à voix haute. Tu es hors ligne.")
                     .put("messages", new org.json.JSONArray().put(new JSONObject().put("role", "user").put("text", question)));
             ai.chat("wake", req, (id, t, fin, err) -> {

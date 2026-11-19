@@ -18,7 +18,7 @@
     <form id="c-login-form" class="c-login-card" autocomplete="on">
       <div class="c-logo" data-icon="code"></div>
       <h1>Syrius Code</h1>
-      <p class="muted small">Le laboratoire d'essai de Syrius, avec Aurore. Réservé au propriétaire.</p>
+      <p class="muted small">Le laboratoire d'essai de Syrius, avec Aurora. Réservé au propriétaire.</p>
       <input id="c-login-name" type="text" placeholder="Ton prénom (si tu en as un)" autocomplete="username" maxlength="60">
       <input id="c-login-password" type="password" placeholder="Mot de passe" autocomplete="current-password" required>
       <button type="submit" class="primary wide">Entrer</button>
@@ -31,7 +31,7 @@
     <header class="c-head">
       <div class="c-brand">
         <span class="c-mark" data-icon="code"></span>
-        <div><strong>Syrius Code</strong><span class="c-sub small muted">Aurore · IA pro · laboratoire</span></div>
+        <div><strong>Syrius Code</strong><span class="c-sub small muted">Aurora 0.1 · IA pro · laboratoire</span></div>
       </div>
       <div class="c-head-actions">
         <button type="button" id="c-theme" class="icon-btn" aria-label="Changer de thème" data-icon="palette"></button>
@@ -40,18 +40,18 @@
     </header>
 
     <main class="c-main">
-      <!-- Aurore : discussion -->
+      <!-- Aurora : discussion -->
       <section id="tab-aurore" class="c-tab on" data-tab="aurore">
         <div id="c-messages" class="c-messages" aria-live="polite">
           <div id="c-empty" class="c-empty">
             <div class="c-empty-mark" data-icon="sparkle"></div>
-            <h2>Bonjour, je suis Aurore</h2>
+            <h2>Bonjour, je suis Aurora</h2>
             <p class="muted">Code, tableaux de bord, emails pro, sites et sécurité : dis-moi ce qu'il faut faire.</p>
             <div id="c-starters" class="c-chips"></div>
           </div>
         </div>
         <form id="c-form" class="c-composer">
-          <textarea id="c-input" rows="1" maxlength="20000" placeholder="Écris à Aurore…" aria-label="Message pour Aurore"></textarea>
+          <textarea id="c-input" rows="1" maxlength="20000" placeholder="Écris à Aurora…" aria-label="Message pour Aurora"></textarea>
           <button type="submit" id="c-send" class="c-send" aria-label="Envoyer" data-icon="send"></button>
         </form>
       </section>
@@ -60,7 +60,7 @@
       <section id="tab-sites" class="c-tab" data-tab="sites">
         <div class="c-page">
           <h2 data-icon="shield"><span>Mes sites</span></h2>
-          <p class="muted small">Aurore lit tes sites comme un visiteur et repère les erreurs de sécurité courantes (en-têtes
+          <p class="muted small">Aurora lit tes sites comme un visiteur et repère les erreurs de sécurité courantes (en-têtes
             absents, fichiers sensibles exposés, clés secrètes visibles, cookies mal protégés…). Elle n'attaque rien, ne teste
             aucun mot de passe et ne scanne <b>que les sites dont tu prouves être le propriétaire</b>. Ce n'est pas un test
             d'intrusion complet.</p>
@@ -78,7 +78,7 @@
       <section id="tab-tableaux" class="c-tab" data-tab="tableaux">
         <div class="c-page">
           <h2 data-icon="chart"><span>Tableaux de bord</span></h2>
-          <p class="muted small">Colle tes chiffres dans la discussion avec Aurore : elle en fait des indicateurs, des graphiques
+          <p class="muted small">Colle tes chiffres dans la discussion avec Aurora : elle en fait des indicateurs, des graphiques
             et un tableau. Enregistre ceux que tu veux garder.</p>
           <div id="c-dash-starters" class="c-chips"></div>
           <ul id="c-dashboards" class="c-cards"></ul>
@@ -90,7 +90,7 @@
       <section id="tab-emails" class="c-tab" data-tab="emails">
         <div class="c-page">
           <h2 data-icon="mail"><span>Emails pro</span></h2>
-          <p class="muted small">Aurore trie, résume et prépare des brouillons de réponse. Elle n'envoie jamais rien toute seule :
+          <p class="muted small">Aurora trie, résume et prépare des brouillons de réponse. Elle n'envoie jamais rien toute seule :
             chaque envoi demande ta confirmation. Les emails ne sont plus dans l'application Syrius : ils se gèrent ici, par toi seul.</p>
           <div class="c-card c-site">
             <strong>Ma boîte mail</strong>
@@ -109,18 +109,18 @@
       <section id="tab-code" class="c-tab" data-tab="code">
         <div class="c-page">
           <h2 data-icon="code"><span>Code</span></h2>
-          <p class="muted small">Aurore écrit, relit et corrige du code. Pour la programmation, elle utilise l'IA spécialisée
+          <p class="muted small">Aurora écrit, relit et corrige du code. Pour la programmation, elle utilise l'IA spécialisée
             Codestral quand elle est disponible. Ne colle jamais de mot de passe ni de clé secrète.</p>
           <div id="c-code-starters" class="c-chips"></div>
 
           <h3 class="c-h3" data-icon="send"><span>Demander un changement de code</span></h3>
           <p class="muted small">Une IA programmeuse prépare le changement dans GitHub, lance les tests, puis te propose le
             résultat. <b>Rien n'est publié sans ton accord.</b> Les parties sécurité (connexion, comptes, filtres, base de
-            données, scanner) lui sont interdites. Tu peux aussi le demander à Aurore dans la discussion.</p>
+            données, scanner) lui sont interdites. Tu peux aussi le demander à Aurora dans la discussion.</p>
           <label class="c-field">Application
-            <select id="c-cr-app"><option value="syrius">Syrius (discussion, téléphone)</option><option value="syrius-code">Syrius Code (Aurore)</option></select></label>
+            <select id="c-cr-app"><option value="syrius">Syrius (discussion, téléphone)</option><option value="syrius-code">Syrius Code (Aurora)</option></select></label>
           <label class="c-field">Ce qu'il faut changer
-            <textarea id="c-cr-text" rows="3" maxlength="1400" placeholder="Ex. : Dans Syrius Code, ajoute un bouton « Copier » sous chaque réponse d'Aurore."></textarea></label>
+            <textarea id="c-cr-text" rows="3" maxlength="1400" placeholder="Ex. : Dans Syrius Code, ajoute un bouton « Copier » sous chaque réponse d'Aurora."></textarea></label>
           <button type="button" id="c-cr-send" class="primary wide" data-icon="send"><span>Envoyer la demande</span></button>
           <p id="c-cr-msg" class="small"></p>
           <ul id="c-cr-list" class="c-cards"></ul>
@@ -141,15 +141,15 @@
             <ul id="c-lessons" class="c-cards"></ul>
           </details>
 
-          <h3 class="c-h3" data-icon="bulb"><span>Compétences d'Aurore</span></h3>
-          <p class="muted small">Des fiches de méthode qu'Aurore charge quand elles servent (revue de code, rapport client…).
+          <h3 class="c-h3" data-icon="bulb"><span>Compétences d'Aurora</span></h3>
+          <p class="muted small">Des fiches de méthode qu'Aurora charge quand elles servent (revue de code, rapport client…).
             Ajoute les tiennes : elles décrivent comment tu veux qu'elle travaille. Ne mets jamais de mot de passe ni de clé.</p>
           <ul id="c-skills" class="c-cards"></ul>
           <details class="c-details">
             <summary>Ajouter une compétence</summary>
             <label class="c-field">Nom (lettres, chiffres, tirets)<input id="c-sk-name" type="text" maxlength="40" placeholder="relecture-contrat" autocapitalize="none"></label>
             <label class="c-field">Quand l'utiliser (10 à 160 caractères)<input id="c-sk-desc" type="text" maxlength="160" placeholder="Relire un contrat et en résumer les risques."></label>
-            <label class="c-field">Consignes d'Aurore<textarea id="c-sk-body" rows="5" maxlength="4000" placeholder="1. Demande le contrat.&#10;2. Résume en 5 points.&#10;3. Signale les clauses risquées."></textarea></label>
+            <label class="c-field">Consignes d'Aurora<textarea id="c-sk-body" rows="5" maxlength="4000" placeholder="1. Demande le contrat.&#10;2. Résume en 5 points.&#10;3. Signale les clauses risquées."></textarea></label>
             <button type="button" id="c-sk-add" class="ghost wide" data-icon="plus"><span>Enregistrer la compétence</span></button>
             <p id="c-sk-msg" class="small"></p>
           </details>
@@ -158,7 +158,7 @@
     </main>
 
     <nav class="c-nav" id="c-nav" aria-label="Sections">
-      <button type="button" data-go="aurore" class="on" data-icon="sparkle"><span>Aurore</span></button>
+      <button type="button" data-go="aurore" class="on" data-icon="sparkle"><span>Aurora</span></button>
       <button type="button" data-go="sites" data-icon="shield"><span>Sites</span></button>
       <button type="button" data-go="tableaux" data-icon="chart"><span>Tableaux</span></button>
       <button type="button" data-go="emails" data-icon="mail"><span>Emails</span></button>
