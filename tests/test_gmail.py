@@ -49,7 +49,7 @@ def fake_google(monkeypatch):
 def test_connexion_complete(make_client, google_cfg, fake_google):
     c = make_client()
     login(c)
-    s = c.get("/api/settings").json()
+    s = c.get("/api/code/email").json()
     assert s["google"] and not s["google_connected"]
     url = c.post("/api/email/google/start", headers=H).json()["url"]
     q = parse_qs(urlparse(url).query)
@@ -122,5 +122,5 @@ def test_non_connecte_message_clair(google_cfg, make_db):
 
 def test_outils_email_actifs_en_mode_google(google_cfg):
     from server.tools.registry import build_tools
-    names = {t["function"]["name"] for t in build_tools(google_cfg, {"web_search": False})}
+    names = {t["function"]["name"] for t in build_tools(google_cfg, {"web_search": False}, "aurore")}
     assert {"list_emails", "read_email", "draft_email"} <= names

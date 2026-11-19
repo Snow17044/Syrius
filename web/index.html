@@ -264,13 +264,9 @@
 
       <details class="train-setup">
         <summary>Comment Syrius reconnaît GitHub</summary>
-        <p class="small muted">Rien à configurer : les automatisations de ton dépôt GitHub (entraînement chaque nuit,
-          les demandes de code de Syrius Code) prouvent leur identité avec la signature officielle de GitHub. Ton Syrius vérifie
-          qu'elles viennent bien de ton dépôt, sur la branche principale. Elles ne peuvent que suivre l'entraînement,
-          lire tes phrases d'entraînement et tes demandes de changement, jamais tes discussions.</p>
-        <p class="small"><strong>Pour les demandes de code (Syrius Code)</strong> : secret GitHub <code>OPENROUTER_API_KEY</code>
-          (et, en option, <code>MISTRAL_API_KEY</code> : Devstral, l'IA de Mistral spécialisée dans le code, devient
-          alors la programmeuse principale), et « Allow GitHub Actions to create and approve pull requests » coché (Settings → Actions → General).</p>
+        <p class="small muted">Rien à configurer : l'entraînement de chaque nuit prouve son identité avec la signature
+          officielle de GitHub. Ton Syrius vérifie qu'il vient bien de ton dépôt, sur la branche principale. Il ne peut que
+          suivre l'entraînement et lire tes phrases d'entraînement, jamais tes discussions.</p>
         <p id="t-setup-msg" class="small"></p>
         <button type="button" id="t-copy" class="hidden"></button><button type="button" id="t-renew" class="hidden"></button>
       </details>
@@ -456,19 +452,6 @@
       </div>
 
       <div class="set-panel" data-panel="services" role="tabpanel">
-<section class="set-card">
-      <h4 data-icon="mail"><span>Emails</span></h4>
-      <p id="s-email" class="muted small"></p>
-      <div id="google-box" class="hidden">
-        <button type="button" id="google-connect" class="ghost wide">Connecter Gmail</button>
-        <p id="google-msg" class="small"></p>
-      </div>
-      <div id="outlook-box" class="hidden">
-        <button type="button" id="outlook-connect" class="ghost wide">Connecter Outlook / Hotmail</button>
-        <p id="outlook-msg" class="small"></p>
-      </div>
-</section>
-
       <div id="discord-box" class="set-card hidden">
         <h4 data-icon="mic"><span>Syrius sur Discord</span></h4>
         <p class="muted small">Parle à Syrius dans un salon vocal Discord, même en jouant sur ta console. Il ne répond
@@ -571,18 +554,5 @@
     </div>
   </dialog>
 
-  <template id="tpl-action">
-    <div class="action-card">
-      <div class="action-title" data-icon="mail"><span>Brouillon d'email — en attente de ta confirmation</span></div>
-      <div class="action-field"><b>À :</b> <span class="a-to"></span></div>
-      <div class="action-field"><b>Sujet :</b> <span class="a-subject"></span></div>
-      <pre class="a-body"></pre>
-      <div class="action-buttons">
-        <button class="primary a-send">Envoyer</button>
-        <button class="ghost a-cancel">Annuler</button>
-      </div>
-      <p class="a-status small"></p>
-    </div>
-  </template>
 </body>
 </html>

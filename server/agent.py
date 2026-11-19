@@ -185,7 +185,7 @@ class Agent:
 
     def brains(self) -> list[dict]:
         return [{"name": p.name, "label": p.label, "model": p.model} for p in self.llm.providers
-                if not getattr(p, "photos_only", False)]
+                if not getattr(p, "photos_only", False) and not getattr(p, "coding_only", False)]  # le code = Syrius Code
 
     async def _one_step(self, provider, body: dict, state: dict) -> AsyncIterator[dict]:
         """Une réponse du modèle. Remplit state["text"] et state["calls"]."""
@@ -237,8 +237,10 @@ class Agent:
         aurore = profile == "aurore"
         base_db = getattr(self.db, "base", self.db)
         preferred = "" if aurore else settings.get("brain", "")
-        if not preferred and not image and _WANTS_CODE.search(user_text):
-            preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation
+        if preferred == "codestral":
+            preferred = ""  # l'IA spécialisée code appartient à Aurore (Syrius Code), plus à Syrius
+        if aurore and not image and _WANTS_CODE.search(user_text):
+            preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation, réservé à Aurore
         providers = self.llm.ordered(preferred, photo=bool(image), fast=settings.get("effort") != "high")
         if image:  # seules les IA qui « voient » peuvent répondre
             providers = [p for p in providers if p.vision]
@@ -375,7 +377,8 @@ class Agent:
                     result, is_error, ui_event = "Limite de pages web atteinte pour cette réponse.", True, None
                 else:
                     result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
-                                                                         {"location": location, "untrusted": untrusted_seen})
+                                                                         {"location": location, "untrusted": untrusted_seen,
+                                                                          "profile": profile})
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:

@@ -10,8 +10,7 @@ C'est une **vraie application Android**, et il est disponible 24h/24 sans rien �
 | 💬 **Discuter** | Réponses affichées en direct, mot par mot |
 | 🗂 **Menu des discussions** | Historique complet, recherche, renommer, épingler, supprimer |
 | 🧠 **Mémoire** | Retient ton prénom, tes goûts et tes projets, d'une discussion à l'autre (modifiable dans les réglages) |
-| 📬 **Emails** | Lister, chercher, lire et résumer tes emails (Gmail, Outlook/Hotmail…) |
-| ✉ **Envoi d'emails** | Il prépare le brouillon ; **rien ne part sans que tu appuies sur « Envoyer »** |
+| 📬 **Emails** | Gérés par **Aurore dans Syrius Code** (réservé au propriétaire) : lister, chercher, lire, résumer, brouillons. **Rien ne part sans que tu appuies sur « Envoyer »** |
 | 🌐 **Web** | Recherche l'actu (optionnel) |
 | 🎙 **Voix** | Dictée au micro et lecture des réponses à voix haute |
 | ⚙ **Réglages** | Prénom, mode Rapide / Réfléchi, cerveau préféré, web, voix, mot de passe |
@@ -84,7 +83,8 @@ Si la limite gratuite du jour de Groq est atteinte, Syrius passe tout seul sur G
 
 ## Emails (optionnel)
 
-Syrius ouvre ta boîte **en lecture seule** : il ne peut ni supprimer, ni déplacer, ni marquer comme lu.
+Aurore (dans Syrius Code) ouvre ta boîte **en lecture seule** : elle ne peut ni supprimer, ni déplacer, ni marquer comme lu.
+Les emails ne sont plus dans l'application Syrius : ni toi ni ta famille ne les y voient.
 Les variables s'ajoutent dans Vercel (**Settings → Environment Variables**), puis **Redeploy**.
 
 ### Gmail
@@ -102,7 +102,7 @@ Les variables s'ajoutent dans Vercel (**Settings → Environment Variables**), p
 4. Variables : `SYRIUS_EMAIL_AUTH=outlook`, `SYRIUS_IMAP_HOST=outlook.office365.com`,
    `SYRIUS_SMTP_HOST=smtp-mail.outlook.com`, `SYRIUS_EMAIL_USER=ton.adresse@hotmail.fr`,
    `SYRIUS_MS_CLIENT_ID=l'ID d'application (client)`.
-5. Dans l'app Syrius : **Réglages → Emails → Connecter Outlook / Hotmail**, puis suis les instructions.
+5. Dans l'app Syrius : **Syrius Code → onglet Emails → Connecter Outlook / Hotmail**, puis suis les instructions.
 
 ## Recherche web (optionnelle)
 Crée un compte gratuit sur <https://ollama.com>, une clé sur <https://ollama.com/settings/keys>,

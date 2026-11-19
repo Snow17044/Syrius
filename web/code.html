@@ -91,7 +91,16 @@
         <div class="c-page">
           <h2 data-icon="mail"><span>Emails pro</span></h2>
           <p class="muted small">Aurore trie, résume et prépare des brouillons de réponse. Elle n'envoie jamais rien toute seule :
-            tu confirmes toi-même. Les emails se connectent dans l'application Syrius (Réglages → Services).</p>
+            chaque envoi demande ta confirmation. Les emails ne sont plus dans l'application Syrius : ils se gèrent ici, par toi seul.</p>
+          <div class="c-card c-site">
+            <strong>Ma boîte mail</strong>
+            <span id="c-mail-status" class="small muted"></span>
+            <div class="c-actions">
+              <button type="button" id="c-google-connect" class="ghost hidden" data-icon="mail"><span>Connecter Gmail</span></button>
+              <button type="button" id="c-outlook-connect" class="ghost hidden" data-icon="mail"><span>Connecter Outlook / Hotmail</span></button>
+            </div>
+            <p id="c-mail-msg" class="small"></p>
+          </div>
           <div id="c-mail-starters" class="c-chips"></div>
         </div>
       </section>
@@ -115,6 +124,13 @@
           <button type="button" id="c-cr-send" class="primary wide" data-icon="send"><span>Envoyer la demande</span></button>
           <p id="c-cr-msg" class="small"></p>
           <ul id="c-cr-list" class="c-cards"></ul>
+          <details class="c-details">
+            <summary>Faire marcher l'IA programmeuse (clés)</summary>
+            <p class="muted small">Dans GitHub (Settings → Secrets and variables → Actions), ajoute au moins une clé :
+              <code>CLOUDFLARE_API_KEY</code> + <code>CLOUDFLARE_ACCOUNT_ID</code> (gratuit, environ 120 appels par jour),
+              <code>OPENROUTER_API_KEY</code> (gratuit, 50 appels par jour) ou <code>MISTRAL_API_KEY</code> (la meilleure pour coder).
+              Coche aussi « Allow GitHub Actions to create and approve pull requests » (Settings → Actions → General).</p>
+          </details>
           <details class="c-details">
             <summary>Conseils pour l'IA programmeuse</summary>
             <p class="muted small">Elle les suit à chaque fois. Quand tu refuses une proposition, ta remarque est ajoutée ici.</p>

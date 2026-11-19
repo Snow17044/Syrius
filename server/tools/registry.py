@@ -271,9 +271,7 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
         if family.is_owner():
             tools += [SCAN_SITE_TOOL, LIST_SITE_FILES_TOOL, READ_SITE_FILE_TOOL]
         return tools
-    tools = list(BASE_TOOLS) + DEVICE_TOOLS
-    if family.email_allowed(cfg):
-        tools += EMAIL_TOOLS
+    tools = list(BASE_TOOLS) + DEVICE_TOOLS  # Syrius : plus d'emails (ils sont chez Aurore, dans Syrius Code)
     if settings.get("internet", True):
         tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL, WEATHER_TOOL]
     return tools
@@ -369,8 +367,11 @@ class ToolExecutor:
             ok = self.db.delete_memory(a["memory_id"])
             return ("Souvenir supprimé." if ok else "Ce souvenir n'existe pas."), not ok, None
 
-        if not family.email_allowed(self.cfg) and name in {"list_emails", "search_emails", "read_email", "draft_email"}:
-            return "Les emails ne sont pas configurés.", True, None
+        if name in {"list_emails", "search_emails", "read_email", "draft_email"}:
+            if ctx.get("profile") != "aurore":
+                return "Les emails se gèrent dans Syrius Code, avec Aurore.", True, None
+            if not family.email_allowed(self.cfg):
+                return "Les emails ne sont pas configurés.", True, None
 
         if name == "list_emails":
             a = _check(args, {"folder": str, "limit": int, "unread_only": bool}, [])

@@ -331,11 +331,9 @@ def is_owner() -> bool:
 
 
 def email_allowed(cfg) -> bool:
-    """Les proches n'ont accès qu'à LEUR boîte (Gmail connecté par chacun) ; une boîte configurée sur le
-    serveur (IMAP / Outlook) est celle du propriétaire et lui reste réservée. Pas d'emails pour les tests."""
-    if GUEST.get():
-        return False
-    return bool(cfg.email_enabled) and (cfg.email_mode == "google" or not CURRENT.get())
+    """Les emails sont gérés par Aurore (Syrius Code) : réservés au propriétaire. Ni les proches, ni les comptes de
+    test, ni l'application Syrius n'y ont accès."""
+    return not GUEST.get() and not CURRENT.get() and bool(cfg.email_enabled)
 
 
 # ------------------------------------------------------------------ quotas équitables

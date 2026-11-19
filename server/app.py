@@ -1083,7 +1083,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return {"heard": heard, "ignored": False, "text": text[:1500]}
 
     # ------------------------------------------------------------------ actions confirmées
-    @app.post("/api/actions/{aid}/confirm", dependencies=[Depends(require_auth)])
+    @app.post("/api/actions/{aid}/confirm", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def confirm_action(aid: str):
         action = db.get_pending_action(aid)
         if not action:
@@ -1105,7 +1105,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         db.set_action_status(aid, "done", expected="sending")
         return {"ok": True}
 
-    @app.post("/api/actions/{aid}/cancel", dependencies=[Depends(require_auth)])
+    @app.post("/api/actions/{aid}/cancel", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def cancel_action(aid: str):
         if not db.set_action_status(aid, "cancelled"):
             raise HTTPException(409, "Action déjà traitée.")
@@ -1115,12 +1115,15 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/api/settings", dependencies=[Depends(require_auth)])
     async def get_settings(request: Request):
         uid = request.state.uid
-        return {**db.get_settings(), "email_enabled": family.email_allowed(cfg),
-                "account": family.account(db.base, uid),
-                "outlook": cfg.email_mode == "outlook" and bool(cfg.ms_client_id) and uid == family.OWNER,
+        return {**db.get_settings(), "account": family.account(db.base, uid), "web_search_available": True}
+
+    # Emails : gérés par Aurore dans Syrius Code (propriétaire seulement)
+    @app.get("/api/code/email", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def code_email_state():
+        return {"enabled": family.email_allowed(cfg), "mode": cfg.email_mode,
                 "google": cfg.email_mode == "google",
                 "google_connected": cfg.email_mode == "google" and gmail.is_connected(db),
-                "web_search_available": True}
+                "outlook": cfg.email_mode == "outlook" and bool(cfg.ms_client_id)}
 
     # Connexion Outlook / Hotmail depuis l'app (code à entrer sur le site de Microsoft)
     # Connexion Gmail (OAuth Google). La page de Google s'ouvre dans le navigateur du téléphone ;
@@ -1130,7 +1133,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         scheme = "https" if (cfg.behind_vercel or cfg.cookie_secure) else request.url.scheme
         return f"{scheme}://{host}/api/email/google/callback"
 
-    @app.post("/api/email/google/start", dependencies=[Depends(require_auth)])
+    @app.post("/api/email/google/start", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def google_start(request: Request):
         if family.GUEST.get():
             raise HTTPException(403, "Les comptes de test n'ont pas accès aux emails.")
@@ -1151,19 +1154,19 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                     raise EmailError("Compte introuvable.")
                 family.CURRENT.set(uid)  # retour de Google : on revient dans l'espace de la bonne personne
                 await asyncio.to_thread(gmail.finish, cfg, db, code[:1000], state[:200], google_redirect_uri(request))
-                ok, text = True, "Gmail est connecté à Syrius."
+                ok, text = True, "Gmail est connecté à Syrius Code (Aurore)."
             except EmailError as e:
                 ok, text = False, str(e)
         page = ("<!doctype html><html lang=fr><meta charset=utf-8><meta name=viewport content='width=device-width'>"
                 "<title>Syrius</title><body style='background:#05080f;color:#e6f1ff;font:18px system-ui;"
                 "display:grid;place-items:center;height:90vh;text-align:center'><div><p style='font-size:48px'>"
                 + ("✅" if ok else "⚠️") + "</p><p>" + html.escape(text) +
-                "</p><p>Tu peux fermer cette page et retourner dans l'application Syrius.</p></div></body></html>")
+                "</p><p>Tu peux fermer cette page et retourner dans l'application Syrius Code.</p></div></body></html>")
         resp = HTMLResponse(page, status_code=200 if ok else 400)
         resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'"
         return resp
 
-    @app.post("/api/email/google/disconnect", dependencies=[Depends(require_auth)])
+    @app.post("/api/email/google/disconnect", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def google_disconnect():
         gmail.disconnect(db)
         return {"ok": True}

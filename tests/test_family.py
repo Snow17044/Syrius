@@ -173,22 +173,28 @@ def test_portee_des_donnees(make_client):
 
 
 def test_boite_mail_du_proprietaire_reservee(make_client):
+    """Les emails sont gérés par Aurore (Syrius Code) : réservés au propriétaire, absents de Syrius pour tous."""
     owner = make_client()
     cfg = owner.agent.cfg
     cfg.imap_host, cfg.email_user, cfg.email_password = "imap.example.com", "moi@example.com", "x"
     cfg.email_auth = "password"
     login(owner)
-    assert owner.get("/api/settings").json()["email_enabled"] is True
+    assert owner.get("/api/code/email").json()["enabled"] is True
+    assert "email_enabled" not in owner.get("/api/settings").json()  # plus rien dans les réglages de Syrius
     lea = member_client(owner)
-    assert lea.get("/api/settings").json()["email_enabled"] is False
+    assert lea.get("/api/code/email").status_code == 403
+    assert lea.post("/api/email/outlook/start", headers=H).status_code == 403
+    assert lea.post("/api/email/google/start", headers=H).status_code == 403
     from server.tools.registry import build_tools
+    mail = {"list_emails", "search_emails", "read_email", "draft_email"}
+    names = lambda p: {t["function"]["name"] for t in build_tools(cfg, {}, p)}  # noqa: E731
+    assert mail <= names("aurore") and not (mail & names("syrius"))  # outils d'emails : Aurore seulement
     family.CURRENT.set("abcdefabcdef")
     try:
-        assert not any(t.get("name") == "list_emails" or t.get("function", {}).get("name") == "list_emails"
-                       for t in build_tools(cfg, {}))
+        assert not (mail & names("aurore"))  # même Aurore ne les donne pas à un proche
+        assert not family.email_allowed(cfg)
     finally:
         family.CURRENT.set("")
-    assert lea.post("/api/email/outlook/start", headers=H).status_code == 403
 
 
 def test_lien_de_test_24h(make_client, monkeypatch):

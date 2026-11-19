@@ -109,6 +109,7 @@
     if (tab === "sites") renderSites();
     if (tab === "tableaux") renderDashboards();
     if (tab === "code") renderCodeTab();
+    if (tab === "emails") renderEmailTab();
     if (tab === "aurore") scrollDown(true);
   }
   document.querySelectorAll("#c-nav button").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
@@ -240,6 +241,8 @@
       view.bubble.appendChild(card);
     } else if (ev.type === "diagram") {
       view.bubble.appendChild(renderDiagram(ev));
+    } else if (ev.type === "action") {
+      view.bubble.appendChild(renderMailDraft(ev));
     }
   }
 
@@ -281,7 +284,7 @@
           if (ev.type === "text") { view.text += ev.text; renderText(view); }
           else if (ev.type === "text_replace") { view.text = String(ev.text || ""); renderText(view); }
           else if (ev.type === "tool") { tools.push(ev.label); setTools(view, tools); }
-          else if (ev.type === "dashboard" || ev.type === "diagram") addCard(view, ev);
+          else if (ev.type === "dashboard" || ev.type === "diagram" || ev.type === "action") addCard(view, ev);
           else if (ev.type === "title") { const c = state.convs.find((x) => x.id === state.convId); if (c) c.title = ev.title; }
           else if (ev.type === "error") { gotError = true; view.bubble.appendChild(el("div", "c-error", "⚠ " + ev.message)); }
           scrollDown();
@@ -323,6 +326,62 @@
   });
   $("#c-convs-close").addEventListener("click", () => $("#c-convs").close());
   $("#c-new").addEventListener("click", async () => { $("#c-convs").close(); await newConversation(); go("aurore"); $("#c-input").focus(); });
+
+  // ------------------------------------------------------------------ emails : brouillon à confirmer, connexion de la boîte
+  function renderMailDraft(ev) {
+    const card = el("div", "c-dcard");
+    card.appendChild(el("h4", "", "Brouillon d'email : en attente de ta confirmation"));
+    const f = (k, v) => { const p = el("p", "small"); p.append(el("b", "", k + " "), document.createTextNode(v)); return p; };
+    card.append(f("À :", ev.to), f("Sujet :", ev.subject), el("pre", "c-skill-body", ev.body));
+    const status = el("p", "small");
+    const bar = el("div", "c-actions");
+    const done = (msg) => { bar.remove(); status.textContent = msg; };
+    const send = btn("Envoyer", "send", async () => {
+      send.disabled = true;
+      try { await api(`/api/actions/${ev.id}/confirm`, { method: "POST" }); done("✅ Email envoyé."); }
+      catch (err) { status.textContent = "⚠ " + err.message; send.disabled = false; }
+    }, "primary");
+    const cancel = btn("Annuler", "close", async () => { try { await api(`/api/actions/${ev.id}/cancel`, { method: "POST" }); } catch (_) { /* */ } done("Annulé."); });
+    bar.append(send, cancel);
+    card.append(bar, status);
+    return card;
+  }
+  async function renderEmailTab() {
+    let s;
+    try { s = await api("/api/code/email"); } catch (_) { return; }
+    $("#c-mail-status").textContent = s.enabled
+      ? "✅ Boîte mail connectée (lecture seule ; chaque envoi demande ta confirmation)."
+      : "Non configurée. Connecte ta boîte ci-dessous, ou voir le README (section Emails).";
+    $("#c-google-connect").classList.toggle("hidden", !s.google);
+    Icons.set($("#c-google-connect"), "mail", s.google_connected ? "Reconnecter Gmail" : "Connecter Gmail");
+    $("#c-outlook-connect").classList.toggle("hidden", !s.outlook);
+  }
+  $("#c-google-connect").addEventListener("click", async () => {
+    const msg = $("#c-mail-msg");
+    try {
+      const { url } = await api("/api/email/google/start", { method: "POST" });
+      msg.textContent = "La page de Google s'ouvre : connecte-toi, accepte, puis reviens ici.";
+      // Dans l'application Android, ce lien s'ouvre dans le navigateur du téléphone (Google l'exige).
+      if (window.SyriusAndroid) location.href = url; else window.open(url, "_blank", "noopener");
+    } catch (err) { msg.textContent = "⚠ " + err.message; }
+  });
+  $("#c-outlook-connect").addEventListener("click", async () => {
+    const msg = $("#c-mail-msg");
+    try {
+      const info = await api("/api/email/outlook/start", { method: "POST" });
+      msg.replaceChildren();
+      msg.append("Ouvre ");
+      const a = el("a", "", info.verification_uri);
+      a.href = info.verification_uri; a.target = "_blank"; a.rel = "noopener noreferrer";
+      msg.append(a, " et entre le code ", el("b", "", info.user_code), ". J'attends ta validation…");
+      const timer = setInterval(async () => {
+        try {
+          const r = await api("/api/email/outlook/poll", { method: "POST" });
+          if (r.status === "ok") { clearInterval(timer); msg.textContent = "✅ Outlook connecté."; renderEmailTab(); }
+        } catch (err) { clearInterval(timer); msg.textContent = "⚠ " + err.message; }
+      }, Math.max(5, info.interval || 5) * 1000);
+    } catch (err) { msg.textContent = "⚠ " + err.message; }
+  });
 
   // ------------------------------------------------------------------ schéma (liste hiérarchique)
   function renderDiagram(d) {
