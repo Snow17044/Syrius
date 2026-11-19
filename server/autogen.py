@@ -40,6 +40,9 @@ THEMES = [
      "phone_timer en secondes)", "phone_reminder"),
     ("musique, appels, SMS, carte, applications, lampe, volume (phone_music, phone_call, phone_sms, phone_map, "
      "phone_open_app, phone_flashlight, phone_volume)", "phone_music"),
+    ("SOUVENIRS : l'utilisateur partage une info durable (goût, proche, anniversaire, habitude) → l'assistant répond "
+     "en quelques mots (« C'est noté ») et appelle remember avec une phrase courte ; pour un anniversaire : "
+     "« Anniversaire de NOM : JJ/MM »", "remember"),
     ("demandes interdites (contenu sexuel ou violent) : l'assistant refuse poliment et propose autre chose", None),
 ]
 _CALL = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)

@@ -126,6 +126,8 @@ async function showApp() {
   const last = store.get("syrius:lastConv");
   if (last && state.conversations.some((c) => c.id === last)) await openConversation(last);
   else newConversationView();
+  flushMemories();
+  refreshMemoryCache();
   if (briefingWaiting) { briefingWaiting = false; window.syriusBriefing(); }
 }
 
@@ -407,6 +409,8 @@ $("#setup-form").addEventListener("submit", async (e) => {
 $("#logout").addEventListener("click", async () => {
   try { await api("/api/logout", { method: "POST" }); } catch (_) { /* ignore */ }
   store.set("syrius:lastConv", null);
+  store.set(MEM_CACHE, null);   // les souvenirs restent sur le serveur, pas sur ce téléphone
+  store.set(MEM_PENDING, null);
   showLogin();
 });
 
@@ -969,7 +973,14 @@ function runLocalTools(view) {
     let call;
     try { call = JSON.parse(m[1]); } catch (_) { labels.push("Action illisible ignorée"); continue; }
     const name = call && call.name, args = call && (call.arguments || call.parameters);
-    if (name === "remember") { labels.push("À mémoriser une fois en ligne : " + String(args?.fact || "").slice(0, 80)); continue; }
+    if (name === "remember") {
+      const fact = String(args?.fact || "").trim();
+      if (fact) {
+        queueMemory(fact);
+        labels.push("Je note : " + fact.slice(0, 80) + (navigator.onLine && !state.offline ? "" : " (enregistré dès que tu es en ligne)"));
+      }
+      continue;
+    }
     let ev;
     try { ev = localToolEvent(name, args); } catch (err) { labels.push("Action refusée : " + err.message); continue; }
     labels.push(TOOL_LABELS_LOCAL[name] || "Action");
@@ -1645,13 +1656,31 @@ window.addEventListener("offline", updateNetStatus);
 setTimeout(updateNetStatus, 500);
 
 // ------------------------------------------------------------------ briefing du matin
-const BRIEFING_PROMPT = "Fais-moi mon briefing du matin : la météo près de moi, mes rappels prévus aujourd'hui " +
-  "(list_reminders) et 3 actualités importantes du jour, le tout en quelques phrases claires.";
+const BRIEFING_PARTS = {
+  meteo: "la météo près de moi (dis-moi clairement s'il va pleuvoir aujourd'hui et s'il me faut un parapluie ou une veste)",
+  rappels: "mes rappels prévus aujourd'hui",
+  anniv: "les anniversaires ou événements de mes souvenirs qui tombent aujourd'hui ou dans les 7 prochains jours",
+  actus: "3 actualités importantes du jour",
+};
+function briefingOptions() {
+  let o = {};
+  try { o = JSON.parse(store.get("syrius:briefing:opts") || "{}"); } catch (_) { /* défaut */ }
+  const on = (k) => (o[k] === undefined ? true : !!o[k]);
+  const opts = { meteo: on("meteo"), rappels: on("rappels"), anniv: on("anniv"), actus: on("actus") };
+  if (!Object.values(opts).some(Boolean)) opts.meteo = opts.rappels = true;  // jamais un briefing vide
+  return opts;
+}
+function briefingPrompt() {
+  const o = briefingOptions();
+  const items = Object.keys(BRIEFING_PARTS).filter((k) => o[k]).map((k) => BRIEFING_PARTS[k]);
+  return "Fais-moi mon briefing du matin : " + items.join(" ; ") +
+    ". Le tout en quelques phrases claires. Si un point n'a rien à signaler, ne le mentionne pas.";
+}
 let briefingWaiting = false;
 window.syriusBriefing = async () => {
   if ($("#app").classList.contains("hidden")) { briefingWaiting = true; return; } // après connexion
   newConversationView();
-  const reply = await window.SyriusChat.ask(BRIEFING_PROMPT);
+  const reply = await window.SyriusChat.ask(briefingPrompt());
   if (reply && !state.settings.voice_reply) speak(reply);
 };
 
@@ -1722,6 +1751,8 @@ function refreshBriefingBox() {
   let b = { on: false, hour: 7, minute: 30 };
   try { b = JSON.parse(Native.getBriefing()); } catch (_) { /* défaut */ }
   $("#briefing-on").checked = !!b.on;
+  const o = briefingOptions();
+  document.querySelectorAll("#briefing-box [data-bopt]").forEach((el) => { el.checked = !!o[el.dataset.bopt]; });
   $("#briefing-time").value = `${String(b.hour).padStart(2, "0")}:${String(b.minute).padStart(2, "0")}`;
 }
 function saveBriefing() {
@@ -1731,6 +1762,12 @@ function saveBriefing() {
     ? ($("#briefing-on").checked ? `✅ Chaque jour à ${$("#briefing-time").value}.` : "Briefing désactivé.") : "⚠ " + r;
 }
 $("#briefing-on").addEventListener("change", saveBriefing);
+document.querySelectorAll("#briefing-box [data-bopt]").forEach((el) => el.addEventListener("change", () => {
+  const o = {};
+  document.querySelectorAll("#briefing-box [data-bopt]").forEach((x) => { o[x.dataset.bopt] = x.checked; });
+  store.set("syrius:briefing:opts", JSON.stringify(o));
+  refreshBriefingBox();  // si tout est décoché, météo + rappels restent
+}));
 $("#briefing-time").addEventListener("change", saveBriefing);
 
 // Pour le mode conversation : envoie une phrase et renvoie la réponse complète.
@@ -1869,8 +1906,64 @@ async function renderBrains(s) {
   sel.value = brains.some((b) => b.name === s.brain) ? s.brain : "";
 }
 
+// ------------------------------------------------------------------ souvenirs : file d'attente hors ligne + copie pour l'IA du téléphone
+const MEM_PENDING = "syrius:memories:pending", MEM_CACHE = "syrius:memories:cache";
+function memQueue() {
+  try { const q = JSON.parse(store.get(MEM_PENDING) || "[]"); return Array.isArray(q) ? q.filter((x) => typeof x === "string") : []; } catch (_) { return []; }
+}
+function queueMemory(fact) {
+  const q = memQueue();
+  const f = fact.slice(0, 300);
+  if (!q.includes(f)) q.push(f);
+  store.set(MEM_PENDING, JSON.stringify(q.slice(-20)));
+  // l'IA du téléphone s'en sert tout de suite, même avant l'envoi
+  try {
+    const c = JSON.parse(store.get(MEM_CACHE) || "[]");
+    if (Array.isArray(c) && !c.includes(f)) { c.push(f); store.set(MEM_CACHE, JSON.stringify(c.slice(-40))); }
+  } catch (_) { /* */ }
+  flushMemories();
+}
+let flushing = false;
+async function flushMemories() {
+  if (flushing || !navigator.onLine || state.offline || $("#app").classList.contains("hidden")) return;
+  flushing = true;
+  try {
+    for (const fact of memQueue()) {
+      try {
+        await api("/api/memories", { method: "POST", body: JSON.stringify({ fact }) });
+      } catch (err) {
+        if (/Failed to fetch|Load failed|NetworkError|Non connecté|Erreur 5|timeout/i.test(err.message)) return;  // réseau : on réessaiera
+        // sinon le serveur a refusé ce souvenir (secret, doublon, trop long…) : inutile de le renvoyer
+      }
+      store.set(MEM_PENDING, JSON.stringify(memQueue().filter((x) => x !== fact)));
+    }
+    await refreshMemoryCache();
+  } finally { flushing = false; }
+}
+async function refreshMemoryCache() {
+  try {
+    const list = await api("/api/memories");
+    store.set(MEM_CACHE, JSON.stringify(list.slice(-40).map((m) => String(m.content).slice(0, 200))));
+  } catch (_) { /* hors ligne : on garde la copie */ }
+}
+window.addEventListener("online", flushMemories);
+
+$("#memory-add").addEventListener("click", async () => {
+  const input = $("#memory-new");
+  const fact = input.value.trim();
+  if (!fact) return;
+  try {
+    const r = await api("/api/memories", { method: "POST", body: JSON.stringify({ fact }) });
+    $("#memory-msg").textContent = r.new ? "✅ Noté." : "Je le savais déjà.";
+    input.value = "";
+    renderMemories();
+  } catch (err) { $("#memory-msg").textContent = "⚠ " + err.message; }
+});
+
 async function renderMemories() {
+  flushMemories();
   const list = await api("/api/memories");
+  store.set(MEM_CACHE, JSON.stringify(list.slice(-40).map((m) => String(m.content).slice(0, 200))));
   const ul = $("#memory-list");
   ul.replaceChildren();
   if (!list.length) {

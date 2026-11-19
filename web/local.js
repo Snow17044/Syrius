@@ -50,7 +50,21 @@
       `chaleureuse et concise, avec une pointe d'humour fin. Nous sommes le ${JOURS[d.getDay()]} ${d.getDate()} ` +
       `${MOIS[d.getMonth()]} ${d.getFullYear()}, il est ${hh}:${mm}. Pour agir, écris une courte phrase puis ` +
       `<tool_call>{"name": ..., "arguments": {...}}</tool_call>. Outils : ${TOOLS_LINE}. ` +
-      "Jamais de contenu sexuel ni violent.";
+      "Jamais de contenu sexuel ni violent." + memoriesLine();
+  }
+  // Souvenirs (copie gardée sur le téléphone) : court, pour ne pas ralentir la réponse.
+  function memoriesLine() {
+    let list = [];
+    try { list = JSON.parse(localStorage.getItem("syrius:memories:cache") || "[]"); } catch (_) { return ""; }
+    if (!Array.isArray(list) || !list.length) return "";
+    const out = [];
+    let n = 0;
+    for (const m of list.filter((x) => typeof x === "string").reverse()) {  // les plus récents d'abord
+      if (n + m.length > 380) break;
+      out.push(m.replace(/[\r\n]+/g, " "));
+      n += m.length + 2;
+    }
+    return out.length ? " Ce que tu sais de ton utilisateur : " + out.join(" ; ") + "." : "";
   }
   function syriusReady() {
     const n = native();

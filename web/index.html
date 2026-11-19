@@ -331,8 +331,13 @@
 
       <div id="briefing-box" class="hidden">
         <h4 data-icon="sun"><span>Briefing du matin</span></h4>
-        <p class="muted small">Chaque jour, une notification : touche-la et Syrius te lit la météo, tes rappels et les actus.</p>
+        <p class="muted small">Chaque jour, une notification : touche-la et Syrius te fait ton briefing. Pour les anniversaires, dis-lui par exemple « Retiens que l'anniversaire de Maman est le 12 mars ».</p>
         <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le briefing</span></label>
+        <p class="muted small">Ce qu'il contient :</p>
+        <label class="switch"><input type="checkbox" data-bopt="meteo" checked><span>Météo et pluie</span></label>
+        <label class="switch"><input type="checkbox" data-bopt="rappels" checked><span>Mes rappels du jour</span></label>
+        <label class="switch"><input type="checkbox" data-bopt="anniv" checked><span>Anniversaires et événements</span></label>
+        <label class="switch"><input type="checkbox" data-bopt="actus" checked><span>3 actualités</span></label>
         <label>Heure <input id="briefing-time" type="time" value="07:30"></label>
         <p id="briefing-msg" class="small"></p>
       </div>
@@ -471,6 +476,11 @@
       <h4 data-icon="bulb"><span>Mémoire</span></h4>
       <p class="muted small">Ce que Syrius a retenu sur toi. Supprime ce que tu veux.</p>
       <ul id="memory-list"></ul>
+      <div class="inline-form">
+        <input id="memory-new" type="text" maxlength="300" placeholder="Ajouter un souvenir (ex. : J'aime le thé, pas le café)" autocomplete="off">
+        <button type="button" id="memory-add" class="ghost" data-icon="plus"><span>Ajouter</span></button>
+      </div>
+      <p id="memory-msg" class="small"></p>
 
       <h4 data-icon="shield"><span>Sécurité</span></h4>
       <details id="pw-box">
