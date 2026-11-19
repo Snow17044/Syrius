@@ -626,7 +626,7 @@
   });
 
   // ------------------------------------------------------------------ code : demandes à l'IA programmeuse + compétences d'Aurora
-  const CR_LABEL = { pending: "En attente (démarre sous 15 min)", running: "L'IA programme…", proposed: "Proposition prête", failed: "Échec", refused: "Annulée" };
+  const CR_LABEL = { pending: "En attente (GitHub la prend en moins d'1 h)", running: "L'IA programme…", proposed: "Proposition prête", failed: "Échec", refused: "Annulée" };
   function codeMsg(sel, text) { $(sel).textContent = text; }
   async function renderCodeTab() {
     renderChangeRequests();
@@ -689,9 +689,10 @@
     if (text.length < 10) { codeMsg("#c-cr-msg", "⚠ Décris le changement en une phrase ou deux."); return; }
     try {
       const app = $("#c-cr-app").value === "syrius-code" ? "Syrius Code" : "Syrius";
-      await api("/api/selfcode", { method: "POST", body: JSON.stringify({ text: `[Application ${app}] ${text}`.slice(0, 1500) }) });
+      const res = await api("/api/selfcode", { method: "POST", body: JSON.stringify({ text: `[Application ${app}] ${text}`.slice(0, 1500) }) });
       $("#c-cr-text").value = "";
-      codeMsg("#c-cr-msg", "✅ Demande envoyée : l'IA programmeuse s'en occupe d'ici 15 minutes.");
+      codeMsg("#c-cr-msg", res.started ? "✅ Demande envoyée : l'IA programmeuse démarre maintenant."
+        : "✅ Demande envoyée. GitHub la prend au prochain passage (jusqu'à 1 h). Pour démarrer tout de suite, utilise « Lancer maintenant » ci-dessous.");
       renderChangeRequests();
     } catch (err) { codeMsg("#c-cr-msg", "⚠ " + err.message); }
   });

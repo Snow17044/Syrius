@@ -480,7 +480,9 @@ class ToolExecutor:
                 item = selfcode.add(base, f"[Demande d'Aurora — application {a['app']}] {a['request']}")
             except selfcode.SelfCodeError as e:
                 return str(e), True, None
-            return (f"Demande {item['id']} envoyée à l'IA programmeuse. Elle sera traitée dans les 15 minutes ; "
+            started = selfcode.dispatch(self.cfg.github_dispatch_token, self.cfg.github_repo)
+            when = "Elle démarre maintenant" if started else "Elle démarrera au prochain passage de GitHub (environ une heure au plus)"
+            return (f"Demande {item['id']} envoyée à l'IA programmeuse. {when} ; "
                     "le propriétaire verra la proposition dans l'onglet Code de Syrius Code."), False, None
 
         if name == "show_dashboard":

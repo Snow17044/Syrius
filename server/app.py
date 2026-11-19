@@ -705,9 +705,17 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/selfcode", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def selfcode_add(body: SelfCodeBody):
         try:
-            return selfcode.add(db.base, body.text)
+            item = selfcode.add(db.base, body.text)
         except selfcode.SelfCodeError as e:
             raise HTTPException(400, str(e)) from None
+        started = await asyncio.to_thread(selfcode.dispatch, cfg.github_dispatch_token, cfg.github_repo)
+        return {**item, "started": started}
+
+    @app.get("/api/selfcode/launch", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def selfcode_launch_info():
+        """Pour l'interface : le démarrage immédiat est-il possible, et la page GitHub pour le lancer à la main."""
+        return {"auto": bool(cfg.github_dispatch_token),
+                "url": f"https://github.com/{cfg.github_repo}/actions/workflows/{selfcode.WORKFLOW}"}
 
     @app.delete("/api/selfcode/{iid}", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def selfcode_cancel(iid: str):
