@@ -216,6 +216,7 @@
           <span id="t-badge" class="t-badge">—</span>
           <span id="t-phase" class="small muted"></span>
         </div>
+        <p id="t-stats" class="small muted"></p>
         <progress id="t-progress" max="100" value="0"></progress>
         <div class="train-kpis">
           <div><strong id="t-step">—</strong><span>étapes</span></div>
@@ -360,6 +361,7 @@
         <div id="local-progress" class="local-progress hidden"><progress max="100" value="0"></progress><span></span></div>
         <p id="local-status" class="small"></p>
         <label class="switch"><input id="local-fallback" type="checkbox"><span>Prendre le relais tout seul (pas de réseau ou IA en ligne épuisées)</span></label>
+        <label class="switch"><input id="local-hybrid" type="checkbox" checked><span>Ordres simples sur le téléphone (minuteur, rappel, lampe… : plus rapide)</span></label>
         <label class="switch"><input id="local-force" type="checkbox"><span>Toujours utiliser l'IA hors ligne</span></label>
         <div id="packs" class="hidden">
           <div class="pack hidden" data-pack="syrius">

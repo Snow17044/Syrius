@@ -121,3 +121,27 @@ def test_rendre_l_ia_programmeuse_meilleure(make_client):
     assert len(owner.get("/api/selfcode/settings").json()["lessons"]) == 2
     lea = member_client(owner)
     assert lea.get("/api/selfcode/settings").status_code == 403
+
+
+def test_bilan_des_pouces_et_notes(make_client):
+    from tests.conftest import H, login
+    c = make_client()
+    login(c)
+    for q, a, src in (("Capitale de la France ?", "Paris.", "pouce"), ("Qui es-tu ?", "Syrius.", "correction"),
+                      ("Test manuel", "Réponse.", None)):
+        body = {"question": q, "answer": a, **({"source": src} if src else {})}
+        assert c.post("/api/training/examples", headers=H, json=body).status_code == 200
+    assert c.post("/api/training/examples", headers=H, json={"question": "xx", "answer": "y", "source": "pirate"}).status_code == 422
+    st = c.get("/api/training").json()["stats"]
+    assert (st["pouce"], st["correction"], st["manuel"]) == (1, 1, 1) and st["evals"] == []
+
+
+def test_notes_du_controle_qualite_dans_le_bilan(make_client):
+    from server import training
+    c = make_client()
+    base = c.app.state.db.base if hasattr(c.app.state, "db") else None
+    if base is None:
+        return
+    training.report(base, {"run": "123456789", "type": "start", "model": "Qwen", "examples": 10, "steps_total": 5})
+    training.report(base, {"run": "123456789", "type": "eval", "passed": 27, "total": 32})
+    assert training.state(base)["stats"]["evals"][0]["pct"] == 84

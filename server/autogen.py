@@ -174,8 +174,8 @@ def _prompt(theme: str, tool: str | None, n: int) -> str:
         '[{"q": "message de l\'utilisateur", "a": "réponse idéale de Syrius"}, ...]. Rien d\'autre.')
 
 
-def _ask(provider, prompt: str) -> str:
-    body = {"model": provider.model, "max_tokens": 3500, "temperature": 0.9,
+def _ask(provider, prompt: str, temperature: float = 0.9, max_tokens: int = 3500) -> str:
+    body = {"model": provider.model, "max_tokens": max_tokens, "temperature": temperature,
             "messages": [{"role": "user", "content": prompt}]}
     req = urllib.request.Request(provider.base_url + "/chat/completions", data=json.dumps(body).encode(), headers={
         "Content-Type": "application/json", "User-Agent": "Syrius/1.0",
@@ -198,6 +198,39 @@ def _parse(text: str) -> list[dict]:
         if isinstance(it, dict) and isinstance(it.get("q"), str) and isinstance(it.get("a"), str):
             out.append({"q": " ".join(it["q"].split()), "a": it["a"].strip()})
     return out
+
+
+_JUDGE = (
+    "Tu es un relecteur EXIGEANT d'exemples d'entraînement pour « Syrius », un assistant personnel francophone. "
+    "Pour chaque exemple (question de l'utilisateur, réponse de l'assistant), réponds ok=false si : un fait est inexact "
+    "ou douteux ; un calcul est faux ; la réponse est hors sujet, trop longue ou bavarde, ou pas en français ; elle invente "
+    "une adresse, un numéro, une source ou un résultat ; le conseil est dangereux ; ou l'action <tool_call> ne correspond "
+    "pas à la demande (mauvais outil, mauvaise durée ou heure, ex. « 5 minutes » doit valoir 300 secondes). "
+    "Sinon ok=true. Réponds UNIQUEMENT avec un tableau JSON : "
+    '[{"i": 0, "ok": true, "why": "raison en 8 mots"}, ...] (un élément par exemple, dans l\'ordre).')
+
+
+def judge(provider, items: list[dict]) -> dict[int, tuple[bool, str]] | None:
+    """Une autre IA relit les exemples : {numéro: (accepté, raison)}, ou None si le relecteur est injoignable."""
+    if not items:
+        return {}
+    listing = "\n\n".join(f"### {i}\nQuestion : {it['q'][:400]}\nRéponse : {it['a'][:900]}" for i, it in enumerate(items))
+    try:
+        text = _ask(provider, _JUDGE + "\n\n" + listing, temperature=0.0, max_tokens=1500)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    m = re.search(r"\[.*\]", text, re.S)
+    try:
+        raw = json.loads(m.group(0)) if m else None
+    except ValueError:
+        raw = None
+    if not isinstance(raw, list):
+        return None
+    out: dict[int, tuple[bool, str]] = {}
+    for v in raw:
+        if isinstance(v, dict) and isinstance(v.get("i"), int) and 0 <= v["i"] < len(items):
+            out[v["i"]] = (v.get("ok") is True, " ".join(str(v.get("why", "")).split())[:80])
+    return out if out else None
 
 
 def generate(providers: list, n: int = 10, seed: int | None = None, theme_index: int | None = None) -> dict:
@@ -223,6 +256,29 @@ def generate(providers: list, n: int = 10, seed: int | None = None, theme_index:
                 reasons[why] = reasons.get(why, 0) + 1
             else:
                 kept.append({"q": it["q"], "a": fixed})
-        return {"theme": theme, "kept": kept, "rejected": len(items) - len(kept), "reasons": reasons,
-                "provider": p.label}
+        # Relecture par une AUTRE IA : seuls les exemples jugés justes sont gardés.
+        verdicts, judged_by = None, ""
+        if kept:
+            for jp in [q for q in pool if q is not p] + [p]:
+                verdicts = judge(jp, kept)
+                if verdicts is not None:
+                    judged_by = jp.label
+                    break
+        final = []
+        for i, it in enumerate(kept):
+            if verdicts is None:  # pas de relecteur : on ne garde que les actions (vérifiées par le serveur)
+                if "<tool_call>" in it["a"]:
+                    final.append(it)
+                else:
+                    reasons["pas de relecteur : réponse libre écartée"] = reasons.get(
+                        "pas de relecteur : réponse libre écartée", 0) + 1
+                continue
+            ok, why = verdicts.get(i, (False, "non jugé"))
+            if ok:
+                final.append(it)
+            else:
+                key = "relecteur : " + (why or "jugé incorrect")[:50]
+                reasons[key] = reasons.get(key, 0) + 1
+        return {"theme": theme, "kept": final, "rejected": len(items) - len(final), "reasons": reasons,
+                "provider": p.label, "judge": judged_by}
     return {"theme": theme, "kept": [], "rejected": 0, "provider": "", "error": last or "aucune IA disponible"}

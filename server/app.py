@@ -137,6 +137,7 @@ class DiscordIdsBody(BaseModel):
 class ExampleBody(BaseModel):
     question: str = Field(min_length=2, max_length=500)
     answer: str = Field(min_length=1, max_length=2000)
+    source: str = Field(default="manuel", pattern=r"^(manuel|pouce|correction)$")
 
 
 class ReportBody(BaseModel):
@@ -580,7 +581,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/training/examples", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_add(body: ExampleBody):
         try:
-            return training.add_example(db.base, body.question, body.answer)
+            return training.add_example(db.base, body.question, body.answer, body.source)
         except training.TrainingError as e:
             raise HTTPException(400, str(e)) from None
 
@@ -604,7 +605,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         res = await asyncio.to_thread(autogen.generate, agent.llm.ordered(), 10, None, th)
         added = autogen.add(db.base, res["kept"]) if res["kept"] else 0
         return {"theme": res["theme"], "added": added, "rejected": res["rejected"], "provider": res.get("provider", ""),
-                "reasons": res.get("reasons", {}), "error": res.get("error", ""),
+                "reasons": res.get("reasons", {}), "judge": res.get("judge", ""), "error": res.get("error", ""),
                 "total": len(autogen.stored(db.base))}
 
     # Nouvelle version de NOTRE IA pour les téléphones : annoncée par la conversion automatique (GitHub),
