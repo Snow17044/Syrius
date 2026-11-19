@@ -1797,6 +1797,7 @@ new MutationObserver(() => {
 // ------------------------------------------------------------------ voix de Syrius (moteur, voix, vitesse)
 function refreshVoiceBox() {
   const ok = Native && appFeatures().includes("voicepick");
+  $("#voice-old").classList.toggle("hidden", !(Native && !ok));  // application trop ancienne : on le dit, avec le lien
   $("#voice-box").classList.toggle("hidden", !ok);
   if (!ok) return;
   let v = {};
