@@ -81,7 +81,7 @@ def violations() -> list[str]:
 def run_tests() -> tuple[bool, str]:
     """Tests dans un conteneur sans réseau ni secrets : le code écrit par l'IA ne peut rien voler."""
     cmd = ["docker", "run", "--rm", "--network", "none", "-v", f"{ROOT}:/w", "-v", f"{WORK / 'cvenv'}:/cv",
-           "-w", "/w", "python:3.12-slim", "/cv/bin/python", "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"]
+           "-w", "/w", "python:3.13-slim", "/cv/bin/python", "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"]
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=1500)
     tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-60:])
     return p.returncode == 0, tail
