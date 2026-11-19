@@ -34,10 +34,14 @@ jobs:
           gh release download coder-data --pattern coder.jsonl --dir training/data --clobber || true
       - name: Fabriquer et vérifier de nouveaux exemples
         run: .venv/bin/python -m coder.make_data 120
+      - name: Vrais exemples (changements que tu as acceptés)
+        continue-on-error: true
+        run: |
+          .venv/bin/python -m coder.real "${{ github.repository }}" training/data/real.jsonl | tee /tmp/real.json || : > training/data/real.jsonl
       - name: Score de la grande IA sur le banc d'essai (référence)
         continue-on-error: true
         run: .venv/bin/python -m coder.bench_run teacher 10 | tee /tmp/teacher.json
       - name: Publier
         run: |
-          gh release upload coder-data training/data/coder.jsonl --clobber
+          gh release upload coder-data training/data/coder.jsonl training/data/real.jsonl --clobber
           [ -f /tmp/teacher.json ] && cp /tmp/teacher.json bench-teacher.json && gh release upload coder-data bench-teacher.json --clobber || true

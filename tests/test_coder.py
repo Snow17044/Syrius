@@ -205,3 +205,33 @@ def test_comparaison_avant_apres():
     assert not compare.verdict(av, {**av, "score": 0.22})[0]  # gain trop faible
     assert "Moins bon" in compare.verdict(av, {**av, "score": 0.1})[1]
     assert not compare.verdict(av, {**av, "version": 3, "score": 0.9})[0]  # banc différent
+
+
+PATCH = "@@ -1,5 +1,6 @@\n def f(a):\n     if a:\n-        return 1\n+        return 2\n+    # nouveau\n     return 0\n \n"
+
+
+def test_vrais_exemples_depuis_les_changements_acceptes():
+    from coder import real
+    assert real.hunks(PATCH) == [("def f(a):\n    if a:\n        return 1\n    return 0\n", "def f(a):\n    if a:\n        return 2\n    # nouveau\n    return 0\n")]
+    assert real.request_from_body("Demande du propriétaire : Change la valeur\nretournée.\n\nTests : OK") == "Change la valeur retournée."
+    base = {"m.py": "def f(a):\n    if a:\n        return 1\n    return 0\n\n"}
+    ex, why = real.example("Change la valeur retournée.", base, {"m.py": PATCH})
+    assert ex and not why and "<<<<<<< SEARCH" in ex["messages"][2]["content"] and "Change la valeur" in ex["messages"][1]["content"]
+    # un patch qui ne correspond pas aux fichiers d'origine est refusé
+    ex2, why2 = real.example("x", {"m.py": "autre chose\n"}, {"m.py": PATCH})
+    assert ex2 is None and "ne s'applique pas" in why2
+    assert real.example("", base, {"m.py": PATCH})[0] is None
+    assert real.example("x", base, {"m.py": PATCH}, forbidden=["m.py"])[0] is None  # fichier protégé
+    big = {"m.py": "x = 1\n" * 2000}
+    assert real.example("x", big, {"m.py": "@@ -1,1 +1,1 @@\n-x = 1\n+x = 2"})[0] is None  # fichier trop long
+
+
+def test_workflows_coder_autorises_et_valides():
+    import yaml
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    for n in ("coder-data", "train-coder"):
+        wf = yaml.safe_load((root / f".github/workflows/{n}.yml").read_text())
+        assert f"{n}.yml" in github_oidc.WORKFLOWS and wf["permissions"]["id-token"] == "write"
+    t = (root / ".github/workflows/train-coder.yml").read_text()
+    assert "steps.bench.outputs.better == 'true'" in t and "real.jsonl" in t
