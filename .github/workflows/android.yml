@@ -55,13 +55,15 @@ jobs:
           SYRIUS_URL: ${{ vars.SYRIUS_URL }}
           SYRIUS_VERSION_CODE: ${{ github.run_number }}
           SYRIUS_KEYSTORE_PASSWORD: ${{ secrets.SYRIUS_KEYSTORE_PASSWORD }}
-        run: gradle --no-daemon assembleRelease bundleRelease
+        run: gradle --no-daemon assembleSyriusRelease bundleSyriusRelease assembleCodeRelease
 
       - name: Renommer
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk Syrius.apk
-          cp android/app/build/outputs/bundle/release/app-release.aab Syrius.aab
+          cp android/app/build/outputs/apk/syrius/release/app-syrius-release.apk Syrius.apk
+          cp android/app/build/outputs/bundle/syriusRelease/app-syrius-release.aab Syrius.aab
+          cp android/app/build/outputs/apk/code/release/app-code-release.apk SyriusCode.apk
           sha256sum Syrius.apk Syrius.aab | tee Syrius.apk.sha256
+          sha256sum SyriusCode.apk | tee SyriusCode.apk.sha256
 
       - name: Empreinte de la clé de signature (publique, pour les liens qui ouvrent l'app)
         env:
@@ -87,6 +89,7 @@ jobs:
           done
           ZA=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)zipalign
           "$ZA" -c -P 16 4 Syrius.apk && echo "zipalign 16 Ko : OK" || bad=1
+          "$ZA" -c -P 16 4 SyriusCode.apk && echo "zipalign 16 Ko (Syrius Code) : OK" || bad=1
           if [ "$bad" = 1 ]; then echo "::error::Bibliothèque non compatible 16 Ko (Google Play la refusera)"; exit 1; fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -96,6 +99,8 @@ jobs:
             Syrius.apk
             Syrius.aab
             Syrius.apk.sha256
+            SyriusCode.apk
+            SyriusCode.apk.sha256
 
   publish:
     # Publication téléchargeable seulement depuis la branche principale
@@ -117,3 +122,8 @@ jobs:
             gh release create android-latest --target "$GITHUB_SHA" --title "Application Android Syrius" \
               --notes "Télécharge **Syrius.apk** depuis ton téléphone Android et ouvre-le pour l'installer."
           gh release upload android-latest Syrius.apk Syrius.aab Syrius.apk.sha256 --clobber
+          # Syrius Code (laboratoire du propriétaire) : sa propre page de téléchargement
+          gh release view syrius-code-latest >/dev/null 2>&1 || \
+            gh release create syrius-code-latest --target "$GITHUB_SHA" --title "Application Syrius Code" \
+              --notes "Télécharge **SyriusCode.apk** depuis ton téléphone Android et ouvre-le pour l'installer. Réservé au propriétaire : il faut se connecter avec son compte."
+          gh release upload syrius-code-latest SyriusCode.apk SyriusCode.apk.sha256 --clobber

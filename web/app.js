@@ -179,8 +179,6 @@ async function renderFamily(account) {
   const owner = !account || account.owner !== false;
   box.classList.toggle("hidden", !owner);
   $("#diag-box").classList.toggle("hidden", !owner);
-  $("#scan-box").classList.toggle("hidden", !owner);
-  if (owner) renderScan();
   $("#discord-box").classList.toggle("hidden", !owner);
   if (owner) api("/api/voicebot").then((v) => { $("#dc-id").value = (v.discord_ids || [])[0] || ""; }).catch(() => {});
   if (owner) refreshSpace();
@@ -1996,130 +1994,6 @@ async function renderBrains(s) {
   }
   sel.value = brains.some((b) => b.name === s.brain) ? s.brain : "";
 }
-
-// ------------------------------------------------------------------ scanner de sécurité de MES sites
-function scanAgo(at) {
-  const m = Math.max(0, Math.round((Date.now() / 1000 - at) / 60));
-  return m < 1 ? "à l'instant" : m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`;
-}
-function scanBtn(label, icon, fn) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "ghost";
-  Icons.set(b, icon, label);
-  b.addEventListener("click", fn);
-  return b;
-}
-async function renderScan() {
-  if (state.offline) return;
-  let data;
-  try { data = await api("/api/sitescan"); } catch (_) { return; }
-  const ul = $("#scan-list");
-  ul.replaceChildren();
-  if (!data.sites.length) {
-    const li = document.createElement("li");
-    li.className = "muted";
-    li.textContent = "Aucun site pour l'instant.";
-    ul.appendChild(li);
-  }
-  for (const s of data.sites) {
-    const li = document.createElement("li");
-    li.className = "diag";
-    const t = document.createElement("strong");
-    t.textContent = s.domain + (s.own ? " (ce Syrius)" : "");
-    const sub = document.createElement("span");
-    sub.className = "muted small";
-    sub.textContent = s.last ? `Dernier scan ${scanAgo(s.last.at)} : note ${s.last.score}/100` : "Pas encore scanné";
-    li.append(t, sub);
-    if (!s.own) {
-      const how = document.createElement("span");
-      how.className = "small";
-      how.textContent = s.instructions;
-      const copy = scanBtn("Copier le code", "copy", async () => { await copyText(s.token); copy.lastChild.textContent = "Copié"; });
-      li.append(how, copy);
-    }
-    const row = document.createElement("div");
-    row.className = "local-actions";
-    const run = scanBtn("Scanner", "search", () => runScan(s.domain, run));
-    row.appendChild(run);
-    if (s.last) row.appendChild(scanBtn("Dernier résultat", "chart", () => showScan(s.domain, s.last)));
-    if (!s.own) row.appendChild(scanBtn("Retirer", "trash", async () => {
-      if (!confirm(`Retirer ${s.domain} de la liste ?`)) return;
-      await api(`/api/sitescan/domains/${encodeURIComponent(s.domain)}`, { method: "DELETE" });
-      $("#scan-result").replaceChildren();
-      renderScan();
-    }));
-    li.appendChild(row);
-    ul.appendChild(li);
-  }
-}
-async function runScan(domain, btn) {
-  $("#scan-msg").textContent = `Scan de ${domain} en cours (environ 20 secondes)…`;
-  btn.disabled = true;
-  try {
-    const res = await api("/api/sitescan/run", { method: "POST", body: JSON.stringify({ domain }) });
-    $("#scan-msg").textContent = "";
-    showScan(domain, res);
-    renderScan();
-  } catch (err) {
-    $("#scan-msg").textContent = "⚠ " + err.message;
-    btn.disabled = false;
-  }
-}
-const SEV_LABEL = { haute: "Grave", moyenne: "Moyen", faible: "Léger", info: "Info" };
-function showScan(domain, res) {
-  const box = $("#scan-result");
-  box.replaceChildren();
-  const head = document.createElement("p");
-  head.className = "small";
-  const c = res.counts || {};
-  head.textContent = `${domain} : note ${res.score}/100 — ${c.haute || 0} grave(s), ${c.moyenne || 0} moyen(s), ${c.faible || 0} léger(s)` +
-    (res.pages ? ` (${res.pages} page(s) vue(s))` : "") + (res.partial ? " — scan partiel (trop long)" : "");
-  box.appendChild(head);
-  if (!res.findings.length) {
-    const ok = document.createElement("p");
-    ok.className = "small";
-    ok.textContent = "✅ Rien d'inquiétant trouvé par ce scan passif.";
-    box.appendChild(ok);
-  }
-  const list = document.createElement("ul");
-  list.className = "family-list";
-  for (const f of res.findings) {
-    const li = document.createElement("li");
-    li.className = "diag";
-    const t = document.createElement("strong");
-    t.className = "sev-" + f.sev;
-    t.textContent = `${SEV_LABEL[f.sev] || ""} — ${f.title}`;
-    const d = document.createElement("span");
-    d.className = "small";
-    d.textContent = f.detail + (f.where ? ` (${f.where})` : "");
-    const fix = document.createElement("span");
-    fix.className = "muted small";
-    fix.textContent = "Comment corriger : " + f.fix;
-    li.append(t, d, fix);
-    list.appendChild(li);
-  }
-  box.appendChild(list);
-  if (res.findings.length) {
-    const share = scanBtn("Copier le rapport", "copy", async () => {
-      const txt = `Scan de sécurité de ${domain} : note ${res.score}/100\n\n` + res.findings.map((f) =>
-        `[${SEV_LABEL[f.sev]}] ${f.title}\n  ${f.detail}\n  Correctif : ${f.fix}`).join("\n\n");
-      await copyText(txt);
-      share.lastChild.textContent = "Copié : colle-le à ton assistant de code";
-    });
-    box.appendChild(share);
-  }
-}
-$("#scan-add").addEventListener("click", async () => {
-  const input = $("#scan-new");
-  if (!input.value.trim()) return;
-  try {
-    await api("/api/sitescan/domains", { method: "POST", body: JSON.stringify({ domain: input.value.trim() }) });
-    input.value = "";
-    $("#scan-msg").textContent = "Site ajouté : place le code de preuve indiqué ci-dessous, puis touche « Scanner ».";
-    renderScan();
-  } catch (err) { $("#scan-msg").textContent = "⚠ " + err.message; }
-});
 
 // ------------------------------------------------------------------ souvenirs : file d'attente hors ligne + copie pour l'IA du téléphone
 const MEM_PENDING = "syrius:memories:pending", MEM_CACHE = "syrius:memories:cache";

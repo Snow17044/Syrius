@@ -252,7 +252,7 @@ public class MainActivity extends Activity {
     private void open(String url) {
         baseUrl = url;
         allowedHost = Uri.parse(url).getHost();
-        web.loadUrl(url);
+        web.loadUrl(url + BuildConfig.START_PATH);  // « code » pour Syrius Code, vide pour Syrius
     }
 
     private void askForUrl(String prefill) {

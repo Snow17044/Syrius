@@ -5,6 +5,7 @@ import html
 import json
 import logging
 import re
+import secrets
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
 from .store_redis import RedisDatabase, RedisError, UpstashREST
+from .tools import dashboard as dashboard_tool
 from .tools import gmail, imagegen, real3d, tiles
 from .tools.places import round_location
 from .tools.email_tool import EmailError, outlook_poll, outlook_start
@@ -31,7 +33,7 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
-    "legal.css": "text/css",
+    "legal.css": "text/css", "code.js": "text/javascript", "code.css": "text/css",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -78,6 +80,14 @@ class JoinBody(BaseModel):
     code: str = Field(min_length=4, max_length=40)
     name: str = Field(min_length=1, max_length=40)
     password: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
+
+
+class CodeMessageBody(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+
+
+class DashboardBody(BaseModel):
+    spec: dict
 
 
 class MessageBody(BaseModel):
@@ -266,6 +276,12 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/")
     async def index():
         return FileResponse(WEB_DIR / "index.html", media_type="text/html")
+
+    @app.get("/code")
+    async def code_page():
+        """Syrius Code (laboratoire d'essai du propriétaire) : la page se charge pour tous, mais tout ce qu'elle
+        utilise (/api/code/…) est réservé au propriétaire."""
+        return FileResponse(WEB_DIR / "code.html", media_type="text/html")
 
     @app.get("/confidentialite")
     async def privacy():
@@ -739,10 +755,103 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         await asyncio.to_thread(auth.set_password, db, body.new)
         return {"ok": True, "detail": "Mot de passe changé. Reconnecte-toi."}
 
+    # ------------------------------------------------------------------ Syrius Code : Aurore (propriétaire seulement)
+    CODE_CONVS, CODE_DASH, MAX_CODE_CONVS, MAX_DASHBOARDS = "code_convs_v1", "code_dashboards_v1", 100, 30
+
+    def _code_load(key: str) -> list:
+        try:
+            data = json.loads(db.base.get_secret(key) or "[]")
+        except ValueError:
+            return []
+        return data if isinstance(data, list) else []
+
+    def _code_ids() -> list:
+        return [i for i in _code_load(CODE_CONVS) if isinstance(i, str)]
+
+    def _code_conv(cid: str) -> dict:
+        conv = db.get_conversation(cid) if cid in _code_ids() else None
+        if not conv:
+            raise HTTPException(404, "Discussion introuvable")
+        return conv
+
+    owner_only = [Depends(require_auth), Depends(require_owner)]
+
+    @app.get("/api/code/conversations", dependencies=owner_only)
+    async def code_conversations():
+        ids = set(_code_ids())
+        return [c for c in db.list_conversations("") if c["id"] in ids]
+
+    @app.post("/api/code/conversations", dependencies=owner_only)
+    async def code_conversation_create():
+        conv = db.create_conversation("Nouvelle discussion")
+        db.base.set_secret(CODE_CONVS, json.dumps([*_code_ids(), conv["id"]][-MAX_CODE_CONVS:]))
+        return conv
+
+    @app.get("/api/code/conversations/{cid}", dependencies=owner_only)
+    async def code_conversation_get(cid: str):
+        conv = _code_conv(cid)
+        return {**conv, "messages": display_messages(db.get_messages(cid))}
+
+    @app.delete("/api/code/conversations/{cid}", dependencies=owner_only)
+    async def code_conversation_delete(cid: str):
+        _code_conv(cid)
+        db.delete_conversation(cid)
+        db.base.set_secret(CODE_CONVS, json.dumps([i for i in _code_ids() if i != cid]))
+        return {"ok": True}
+
+    @app.post("/api/code/conversations/{cid}/messages", dependencies=owner_only)
+    async def code_send(cid: str, body: CodeMessageBody):
+        conv = _code_conv(cid)
+        if cid in busy:
+            raise HTTPException(409, "Aurore répond déjà dans cette discussion.")
+        first = not db.get_messages(cid)
+        busy.add(cid)
+
+        async def stream():
+            try:
+                async for event in agent.chat(cid, body.text, None, profile="aurore"):
+                    yield sse(event)
+                if first and conv["title"] == "Nouvelle discussion" and db.get_messages(cid):
+                    title = agent.make_title(body.text)
+                    db.update_conversation(cid, title=title)
+                    yield sse({"type": "title", "title": title})
+            except Exception:
+                logging.getLogger("syrius").exception("Erreur pendant la réponse d'Aurore")
+                yield sse({"type": "error", "message": "Erreur interne."})
+            finally:
+                busy.discard(cid)
+
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"})
+
+    @app.get("/api/code/dashboards", dependencies=owner_only)
+    async def code_dashboards():
+        return [d for d in _code_load(CODE_DASH) if isinstance(d, dict)][::-1]
+
+    @app.post("/api/code/dashboards", dependencies=owner_only)
+    async def code_dashboard_save(body: DashboardBody):
+        try:
+            spec = dashboard_tool.validate(body.spec)
+        except dashboard_tool.DashboardError as e:
+            raise HTTPException(400, str(e)) from None
+        items = [d for d in _code_load(CODE_DASH) if isinstance(d, dict)]
+        item = {"id": secrets.token_hex(4), "at": int(time.time()), "spec": spec}
+        db.base.set_secret(CODE_DASH, json.dumps([*items, item][-MAX_DASHBOARDS:], ensure_ascii=False))
+        return item
+
+    @app.delete("/api/code/dashboards/{did}", dependencies=owner_only)
+    async def code_dashboard_delete(did: str):
+        items = [d for d in _code_load(CODE_DASH) if isinstance(d, dict)]
+        if not any(d.get("id") == did for d in items):
+            raise HTTPException(404)
+        db.base.set_secret(CODE_DASH, json.dumps([d for d in items if d.get("id") != did], ensure_ascii=False))
+        return {"ok": True}
+
     # ------------------------------------------------------------------ discussions
     @app.get("/api/conversations", dependencies=[Depends(require_auth)])
     async def list_conversations(q: str = ""):
-        return db.list_conversations(q[:100])
+        code = set(_code_ids())  # les discussions d'Aurore (Syrius Code) restent hors de l'application Syrius
+        return [c for c in db.list_conversations(q[:100]) if c["id"] not in code]
 
     @app.post("/api/conversations", dependencies=[Depends(require_auth)])
     async def create_conversation():

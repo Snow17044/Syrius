@@ -80,12 +80,13 @@ def public_entries(base, own_host: str = "") -> list[dict]:
     own = clean_domain(own_host) if own_host else ""
     data = _load(base)
     if own:
-        out.append({"domain": own, "own": True, "token": "", "last": (data.get(own) or {}).get("last")})
+        out.append({"domain": own, "own": True, "token": "", "last": (data.get(own) or {}).get("last"),
+                    "history": (data.get(own) or {}).get("history", [])})
     for dom, e in data.items():
         if dom == own or e.get("own"):
             continue
         out.append({"domain": dom, "own": False, "token": e["token"], "instructions": instructions(dom, e["token"]),
-                    "last": e.get("last")})
+                    "last": e.get("last"), "history": e.get("history", [])})
     return out
 
 
@@ -510,6 +511,7 @@ def run(base, raw: str, own_hosts: tuple = (), fetcher=None, now: float | None =
     result["at"] = int(t)
     entry = data.setdefault(dom, {"token": "", "added": int(t), "own": True})
     entry["last"] = {k: result[k] for k in ("at", "pages", "requests", "partial", "seconds", "score", "counts", "findings")}
+    entry["history"] = [*entry.get("history", []), {"at": int(t), "score": result["score"], "counts": result["counts"]}][-12:]
     _save(base, data)
     return result
 

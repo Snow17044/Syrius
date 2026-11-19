@@ -12,7 +12,7 @@ from .. import family, memory, sitescan
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
-from . import diagram, model3d, places, reminders, weather, web
+from . import dashboard, diagram, model3d, places, reminders, weather, web
 from .gmail import GmailClient
 
 TIMEZONE = ZoneInfo("Europe/Paris")
@@ -125,6 +125,7 @@ TOOL_LABELS = {
     "get_current_time": "Je regarde l'heure",
     "remember": "Je note ça dans ma mémoire",
     "scan_site": "Je scanne ton site (lecture seule)",
+    "show_dashboard": "Je construis le tableau de bord",
     "forget": "J'efface ce souvenir",
     "list_emails": "Je consulte tes emails",
     "search_emails": "Je cherche dans tes emails",
@@ -140,6 +141,28 @@ TOOL_LABELS = {
     **DEVICE_LABELS,
 }
 
+
+SHOW_DASHBOARD_TOOL = _tool(
+    "show_dashboard",
+    "Affiche un TABLEAU DE BORD (KPI, graphiques, tableau) à partir de données que l'utilisateur t'a données. "
+    "N'invente aucune donnée. Graphiques : bar (barres), line (courbe), pie (camembert, une seule série). "
+    "Chaque série a autant de valeurs que d'étiquettes. Résume ensuite le tableau en une ou deux phrases.",
+    {"title": {"type": "string", "description": "Titre du tableau de bord"},
+     "kpis": {"type": "array", "description": "Indicateurs clés (6 au plus)",
+              "items": {"type": "object", "properties": {
+                  "label": {"type": "string"}, "value": {"type": "string", "description": "ex. 1 250 € ou 98 %"},
+                  "note": {"type": "string", "description": "précision courte, ex. « vs mois dernier »"},
+                  "trend": {"type": "string", "description": "up, down ou flat"}}}},
+     "charts": {"type": "array", "description": "Graphiques (4 au plus)",
+                "items": {"type": "object", "properties": {
+                    "type": {"type": "string", "description": "bar, line ou pie"}, "title": {"type": "string"},
+                    "labels": {"type": "array", "items": {"type": "string"}},
+                    "series": {"type": "array", "items": {"type": "object", "properties": {
+                        "name": {"type": "string"}, "values": {"type": "array", "items": {"type": "number"}}}}}}}},
+     "table": {"type": "object", "description": "Tableau (6 colonnes et 20 lignes au plus)",
+               "properties": {"columns": {"type": "array", "items": {"type": "string"}},
+                              "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}}}},
+    ["title"])
 
 SCAN_SITE_TOOL = _tool(
     "scan_site",
@@ -165,6 +188,8 @@ _SCAN_RX = re.compile(r"scan|s[ée]curit|faille|vuln[ée]rab|site|domaine", re.I
 _PHONE_TOOLS = {t["function"]["name"] for t in DEVICE_TOOLS}
 _DIAGRAM_TOOLS = {"show_diagram", "show_model"}
 _MAIL_TOOLS = {"list_emails", "search_emails", "read_email", "draft_email"}
+_DASH_RX = re.compile(r"tableau de bord|dashboard|graphique|courbe|histogramme|camembert|\bkpi\b|statistique|chiffre|donn[ée]es|\bcsv\b|"
+                      r"ventes|recettes|d[ée]penses|[ée]volution|\d+[ ;,]+\d+", re.I)
 
 
 def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[dict]:
@@ -181,18 +206,29 @@ def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[d
         drop |= _MAIL_TOOLS
     if not _SCAN_RX.search(text):
         drop.add("scan_site")
+    if not _DASH_RX.search(text):
+        drop.add("show_dashboard")
     return [t for t in tools if t["function"]["name"] not in drop]
 
 
-def build_tools(cfg: Config, settings: dict) -> list[dict]:
-    """Liste triée et stable (important pour le cache)."""
+def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[dict]:
+    """Liste triée et stable (important pour le cache). Aurore (Syrius Code) a ses propres outils ; le scan de
+    sites et les tableaux de bord n'existent QUE là."""
+    if profile == "aurore":
+        tools = [t for t in BASE_TOOLS if t["function"]["name"] in ("get_current_time", "show_diagram")]
+        tools += [SHOW_DASHBOARD_TOOL]
+        if family.email_allowed(cfg):
+            tools += EMAIL_TOOLS
+        if settings.get("internet", True):
+            tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL]
+        if family.is_owner():
+            tools += [SCAN_SITE_TOOL]
+        return tools
     tools = list(BASE_TOOLS) + DEVICE_TOOLS
     if family.email_allowed(cfg):
         tools += EMAIL_TOOLS
     if settings.get("internet", True):
         tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL, WEATHER_TOOL]
-    if family.is_owner():
-        tools += [SCAN_SITE_TOOL]
     return tools
 
 
@@ -353,6 +389,14 @@ class ToolExecutor:
                 raise InvalidInput(str(e)) from None
             return (f"Schéma « {event['title']} » affiché en 3D ({len(event['nodes'])} idées). "
                     "Résume-le en une ou deux phrases, sans le recopier."), False, event
+
+        if name == "show_dashboard":
+            try:
+                event = dashboard.validate(args)
+            except dashboard.DashboardError as e:
+                raise InvalidInput(str(e)) from None
+            return (f"Tableau de bord « {event['title']} » affiché ({len(event['kpis'])} KPI, "
+                    f"{len(event['charts'])} graphique(s)). Résume-le en une ou deux phrases, sans le recopier."), False, event
 
         if name == "show_model":
             try:

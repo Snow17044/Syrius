@@ -36,6 +36,26 @@ android {
         buildConfig true
     }
 
+    // Deux applications construites à partir du même code :
+    //  - « syrius » : Syrius (discussion, téléphone, IA hors ligne) ;
+    //  - « code »   : Syrius Code, le laboratoire d'essai du propriétaire (Aurore : code, tableaux de bord,
+    //                 emails pro, sites et sécurité). Même serveur, page d'accueil différente (/code),
+    //                 aucun lien d'invitation, pas d'accès aux appels ni aux contacts.
+    flavorDimensions = ["app"]
+    productFlavors {
+        syrius {
+            dimension "app"
+            buildConfigField "String", "START_PATH", "\"\""
+        }
+        code {
+            dimension "app"
+            applicationId "fr.syrius.code"
+            versionNameSuffix "-code"
+            buildConfigField "String", "START_PATH", "\"code\""
+            manifestPlaceholders = [linkHost: "code.invalid"]
+        }
+    }
+
     signingConfigs {
         if (ks) {
             release {

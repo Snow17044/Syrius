@@ -10,7 +10,7 @@ from pathlib import Path
 from .config import Config
 from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
-from .tools import diagram, model3d
+from .tools import dashboard, diagram, model3d
 from . import family, vision
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, select_tools
 
@@ -31,6 +31,21 @@ MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août
 def load_persona() -> str:
     """La personnalité est dans server/persona.md : modifie ce fichier pour changer Syrius."""
     return PERSONA_FILE.read_text(encoding="utf-8").strip()
+
+
+AURORE_FILE = Path(__file__).with_name("aurore.md")
+
+
+def build_aurore_system(settings: dict) -> str:
+    """Consigne d'Aurore (Syrius Code) : personnalité pro, pas de souvenirs personnels de Syrius."""
+    now = datetime.now(TIMEZONE)
+    parts = [AURORE_FILE.read_text(encoding="utf-8").strip(),
+             f"Nous sommes le {JOURS[now.weekday()]} {now.day} {MOIS[now.month - 1]} {now.year}."]
+    if settings.get("user_name"):
+        parts.append(f"Prénom de l'utilisateur : {settings['user_name']}")
+    if settings.get("internet", True) is False:
+        parts.append("Internet est DÉSACTIVÉ dans les réglages : tu n'as pas les outils web_search / web_read.")
+    return "\n\n".join(parts)
 
 
 def build_system(settings: dict, memories: list[dict]) -> str:
@@ -105,6 +120,12 @@ def display_messages(stored: list[dict]) -> list[dict]:
                  for b in m["content"] if b.get("type") == "tool_use"]
         diagrams = []
         for b in m["content"]:  # les schémas 3D restent consultables dans l'historique
+            if b.get("type") == "tool_use" and b.get("name") == "show_dashboard":
+                try:
+                    diagrams.append(dashboard.validate(b.get("input")))
+                except dashboard.DashboardError:
+                    pass
+                continue
             if b.get("type") == "tool_use" and b.get("name") == "show_diagram":
                 try:
                     diagrams.append(diagram.validate(b.get("input")))
@@ -192,7 +213,7 @@ class Agent:
 
     async def chat(self, conversation_id: str, user_text: str,
                    location: dict | None = None, voice: bool = False,
-                   image: str | None = None) -> AsyncIterator[dict]:
+                   image: str | None = None, profile: str = "syrius") -> AsyncIterator[dict]:
         if not self.llm.providers:
             yield {"type": "error", "message": "Aucun cerveau configuré : ajoute une clé GROQ_API_KEY "
                                                "ou GEMINI_API_KEY (voir README)."}
@@ -208,7 +229,8 @@ class Agent:
         user_content.append({"type": "text", "text": (user_text + "\n\n[📷 photo jointe]").strip() if image else user_text})
         history = trim_history(stored) + [{"role": "user", "content": user_content}]
         to_save = [history[-1]]
-        preferred = settings.get("brain", "")
+        aurore = profile == "aurore"
+        preferred = "" if aurore else settings.get("brain", "")
         if not preferred and not image and _WANTS_CODE.search(user_text):
             preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation
         providers = self.llm.ordered(preferred, photo=bool(image), fast=settings.get("effort") != "high")
@@ -234,7 +256,8 @@ class Agent:
         web_calls = 0
 
         for _step in range(MAX_STEPS):
-            system = build_system(settings, self.db.list_memories())  # les souvenirs peuvent changer
+            system = (build_aurore_system(settings) if aurore
+                      else build_system(settings, self.db.list_memories()))  # les souvenirs peuvent changer
             if voice:
                 system += ("\n\nMODE CONVERSATION VOCALE : ta réponse sera lue à voix haute. Réponds en 1 à 3 "
                            "phrases naturelles à l'oral, sans liste, sans tableau, sans Markdown ni emoji. "
@@ -242,7 +265,7 @@ class Agent:
             msgs = to_openai(history, system)
             if image:
                 vision.attach(msgs, image)
-            body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, settings), tool_context, keep_all),
+            body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, settings, profile), tool_context, keep_all),
                     "max_tokens": MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None
@@ -251,7 +274,7 @@ class Agent:
             while providers:
                 provider = providers[0]
                 req = dict(body)
-                if _step == 0 and not tool_retry:
+                if _step == 0 and not tool_retry and not aurore:
                     forced = "show_diagram" if _WANTS_DIAGRAM.search(user_text) else \
                         "show_model" if _WANTS_MODEL.search(user_text) else \
                         "phone_image" if not image and _WANTS_IMAGE.search(user_text) else ""
