@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr" data-theme="syrius">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f16">
+  <meta name="robots" content="noindex">
+  <title>Réinitialiser le mot de passe</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/code.css">
+  <script src="/static/reset.js" defer></script>
+</head>
+<body class="code-body">
+  <div class="screen c-login">
+    <form id="r-form" class="c-login-card" autocomplete="off">
+      <h1>Mot de passe oublié</h1>
+      <p id="r-info" class="muted small">Entre ton code de secours (celui de la variable <b>SYRIUS_RESET_CODE</b> dans Vercel),
+        puis choisis un nouveau mot de passe. Tous tes appareils seront déconnectés. Les comptes de ta famille ne changent pas.</p>
+      <input id="r-code" type="password" placeholder="Code de secours" autocomplete="off" required>
+      <input id="r-password" type="password" placeholder="Nouveau mot de passe (10 caractères minimum)" minlength="10" autocomplete="new-password" required>
+      <input id="r-password2" type="password" placeholder="Confirme le nouveau mot de passe" minlength="10" autocomplete="new-password" required>
+      <button type="submit" id="r-go" class="primary wide">Changer mon mot de passe</button>
+      <p id="r-msg" class="small" role="status"></p>
+      <p class="small"><a href="/">Retour à Syrius</a></p>
+    </form>
+    <div id="r-off" class="c-login-card hidden">
+      <h1>Réinitialisation désactivée</h1>
+      <p class="muted small">Pour des raisons de sécurité, cette page ne marche que si tu as ajouté une variable dans Vercel :</p>
+      <ol class="small" id="r-steps">
+        <li>Ouvre ton projet Syrius sur vercel.com → <b>Settings → Environment Variables</b>.</li>
+        <li>Ajoute <b>SYRIUS_RESET_CODE</b> avec un code que tu inventes (12 caractères au moins, par exemple 4 mots au hasard).</li>
+        <li>Va dans <b>Deployments → ⋯ → Redeploy</b>, attends la fin, puis reviens sur cette page.</li>
+      </ol>
+      <p class="small"><a href="/">Retour à Syrius</a></p>
+    </div>
+  </div>
+</body>
+</html>

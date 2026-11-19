@@ -127,6 +127,15 @@ et `SYRIUS_KEY_ALIAS` (demande-moi, je t'explique).
 
 ---
 
+## J'ai oublié mon mot de passe
+1. Dans Vercel : **Settings → Environment Variables** → ajoute `SYRIUS_RESET_CODE` avec un code que tu inventes
+   (12 caractères au moins), puis **Deployments → ⋯ → Redeploy**.
+2. Ouvre `https://ton-adresse.vercel.app/reinitialiser`, entre ce code et ton nouveau mot de passe.
+3. **Supprime ensuite la variable** `SYRIUS_RESET_CODE` (et redéploie) : la réinitialisation est de nouveau désactivée.
+
+Sans cette variable, la page refuse tout : un lien qui réinitialiserait le mot de passe sans code permettrait à
+n'importe qui de prendre ton compte.
+
 ## Sécurité
 
 Voir [SECURITY.md](SECURITY.md). En résumé :

@@ -33,7 +33,7 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
-    "legal.css": "text/css", "code.js": "text/javascript", "code.css": "text/css",
+    "legal.css": "text/css", "code.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -113,6 +113,14 @@ class Model3DCreate(BaseModel):
 class ConversationPatch(BaseModel):
     title: str | None = Field(default=None, max_length=120)
     pinned: bool | None = None
+
+
+MIN_RESET_CODE = 12
+
+
+class ResetBody(BaseModel):
+    code: str = Field(max_length=256)
+    password: str = Field(min_length=auth.MIN_PASSWORD_LEN, max_length=256)
 
 
 class SetupBody(BaseModel):
@@ -282,6 +290,10 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         """Syrius Code (laboratoire d'essai du propriétaire) : la page se charge pour tous, mais tout ce qu'elle
         utilise (/api/code/…) est réservé au propriétaire."""
         return FileResponse(WEB_DIR / "code.html", media_type="text/html")
+
+    @app.get("/reinitialiser")
+    async def reset_page():
+        return FileResponse(WEB_DIR / "reset.html", media_type="text/html", headers={"Cache-Control": "no-store"})
 
     @app.get("/confidentialite")
     async def privacy():
@@ -456,6 +468,30 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             await asyncio.sleep(1)
             raise HTTPException(401, "Code de configuration incorrect.")
         await asyncio.to_thread(auth.set_password, db, body.password)
+        return {"ok": True}
+
+    def reset_available() -> bool:
+        return len(cfg.reset_code or "") >= MIN_RESET_CODE
+
+    @app.get("/api/reset/state")
+    async def reset_state():
+        return {"available": reset_available()}
+
+    @app.post("/api/reset")
+    async def reset_password(body: ResetBody, request: Request):
+        """Mot de passe oublié : le code de secours (variable Vercel SYRIUS_RESET_CODE) permet d'en choisir un nouveau.
+        Désactivé par défaut ; mêmes limites d'essais que la connexion ; déconnecte tous les appareils."""
+        ip = client_ip(request)
+        if not reset_available():
+            raise HTTPException(403, "Réinitialisation non activée : ajoute SYRIUS_RESET_CODE dans Vercel.")
+        if auth.is_locked_out(db, ip):
+            raise HTTPException(429, "Trop d'essais. Réessaie dans 15 minutes.")
+        if not hmac.compare_digest(body.code.encode(), cfg.reset_code.encode()):
+            db.record_failed_login(ip)
+            await asyncio.sleep(1)
+            raise HTTPException(401, "Code de secours incorrect.")
+        await asyncio.to_thread(auth.set_password, db, body.password)
+        db.clear_failed_logins(ip)
         return {"ok": True}
 
     @app.post("/api/login")
