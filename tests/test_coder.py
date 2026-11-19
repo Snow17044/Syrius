@@ -235,3 +235,14 @@ def test_workflows_coder_autorises_et_valides():
         assert f"{n}.yml" in github_oidc.WORKFLOWS and wf["permissions"]["id-token"] == "write"
     t = (root / ".github/workflows/train-coder.yml").read_text()
     assert "steps.bench.outputs.better == 'true'" in t and "real.jsonl" in t
+
+
+def test_consigne_sans_chemin_a_recopier():
+    """Le premier essai réel : la grande IA recopiait « chemin/ » de l'exemple (2 échecs sur 10). Plus d'exemple à recopier."""
+    assert "chemin/" not in tasks.SYSTEM and "EXACTEMENT" in tasks.SYSTEM and "### stack.py" in tasks.SYSTEM
+
+
+def test_publication_ignore_les_fichiers_vides():
+    from pathlib import Path
+    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/coder-data.yml").read_text()
+    assert '[ -s "$f" ]' in wf and "|| echo" not in wf

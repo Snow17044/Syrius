@@ -43,5 +43,8 @@ jobs:
         run: .venv/bin/python -m coder.bench_run teacher 10 | tee /tmp/teacher.json
       - name: Publier
         run: |
-          gh release upload coder-data training/data/coder.jsonl training/data/real.jsonl --clobber
+          # GitHub refuse un fichier vide : on ne publie que ce qui contient quelque chose
+          for f in training/data/coder.jsonl training/data/real.jsonl; do
+            if [ -s "$f" ]; then gh release upload coder-data "$f" --clobber; else echo "($f vide : non publié)"; fi
+          done
           [ -f /tmp/teacher.json ] && cp /tmp/teacher.json bench-teacher.json && gh release upload coder-data bench-teacher.json --clobber || true
