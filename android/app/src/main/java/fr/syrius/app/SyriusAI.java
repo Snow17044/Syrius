@@ -166,6 +166,28 @@ class SyriusAI {
         });
     }
 
+    /** Charge le modèle en mémoire s'il ne l'est pas encore (plusieurs secondes la première fois). */
+    private void ensureEngine(ModelPack pk) throws Exception {
+        if (engine != null) return;
+        EngineConfig cfg = new EngineConfig(pk.file(pk.parts[0].file).getAbsolutePath(),
+                new Backend.CPU(4, null), new Backend.CPU(4, null), null, 1280, 1, pk.dir().getAbsolutePath());
+        Engine e = new Engine(cfg);
+        e.initialize();
+        engine = e;
+    }
+
+    /** Préchauffage : le premier ordre de la journée n'attend plus le chargement du modèle. */
+    void warmUp() {
+        worker.execute(() -> {
+            try {
+                ModelPack pk = pack;
+                if (engine == null && available() && pk != null && pk.ready() && !switching) ensureEngine(pk);
+            } catch (Throwable ignored) {
+                // pas grave : le chargement se fera à la première question
+            }
+        });
+    }
+
     /** Conversation : la réponse arrive morceau par morceau (chaque morceau est ajouté au précédent). */
     void chat(String requestId, JSONObject req, LocalAI.Sink sink) {
         worker.execute(() -> {
@@ -175,13 +197,7 @@ class SyriusAI {
                     sink.chunk(requestId, "", true, "Notre IA Syrius n'est pas installée.");
                     return;
                 }
-                if (engine == null) {
-                    EngineConfig cfg = new EngineConfig(pk.file(pk.parts[0].file).getAbsolutePath(),
-                            new Backend.CPU(4, null), new Backend.CPU(4, null), null, 1280, 1, pk.dir().getAbsolutePath());
-                    Engine e = new Engine(cfg);
-                    e.initialize();
-                    engine = e;
-                }
+                ensureEngine(pk);
                 JSONArray msgs = req.optJSONArray("messages");
                 List<Message> history = new ArrayList<>();
                 String last = "";

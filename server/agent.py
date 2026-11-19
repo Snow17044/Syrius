@@ -12,7 +12,7 @@ from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
 from .tools import diagram, model3d
 from . import family, vision
-from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools
+from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, select_tools
 
 log = logging.getLogger("syrius.agent")
 
@@ -211,7 +211,7 @@ class Agent:
         preferred = settings.get("brain", "")
         if not preferred and not image and _WANTS_CODE.search(user_text):
             preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation
-        providers = self.llm.ordered(preferred, photo=bool(image))
+        providers = self.llm.ordered(preferred, photo=bool(image), fast=settings.get("effort") != "high")
         if image:  # seules les IA qui « voient » peuvent répondre
             providers = [p for p in providers if p.vision]
             if not providers:
@@ -225,6 +225,11 @@ class Agent:
             providers = [p for p in providers if not p.name.startswith("openrouter")] or providers
         power_counted = False
         effort = "high" if settings.get("effort") == "high" else "low"
+        # Outils envoyés : seulement ceux que la demande évoque (+ la fin de la réponse précédente, pour « oui »…).
+        last_reply = next((b.get("text", "") for m in reversed(history[:-1]) if m["role"] == "assistant"
+                           for b in m["content"] if b.get("type") == "text"), "")
+        tool_context = user_text + " " + last_reply[-500:]
+        keep_all = any(b.get("type") == "tool_use" for m in history[-6:] for b in m["content"])  # conversation d'action
         untrusted_seen = False
         web_calls = 0
 
@@ -237,7 +242,7 @@ class Agent:
             msgs = to_openai(history, system)
             if image:
                 vision.attach(msgs, image)
-            body = {"messages": msgs, "tools": build_tools(self.cfg, settings),
+            body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, settings), tool_context, keep_all),
                     "max_tokens": MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None

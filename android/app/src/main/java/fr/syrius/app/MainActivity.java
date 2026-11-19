@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     private String baseUrl;
     private String allowedHost;
     private TextToSpeech tts;
+    private boolean googleTts;
     private SpeechRecognizer recognizer;
     private DeviceActions device;
     private LocalAI local;
@@ -199,27 +200,7 @@ public class MainActivity extends Activity {
         pendingBriefing = getIntent() != null && getIntent().getBooleanExtra(Reminders.EXTRA_BRIEFING, false);
         web.addJavascriptInterface(new Bridge(), "SyriusAndroid");
 
-        tts = new TextToSpeech(this, status -> {
-            if (status == TextToSpeech.SUCCESS) {
-                tts.setLanguage(Locale.FRANCE);
-                chooseFrenchVoice();
-                tts.setSpeechRate(1.05f);  // un peu plus vif, plus naturel que le rythme par défaut
-                // Prévient la page quand Syrius a fini de parler (mode conversation : il réécoute ensuite).
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String id) { }
-
-                    @Override
-                    public void onDone(String id) {
-                        sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
-                    }
-
-                    @Override
-                    public void onError(String id) {
-                        sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
-                    }
-                });
-            }
-        });
+        initTts();
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String saved = prefs.getString(KEY_URL, "");
@@ -414,24 +395,92 @@ public class MainActivity extends Activity {
         sendJs("window.syriusOnSpeech && window.syriusOnSpeech(" + JSONObject.quote(text) + ", " + isFinal + ")");
     }
 
-    /** Prend la plus belle voix française installée (qualité la plus haute, France d'abord). */
-    private void chooseFrenchVoice() {
+    private static final String GOOGLE_TTS = "com.google.android.tts";
+
+    private boolean packageInstalled(String pkg) {
         try {
-            android.speech.tts.Voice best = null;
-            int bestScore = Integer.MIN_VALUE;
-            java.util.Set<android.speech.tts.Voice> voices = tts.getVoices();
-            if (voices == null) return;
-            for (android.speech.tts.Voice v : voices) {
-                if (v.getLocale() == null || !"fr".equals(v.getLocale().getLanguage())) continue;
-                if (v.getFeatures() != null && v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) continue;
-                int score = v.getQuality() * 10 + ("FR".equals(v.getLocale().getCountry()) ? 5 : 0)
-                        - (v.isNetworkConnectionRequired() ? 3 : 0);  // la voix locale marche aussi sans Internet
-                if (score > bestScore) { bestScore = score; best = v; }
+            getPackageManager().getPackageInfo(pkg, 0);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Voix de Syrius. Le moteur « Synthèse vocale Google » (voix neuronales, bien plus naturelles) est pris en
+     * priorité s'il est installé ; sinon la voix du constructeur, souvent robotique, avec une aide pour l'installer.
+     */
+    private void initTts() {
+        if (tts != null) {
+            try { tts.stop(); tts.shutdown(); } catch (Exception ignored) { }
+        }
+        googleTts = packageInstalled(GOOGLE_TTS);
+        TextToSpeech.OnInitListener ready = status -> {
+            if (status != TextToSpeech.SUCCESS) return;
+            tts.setLanguage(Locale.FRANCE);
+            applyVoice();
+            // Prévient la page quand Syrius a fini de parler (mode conversation : il réécoute ensuite).
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override public void onStart(String id) { }
+
+                @Override
+                public void onDone(String id) {
+                    sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
+                }
+
+                @Override
+                public void onError(String id) {
+                    sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
+                }
+            });
+        };
+        tts = googleTts ? new TextToSpeech(this, ready, GOOGLE_TTS) : new TextToSpeech(this, ready);
+    }
+
+    /** Voix choisie par la personne, sinon la plus belle voix française installée ; vitesse enregistrée. */
+    private void applyVoice() {
+        try {
+            SharedPreferences vp = getSharedPreferences("syrius_voice", MODE_PRIVATE);
+            tts.setSpeechRate(Math.max(0.7f, Math.min(1.5f, vp.getFloat("rate", 1.05f))));
+            String wanted = vp.getString("voice", "");
+            android.speech.tts.Voice pick = null;
+            if (!wanted.isEmpty()) {
+                for (android.speech.tts.Voice v : frenchVoices()) if (v.getName().equals(wanted)) pick = v;
             }
-            if (best != null) tts.setVoice(best);
+            if (pick == null) {
+                java.util.List<android.speech.tts.Voice> all = frenchVoices();
+                if (!all.isEmpty()) pick = all.get(0);
+            }
+            if (pick != null) tts.setVoice(pick);
         } catch (Exception ignored) {
             // on garde la voix par défaut du téléphone
         }
+    }
+
+    private static int voiceScore(android.speech.tts.Voice v) {
+        return v.getQuality() * 10 + ("FR".equals(v.getLocale().getCountry()) ? 5 : 0)
+                - (v.isNetworkConnectionRequired() ? 3 : 0);  // la voix locale marche aussi sans Internet
+    }
+
+    /** Voix françaises réellement installées, les plus belles d'abord. */
+    private java.util.List<android.speech.tts.Voice> frenchVoices() {
+        java.util.List<android.speech.tts.Voice> out = new java.util.ArrayList<>();
+        try {
+            java.util.Set<android.speech.tts.Voice> voices = tts.getVoices();
+            if (voices == null) return out;
+            for (android.speech.tts.Voice v : voices) {
+                if (v.getLocale() == null || !"fr".equals(v.getLocale().getLanguage())) continue;
+                if (v.getFeatures() != null && v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) continue;
+                out.add(v);
+            }
+            java.util.Collections.sort(out, (a, b) -> {
+                int d = voiceScore(b) - voiceScore(a);
+                return d != 0 ? d : a.getName().compareTo(b.getName());
+            });
+        } catch (Exception ignored) {
+            // liste vide : la voix par défaut sera utilisée
+        }
+        return out;
     }
 
     private void sendJs(String js) {
@@ -488,6 +537,100 @@ public class MainActivity extends Activity {
             return "https".equals(uri.getScheme()) && allowedHost != null && allowedHost.equals(uri.getHost());
         }
 
+        /** État de la voix pour les réglages : moteur, voix actuelle, voix françaises disponibles, vitesse. */
+        @JavascriptInterface
+        public String ttsInfo() {
+            if (!trusted()) return "{}";
+            try {
+                JSONObject o = new JSONObject();
+                o.put("google", googleTts);
+                o.put("ready", tts != null);
+                SharedPreferences vp = getSharedPreferences("syrius_voice", MODE_PRIVATE);
+                o.put("rate", vp.getFloat("rate", 1.05f));
+                android.speech.tts.Voice cur = tts == null ? null : tts.getVoice();
+                o.put("current", cur == null ? "" : cur.getName());
+                org.json.JSONArray list = new org.json.JSONArray();
+                int n = 0;
+                for (android.speech.tts.Voice v : frenchVoices()) {
+                    if (n++ >= 14) break;
+                    String q = v.getQuality() >= 500 ? "très haute" : v.getQuality() >= 400 ? "haute"
+                            : v.getQuality() >= 300 ? "normale" : "basse";
+                    String country = v.getLocale().getDisplayCountry(Locale.FRENCH);
+                    list.put(new JSONObject().put("name", v.getName())
+                            .put("label", "Voix " + n + " · " + (country.isEmpty() ? "français" : country) + " · qualité " + q
+                                    + (v.isNetworkConnectionRequired() ? " · en ligne" : " · sur le téléphone")));
+                }
+                o.put("voices", list);
+                return o.toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
+        @JavascriptInterface
+        public String ttsSetVoice(String name) {
+            if (name == null || !trusted() || tts == null) return "Refusé";
+            for (android.speech.tts.Voice v : frenchVoices()) {
+                if (v.getName().equals(name)) {
+                    tts.setVoice(v);
+                    getSharedPreferences("syrius_voice", MODE_PRIVATE).edit().putString("voice", name).apply();
+                    return "ok";
+                }
+            }
+            return "Voix introuvable";
+        }
+
+        @JavascriptInterface
+        public void ttsSetRate(float rate) {
+            if (!trusted() || tts == null || Float.isNaN(rate)) return;
+            float r = Math.max(0.7f, Math.min(1.5f, rate));
+            tts.setSpeechRate(r);
+            getSharedPreferences("syrius_voice", MODE_PRIVATE).edit().putFloat("rate", r).apply();
+        }
+
+        /** Ouvre les réglages « Synthèse vocale » d'Android (choix du moteur, téléchargement des voix). */
+        @JavascriptInterface
+        public String ttsOpenSettings() {
+            if (!trusted()) return "Refusé";
+            try {
+                startActivity(new Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return "ok";
+            } catch (Exception e) {
+                try {
+                    startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    return "ok";
+                } catch (Exception e2) {
+                    return "Impossible d'ouvrir les réglages";
+                }
+            }
+        }
+
+        /** Ouvre la page Play Store de « Synthèse vocale Google » (voix neuronales, gratuites). */
+        @JavascriptInterface
+        public String ttsInstallGoogle() {
+            if (!trusted()) return "Refusé";
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + GOOGLE_TTS))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return "ok";
+            } catch (Exception e) {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("https://play.google.com/store/apps/details?id=" + GOOGLE_TTS))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    return "ok";
+                } catch (Exception e2) {
+                    return "Impossible d'ouvrir le Play Store";
+                }
+            }
+        }
+
+        /** Préchauffe notre IA (chargement du modèle) pour que le premier ordre soit instantané. */
+        @JavascriptInterface
+        public void syriusWarmUp() {
+            if (trusted() && syrius != null) syrius.warmUp();
+        }
+
         @JavascriptInterface
         public void speak(String text) {
             if (text == null || !trusted() || tts == null) return;
@@ -530,7 +673,7 @@ public class MainActivity extends Activity {
         /** Fonctions disponibles dans cette version de l'application. */
         @JavascriptInterface
         public String features() {
-            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\",\"music\",\"vision\",\"imagegen\"]";
+            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\",\"music\",\"vision\",\"imagegen\",\"voicepick\",\"warmup\"]";
         }
 
         @JavascriptInterface
@@ -879,6 +1022,13 @@ public class MainActivity extends Activity {
     @Override
     public void onBackPressed() {  // Android 12 et moins
         goBack();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Retour des réglages ou du Play Store : si le moteur Google vient d'être installé, on s'en sert aussitôt.
+        if (tts != null && !googleTts && packageInstalled(GOOGLE_TTS)) initTts();
     }
 
     @Override
