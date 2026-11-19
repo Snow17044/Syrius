@@ -9,11 +9,9 @@ const ASSOCIATION = {
     "Nouvel Élan est un mouvement politique de jeunes qui veulent faire bouger les choses. " +
     "Débats, actions de terrain, propositions : rejoins le mouvement !",
   reseaux: [
-    // Remplace les liens ci-dessous par les vrais comptes (ou supprime une ligne).
-    { nom: "Instagram", icone: "📸", lien: "https://www.instagram.com/" },
-    { nom: "TikTok", icone: "🎵", lien: "https://www.tiktok.com/" },
-    { nom: "X (Twitter)", icone: "✖️", lien: "https://x.com/" },
-    { nom: "Nous écrire", icone: "✉️", lien: "mailto:contact@exemple.fr" },
+    { nom: "Instagram — @nouvelelan.fr", icone: "📸", lien: "https://www.instagram.com/nouvelelan.fr/" },
+    // Ajouter ici les autres comptes quand ils existent, par ex. :
+    // { nom: "TikTok", icone: "🎵", lien: "https://www.tiktok.com/@…" },
   ],
 };
 // ─────────────────────────────────────────────────────────────
@@ -22,7 +20,7 @@ const $ = (s) => document.querySelector(s);
 const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso", "rejoindre", "adhesions", "confidentialite"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "15 — 19 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "16 — 19 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
