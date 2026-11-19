@@ -29,3 +29,7 @@ discord-bot/
 server/hfspace.py
 server/github_oidc.py
 server/autogen.py
+server/sitescan.py
+training/eval_gate.py
+training/eval_set.py
+training/eval_model.py

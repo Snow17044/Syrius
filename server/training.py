@@ -109,7 +109,7 @@ def report(base, event: dict) -> None:
         raise TrainingError("événement invalide")
     rid = str(event.get("run", ""))
     kind = event.get("type")
-    if not _RUN_ID.match(rid) or kind not in ("start", "step", "test", "done", "error"):
+    if not _RUN_ID.match(rid) or kind not in ("start", "step", "test", "eval", "done", "error"):
         raise TrainingError("événement invalide")
     items = runs(base)
     run = next((r for r in items if r.get("id") == rid), None)
@@ -136,6 +136,12 @@ def report(base, event: dict) -> None:
         run["tests"].append({"phase": phase, "q": _txt(event.get("q"), 300), "a": _txt(event.get("a"), 900)})
         run["tests"] = run["tests"][-24:]
         run["phase"] = "Essais " + ("avant" if phase == "avant" else "après") + " entraînement"
+    elif kind == "eval":
+        total = int(_num(event.get("total"), 1, 1000) or 0)
+        passed = int(_num(event.get("passed"), 0, 1000) or 0)
+        if total and passed <= total:
+            run["eval"] = {"passed": passed, "total": total}
+            run["phase"] = f"Contrôle qualité : {passed}/{total} ({round(100 * passed / total)} %)"
     elif kind == "done":
         run["status"] = "done"
         run["examples_hash"] = examples_hash(base)

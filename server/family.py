@@ -325,6 +325,11 @@ def member_exists(base, uid: str) -> bool:
 GUEST = contextvars.ContextVar("syrius_guest", default=False)
 
 
+def is_owner() -> bool:
+    """Vrai pour le propriétaire connecté (pas un proche, pas un invité)."""
+    return not GUEST.get() and CURRENT.get() == OWNER
+
+
 def email_allowed(cfg) -> bool:
     """Les proches n'ont accès qu'à LEUR boîte (Gmail connecté par chacun) ; une boîte configurée sur le
     serveur (IMAP / Outlook) est celle du propriétaire et lui reste réservée. Pas d'emails pour les tests."""

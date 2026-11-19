@@ -371,6 +371,10 @@ details { margin-top: 6px; }
 details summary { cursor: pointer; color: var(--text-2); padding: 8px 0; }
 details input { margin-top: 8px; }
 #memory-list { list-style: none; padding: 0; margin: 0; }
+.sev-haute { color: var(--danger, #f08a8a); }
+.sev-moyenne { color: #ffb86b; }
+.sev-faible { color: #f1d27a; }
+.sev-info { color: var(--muted); }
 .inline-form { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 .inline-form input { flex: 1; min-width: 0; }
 #memory-list li { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 8px 0; font-size: .9rem; }

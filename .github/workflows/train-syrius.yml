@@ -61,6 +61,13 @@ jobs:
           .venv/bin/python training/train.py --model "${{ inputs.model || 'Qwen/Qwen2.5-0.5B-Instruct' }}" \
             --minutes "${{ inputs.minutes || '290' }}" --out build/syrius
 
+      - name: Contrôle qualité du nouveau modèle
+        if: steps.check.outputs.go == 'true'
+        continue-on-error: true  # s'il plante, le modèle n'a pas de contrôle : la conversion automatique le refusera
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: .venv/bin/python training/eval_model.py build/syrius
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.check.outputs.go == 'true'
         with:
