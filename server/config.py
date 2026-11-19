@@ -94,6 +94,9 @@ class Config:
 
     # Premier mot de passe : code choisi dans Vercel, demandé une seule fois au premier lancement.
     setup_code: str = field(default_factory=lambda: _env("SYRIUS_SETUP_CODE"))
+    # Code de secours (facultatif) : permet de réinitialiser le mot de passe du propriétaire depuis /reinitialiser.
+    # Absent ou trop court (< 12 caractères) = réinitialisation désactivée. À supprimer après usage.
+    reset_code: str = field(default_factory=lambda: _env("SYRIUS_RESET_CODE"))
     # Cookies "Secure" : obligatoire en production (HTTPS). Désactivable seulement en local.
     cookie_secure: bool = field(default_factory=lambda: _bool("SYRIUS_COOKIE_SECURE", True))
     session_days: int = field(default_factory=lambda: int(_env("SYRIUS_SESSION_DAYS", "30")))
