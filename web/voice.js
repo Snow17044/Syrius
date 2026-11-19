@@ -28,7 +28,7 @@
   function clean(text) {
     return String(text || "").replace(/```[\s\S]*?```/g, " ").replace(/\p{Extended_Pictographic}|\uFE0F/gu, "")
       .replace(/[`*#>_\[\]()|]/g, "")
-      .replace(/https?:\/\/\S+/g, "lien").replace(/\s+/g, " ").trim().slice(0, 1500);
+      .replace(/https?:\/\/\S+/g, "lien").replace(/\s+/g, " ").trim().slice(0, 6000);
   }
 
   // ---------------------------------------------------------------- écoute (une phrase)

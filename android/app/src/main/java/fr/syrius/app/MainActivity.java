@@ -397,6 +397,30 @@ public class MainActivity extends Activity {
 
     private static final String GOOGLE_TTS = "com.google.android.tts";
 
+    /** Découpe un long texte en morceaux d'au plus `max` caractères, de préférence à la fin d'une phrase. */
+    static java.util.List<String> splitForSpeech(String text, int max) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        String rest = text.trim();
+        while (rest.length() > max) {
+            int cut = -1;
+            for (int i = max; i > max / 2; i--) {
+                char c = rest.charAt(i - 1);
+                if ((c == '.' || c == '!' || c == '?' || c == '\n') && (i == rest.length() || Character.isWhitespace(rest.charAt(i)))) {
+                    cut = i;
+                    break;
+                }
+            }
+            if (cut < 0) {  // pas de fin de phrase : on coupe à un espace
+                cut = rest.lastIndexOf(' ', max);
+                if (cut <= max / 2) cut = max;
+            }
+            out.add(rest.substring(0, cut).trim());
+            rest = rest.substring(cut).trim();
+        }
+        if (!rest.isEmpty() || out.isEmpty()) out.add(rest);
+        return out;
+    }
+
     private boolean packageInstalled(String pkg) {
         try {
             getPackageManager().getPackageInfo(pkg, 0);
@@ -425,6 +449,7 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onDone(String id) {
+                    if ("syrius-part".equals(id)) return;  // il reste des morceaux à lire
                     sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
                 }
 
@@ -634,8 +659,14 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void speak(String text) {
             if (text == null || !trusted() || tts == null) return;
-            String t = text.length() > 3000 ? text.substring(0, 3000) : text;
-            tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, "syrius");
+            String t = text.length() > 8000 ? text.substring(0, 8000) : text;
+            // Android refuse un texte trop long d'un coup (≈ 4 000 caractères) : on lit les longues réponses en morceaux,
+            // à la suite. Seul le dernier morceau (« syrius ») prévient la page que Syrius a fini de parler.
+            java.util.List<String> parts = splitForSpeech(t, Math.max(500, Math.min(3500, TextToSpeech.getMaxSpeechInputLength() - 100)));
+            for (int i = 0; i < parts.size(); i++) {
+                tts.speak(parts.get(i), i == 0 ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD, null,
+                        i == parts.size() - 1 ? "syrius" : "syrius-part");
+            }
         }
 
         /** Garde l'écran allumé pendant le mode conversation. */
