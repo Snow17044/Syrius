@@ -41,7 +41,7 @@ function watchMsg(el) {
   }).observe(el, { childList: true, characterData: true, subtree: true });
 }
 document.addEventListener("DOMContentLoaded", () => {
-  ["#local-status", "#wake-status", "#wake-learn-msg", "#briefing-msg", "#google-msg", "#outlook-msg",
+  ["#local-status", "#wake-status", "#wake-learn-msg", "#briefing-msg",
     "#settings-msg", "#pw-msg", "#family-msg", "#del-msg", "#dc-msg", "#dc-space-msg"].forEach((q) => watchMsg($(q)));
   document.querySelectorAll(".pack-status").forEach(watchMsg);
 });
@@ -1313,7 +1313,6 @@ async function sendMessage(text) {
         if (ev.type === "text") { view.text += ev.text; repaint(); }
         else if (ev.type === "text_replace") { view.text = String(ev.text || ""); repaint(); }
         else if (ev.type === "tool") { tools.push(ev.label); setTools(view, [...new Set(tools)]); scrollDown(); }
-        else if (ev.type === "action") { placeCard(view, actionCard(ev)); scrollDown(); }
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
         else if (ev.type === "map") { addMapCard(view, ev); if (window.SyriusHUD) window.SyriusHUD.show(ev); }
         else if (ev.type === "diagram") { addDiagramCard(view, ev); if (window.SyriusHolo) window.SyriusHolo.show(ev); }
@@ -1640,26 +1639,6 @@ function callCard(view, ev) {
   placeCard(view, card);
 }
 
-function actionCard(ev) {
-  const node = $("#tpl-action").content.firstElementChild.cloneNode(true);
-  node.querySelector(".a-to").textContent = ev.to;
-  node.querySelector(".a-subject").textContent = ev.subject;
-  node.querySelector(".a-body").textContent = ev.body;
-  const status = node.querySelector(".a-status");
-  const buttons = node.querySelectorAll(".action-buttons button");
-  const finish = (msg) => { buttons.forEach((b) => b.remove()); setMsg(status, msg); };
-  node.querySelector(".a-send").addEventListener("click", async () => {
-    buttons.forEach((b) => { b.disabled = true; });
-    try { await api(`/api/actions/${ev.id}/confirm`, { method: "POST" }); finish("✅ Email envoyé."); }
-    catch (err) { setMsg(status, "⚠ " + err.message); buttons.forEach((b) => { b.disabled = false; }); }
-  });
-  node.querySelector(".a-cancel").addEventListener("click", async () => {
-    try { await api(`/api/actions/${ev.id}/cancel`, { method: "POST" }); } catch (_) { /* ignore */ }
-    finish("Annulé.");
-  });
-  return node;
-}
-
 // ------------------------------------------------------------------ état du réseau (en-tête)
 function updateNetStatus() {
   const off = state.offline || !navigator.onLine;
@@ -1956,14 +1935,6 @@ $("#open-settings").addEventListener("click", async () => {
   $("#s-voice").checked = !!s.voice_reply;
   $("#s-location").checked = s.location !== false;
   await renderBrains(s);
-  $("#outlook-box").classList.toggle("hidden", !s.outlook);
-  $("#google-box").classList.toggle("hidden", !s.google);
-  $("#google-connect").textContent = s.google_connected ? "Reconnecter Gmail" : "Connecter Gmail";
-  $("#google-msg").textContent = s.google_connected ? "✅ Gmail est connecté." : "";
-  $("#outlook-msg").textContent = "";
-  $("#s-email").textContent = s.email_enabled
-    ? "✅ Boîte mail connectée (lecture seule ; chaque envoi demande ta confirmation)."
-    : "Non configurés. Voir le guide d'installation (README, section Emails).";
   $("#settings-msg").textContent = "";
   await renderFamily(s.account);
   await renderMemories();
@@ -2074,37 +2045,6 @@ async function renderMemories() {
     ul.appendChild(li);
   }
 }
-
-$("#google-connect").addEventListener("click", async () => {
-  const msg = $("#google-msg");
-  try {
-    const { url } = await api("/api/email/google/start", { method: "POST" });
-    msg.textContent = "La page de Google s'ouvre : connecte-toi, accepte, puis reviens ici et rouvre les réglages.";
-    // Dans l'application Android, ce lien s'ouvre dans le navigateur du téléphone (Google l'exige).
-    if (Native) location.href = url; else window.open(url, "_blank", "noopener");
-  } catch (err) { msg.textContent = "⚠ " + err.message; }
-});
-
-$("#outlook-connect").addEventListener("click", async () => {
-  const msg = $("#outlook-msg");
-  try {
-    const info = await api("/api/email/outlook/start", { method: "POST" });
-    msg.replaceChildren();
-    msg.append("Ouvre ");
-    const a = document.createElement("a");
-    a.href = info.verification_uri; a.target = "_blank"; a.rel = "noopener noreferrer";
-    a.textContent = info.verification_uri;
-    const b = document.createElement("b");
-    b.textContent = info.user_code;
-    msg.append(a, " et entre le code ", b, ". J'attends ta validation…");
-    const timer = setInterval(async () => {
-      try {
-        const r = await api("/api/email/outlook/poll", { method: "POST" });
-        if (r.status === "ok") { clearInterval(timer); msg.textContent = "✅ Outlook connecté."; }
-      } catch (err) { clearInterval(timer); msg.textContent = "⚠ " + err.message; }
-    }, Math.max(5, info.interval || 5) * 1000);
-  } catch (err) { msg.textContent = "⚠ " + err.message; }
-});
 
 $("#settings-save").addEventListener("click", async () => {
   try {

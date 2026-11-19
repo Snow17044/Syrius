@@ -91,7 +91,16 @@
         <div class="c-page">
           <h2 data-icon="mail"><span>Emails pro</span></h2>
           <p class="muted small">Aurore trie, résume et prépare des brouillons de réponse. Elle n'envoie jamais rien toute seule :
-            tu confirmes toi-même. Les emails se connectent dans l'application Syrius (Réglages → Services).</p>
+            chaque envoi demande ta confirmation. Les emails ne sont plus dans l'application Syrius : ils se gèrent ici, par toi seul.</p>
+          <div class="c-card c-site">
+            <strong>Ma boîte mail</strong>
+            <span id="c-mail-status" class="small muted"></span>
+            <div class="c-actions">
+              <button type="button" id="c-google-connect" class="ghost hidden" data-icon="mail"><span>Connecter Gmail</span></button>
+              <button type="button" id="c-outlook-connect" class="ghost hidden" data-icon="mail"><span>Connecter Outlook / Hotmail</span></button>
+            </div>
+            <p id="c-mail-msg" class="small"></p>
+          </div>
           <div id="c-mail-starters" class="c-chips"></div>
         </div>
       </section>

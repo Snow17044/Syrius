@@ -377,7 +377,8 @@ class Agent:
                     result, is_error, ui_event = "Limite de pages web atteinte pour cette réponse.", True, None
                 else:
                     result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
-                                                                         {"location": location, "untrusted": untrusted_seen})
+                                                                         {"location": location, "untrusted": untrusted_seen,
+                                                                          "profile": profile})
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:
