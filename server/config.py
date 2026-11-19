@@ -44,8 +44,7 @@ class Config:
                               or _env("GROQ"))
     groq_model: str = field(default_factory=lambda: _env("SYRIUS_GROQ_MODEL", "openai/gpt-oss-120b"))
     groq_backup_models: list = field(default_factory=lambda: [
-        m.strip() for m in _env("SYRIUS_GROQ_MODELS", "llama-3.3-70b-versatile,qwen/qwen3-32b,"
-                                "openai/gpt-oss-20b").split(",")
+        m.strip() for m in _env("SYRIUS_GROQ_MODELS", "openai/gpt-oss-20b").split(",")  # Llama 3.3 et Qwen3 32B : retirés par Groq
         if m.strip()][:6])
     # Mistral (modèles open source, offre gratuite « Experiment ») : cerveau principal s'il est configuré.
     mistral_api_key: str = field(default_factory=lambda: _env("MISTRAL_API_KEY") or _env("MISTRAL_KEY")

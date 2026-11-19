@@ -184,6 +184,7 @@ class Agent:
         self.executor = ToolExecutor(cfg, db)
 
     def brains(self) -> list[dict]:
+        self.llm.prune_groq()  # les modèles Groq supprimés disparaissent de la liste
         return [{"name": p.name, "label": p.label, "model": p.model} for p in self.llm.providers
                 if not getattr(p, "photos_only", False) and not getattr(p, "coding_only", False)]  # le code = Syrius Code
 
