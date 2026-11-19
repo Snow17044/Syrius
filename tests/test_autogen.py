@@ -8,6 +8,21 @@ from tests.conftest import H, login
 from tests.test_github_oidc import KEYS, token
 
 
+def fake_llm(lot, verdict=None, judge_down=False):
+    """Faux fournisseur : écrit le lot ; en relecteur, juge chaque exemple (par défaut : tous justes)."""
+    import re
+
+    def ask(p, prompt, *a, **k):
+        if prompt.startswith(autogen._JUDGE[:40]):
+            if judge_down:
+                raise OSError("relecteur injoignable")
+            ids = [int(x) for x in re.findall(r"(?m)^### (\d+)", prompt)]
+            qs = re.findall(r"(?m)^Question : (.*)$", prompt)
+            return json.dumps([{"i": i, "ok": (verdict(qs[i]) if verdict else True), "why": "fait faux"} for i in ids])
+        return json.dumps(lot)
+    return ask
+
+
 def call(name, args):
     return "C'est parti.\n<tool_call>\n" + json.dumps({"name": name, "arguments": args}) + "\n</tool_call>"
 
@@ -31,7 +46,7 @@ def test_lot_cree_et_stocke(make_client, monkeypatch):
     lot = [{"q": "Capitale de l'Italie ?", "a": "Rome !"}, {"q": "capitale de l'italie", "a": "Rome."},
            {"q": "Mets un minuteur de 2 minutes", "a": call("phone_timer", {"seconds": 120})},
            {"q": "Lampe", "a": call("phone_flashlight", {"on": "oui"})}]
-    monkeypatch.setattr(autogen, "_ask", lambda p, prompt: json.dumps(lot))
+    monkeypatch.setattr(autogen, "_ask", fake_llm(lot))
     owner.fake.providers[0].name = "groq"
     monkeypatch.setattr(github_oidc, "_jwks", lambda: KEYS)
     monkeypatch.setattr(github_oidc.time, "time", lambda: 1500)
@@ -72,10 +87,51 @@ def test_raison_du_refus_donnee():
 def test_theme_choisi_et_raisons_comptees(monkeypatch):
     items = [{"q": "Un poème sur la mer", "a": "La mer chante, la mer danse."},
              {"q": "Mauvais", "a": "<tool_call>{oops}</tool_call>"}]
-    monkeypatch.setattr(autogen, "_ask", lambda p, prompt: json.dumps(items))
+    monkeypatch.setattr(autogen, "_ask", fake_llm(items))
 
     class P:
         label, model, base_url, api_key = "Test", "m", "http://x", ""
     res = autogen.generate([P()], theme_index=3)
     assert res["theme"] == autogen.THEMES[3][0]
     assert len(res["kept"]) == 1 and res["reasons"] == {"action illisible": 1}
+
+
+class P:
+    label, model, base_url, api_key = "Test", "m", "http://x", ""
+
+
+def test_le_relecteur_ecarte_les_faits_faux(monkeypatch):
+    lot = [{"q": "Capitale de l'Australie ?", "a": "C'est Sydney."}, {"q": "Capitale de l'Italie ?", "a": "C'est Rome."},
+           {"q": "Mets un minuteur de 5 minutes", "a": call("phone_timer", {"seconds": 300})}]
+    monkeypatch.setattr(autogen, "_ask", fake_llm(lot, verdict=lambda q: "Australie" not in q))
+    res = autogen.generate([P()], theme_index=1)
+    assert [it["q"] for it in res["kept"]] == ["Capitale de l'Italie ?", "Mets un minuteur de 5 minutes"]
+    assert res["judge"] == "Test" and any(k.startswith("relecteur : ") for k in res["reasons"])
+
+
+def test_sans_relecteur_seules_les_actions_verifiees_sont_gardees(monkeypatch):
+    lot = [{"q": "Capitale de l'Italie ?", "a": "C'est Rome."},
+           {"q": "Mets un minuteur de 5 minutes", "a": call("phone_timer", {"seconds": 300})}]
+    monkeypatch.setattr(autogen, "_ask", fake_llm(lot, judge_down=True))
+    res = autogen.generate([P()], theme_index=1)
+    assert [it["q"] for it in res["kept"]] == ["Mets un minuteur de 5 minutes"] and res["judge"] == ""
+    assert "pas de relecteur : réponse libre écartée" in res["reasons"]
+
+
+def test_le_relecteur_est_une_autre_ia_si_possible(monkeypatch):
+    seen = []
+
+    def ask(p, prompt, *a, **k):
+        seen.append((p.label, prompt.startswith(autogen._JUDGE[:40])))
+        return json.dumps([{"q": "Capitale de l'Italie ?", "a": "Rome."}]) if not seen[-1][1] else '[{"i": 0, "ok": true}]'
+    monkeypatch.setattr(autogen, "_ask", ask)
+
+    class A(P):
+        label = "A"
+
+    class B(P):
+        label = "B"
+    res = autogen.generate([A(), B()], theme_index=1, seed=1)
+    gen = next(lbl for lbl, j in seen if not j)
+    rel = next(lbl for lbl, j in seen if j)
+    assert gen != rel and res["judge"] == rel

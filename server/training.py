@@ -62,7 +62,10 @@ def examples(base) -> list[dict]:
     return [e for e in _load(base, EXAMPLES_KEY, []) if isinstance(e, dict)]
 
 
-def add_example(base, question: str, answer: str) -> dict:
+SOURCES = ("manuel", "pouce", "correction")
+
+
+def add_example(base, question: str, answer: str, source: str = "manuel") -> dict:
     q, a = " ".join(str(question).split()), str(answer).strip()
     if not 2 <= len(q) <= 500 or not 1 <= len(a) <= 2000:
         raise TrainingError("Question (2 à 500 caractères) et réponse (1 à 2000) obligatoires.")
@@ -71,7 +74,8 @@ def add_example(base, question: str, answer: str) -> dict:
     items = examples(base)
     if len(items) >= MAX_EXAMPLES:
         raise TrainingError(f"Maximum {MAX_EXAMPLES} exemples : supprime-en avant d'en ajouter.")
-    item = {"id": secrets.token_hex(4), "q": q, "a": a, "at": int(time.time())}
+    item = {"id": secrets.token_hex(4), "q": q, "a": a, "at": int(time.time()),
+            "src": source if source in SOURCES else "manuel"}
     items.append(item)
     _save(base, EXAMPLES_KEY, items)
     return item
@@ -171,4 +175,8 @@ def state(base) -> dict:
         if r.get("status") == "running" and time.time() - r.get("updated", 0) > 1800:
             r["status"] = "stale"
             r["phase"] = "Sans nouvelles (interrompu ?)"
-    return {"runs": items[::-1], "examples": examples(base)[::-1], "connected": bool(items)}
+    exs = examples(base)
+    stats = {s: sum(1 for e in exs if e.get("src", "manuel") == s) for s in SOURCES}
+    stats["evals"] = [{"at": r.get("finished") or r.get("updated", 0), "pct": round(100 * r["eval"]["passed"] / r["eval"]["total"])}
+                      for r in items if r.get("eval") and r["eval"].get("total")][-10:]
+    return {"runs": items[::-1], "examples": exs[::-1], "connected": bool(items), "stats": stats}

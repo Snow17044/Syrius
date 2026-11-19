@@ -576,9 +576,9 @@ function addFeedbackButtons(view) {
   };
   const plain = () => view.bubble.children.length === 2 && !view.tools.childElementCount  // ni carte ni image ni action
     && !view.body.querySelector("img, canvas, video, iframe");
-  const send = async (q, a, btn, done) => {
+  const send = async (q, a, btn, done, source) => {
     try {
-      await api("/api/training/examples", { method: "POST", body: JSON.stringify({ question: q.slice(0, 500), answer: a.slice(0, 2000) }) });
+      await api("/api/training/examples", { method: "POST", body: JSON.stringify({ question: q.slice(0, 500), answer: a.slice(0, 2000), source }) });
       up.disabled = down.disabled = true;
       Icons.set(btn, "check", done);
     } catch (err) { alert("Non ajouté : " + err.message); }
@@ -587,13 +587,13 @@ function addFeedbackButtons(view) {
     const q = question(), a = (view.text || "").trim();
     if (!plain()) return alert("Cette réponse contient une action (image, schéma…). Utilise 👎 pour écrire la bonne réponse.");
     if (!q || !a) return;
-    send(q, a, up, "Ajoutée à l'entraînement");
+    send(q, a, up, "Ajoutée à l'entraînement", "pouce");
   });
   down.addEventListener("click", () => {
     const q = question();
     if (!q) return;
     const fix = prompt("Quelle aurait dû être la bonne réponse de Syrius ?\n(elle sera apprise cette nuit)");
-    if (fix && fix.trim()) send(q, fix.trim(), down, "Correction ajoutée");
+    if (fix && fix.trim()) send(q, fix.trim(), down, "Correction ajoutée", "correction");
   });
   view.actions.append(up, down);
 }
@@ -727,6 +727,7 @@ function refreshLocalBox() {
     : i.installed ? "✅ Installée et prête." : "Pas encore installée.";
   $("#local-fallback").checked = l.prefs.fallback;
   $("#local-force").checked = l.prefs.force;
+  $("#local-hybrid").checked = l.prefs.hybrid;
   const packsBusy = refreshPacks();
   clearTimeout(localTimer);
   if ((busy || packsBusy) && $("#settings").open) localTimer = setTimeout(refreshLocalBox, 1500);
@@ -848,10 +849,14 @@ $("#local-delete").addEventListener("click", () => {
 });
 $("#local-fallback").addEventListener("change", (e) => { L().prefs.fallback = e.target.checked; });
 $("#local-force").addEventListener("change", (e) => { L().prefs.force = e.target.checked; });
+$("#local-hybrid").addEventListener("change", (e) => { L().prefs.hybrid = e.target.checked; });
 const L = () => window.SyriusLocal;
-function localWanted() {
+function localWanted(text) {
   const l = L();
-  return !!(l && l.ready() && (l.prefs.force || state.offline || !navigator.onLine));
+  if (!l || !l.ready()) return false;
+  if (l.prefs.force || state.offline || !navigator.onLine) return true;
+  // Avec Internet : les ordres simples vont sur le téléphone (instantané), le reste sur les grandes IA.
+  return !!(text && l.prefs.hybrid && !state.noHybrid && l.syriusReady() && l.isCommand(text));
 }
 
 // ------------------------------------------------------------------ actions de NOTRE IA Syrius (sur le téléphone)
@@ -1039,10 +1044,10 @@ function offlineVisionWanted() {
   return !!(l && l.visionReady() && (l.prefs.force || state.offline || !navigator.onLine));
 }
 
-async function sendLocal(text) {
+async function sendLocal(text, hybrid) {
   $("#input").value = "";
   autoGrow();
-  addMessage("user", text);
+  const userView = addMessage("user", text);
   const view = addMessage("assistant", "");
   scrollDown(true);
   const l = L();
@@ -1063,6 +1068,13 @@ async function sendLocal(text) {
     return;
   }
   await answerLocally(view);
+  // Ordre simple mal compris par la petite IA (aucune action valide) : les grandes IA en ligne reprennent la question.
+  if (hybrid && !/<tool_call>/.test(view.raw || "")) {
+    for (const v of [userView, view]) v.wrap.remove();
+    state.views = (state.views || []).filter((v) => v.wrap.isConnected);
+    state.noHybrid = true;
+    return sendMessage(text);
+  }
 }
 
 async function sendLocalPhoto(text, photo) {
@@ -1222,7 +1234,8 @@ async function sendMessage(text) {
   const photo = state.photo;
   if (photo && !text) text = "Que vois-tu sur cette photo ?";
   if (!text || state.streaming) return;
-  if (localWanted() || (photo && offlineVisionWanted())) {
+  const hybridOnly = !state.offline && navigator.onLine && !(L() && L().prefs.force);
+  if (localWanted(photo ? "" : text) || (photo && offlineVisionWanted())) {
     if (photo) {
       if (!L() || !L().visionReady()) {
         alert("Sans Internet, la photo a besoin de la « Vision hors ligne » : Réglages → IA hors ligne → Télécharger.");
@@ -1230,8 +1243,9 @@ async function sendMessage(text) {
       }
       return sendLocalPhoto(text, photo);
     }
-    return sendLocal(text);
+    return sendLocal(text, hybridOnly);
   }
+  state.noHybrid = false;
   if (!state.convId) {
     const conv = await api("/api/conversations", { method: "POST" });
     state.convId = conv.id;
@@ -2234,6 +2248,10 @@ function renderTraining(d) {
   badge.textContent = run ? labels[run.status] || run.status : "Aucun entraînement suivi";
   badge.className = "t-badge " + (run ? run.status : "none");
   $("#t-phase").textContent = run ? run.phase || "" : "Branche le suivi en direct (en bas) pour voir le prochain.";
+  const st = d.stats || {};
+  const ev = (st.evals || []).map((e) => e.pct + " %");
+  $("#t-stats").textContent = `Ce que tu lui as appris : ${st.pouce || 0} réponse(s) validée(s) 👍, ${st.correction || 0} correction(s) 👎, ` +
+    `${st.manuel || 0} exemple(s) écrit(s). Notes du contrôle qualité : ${ev.length ? ev.join(" → ") : "pas encore de note"}.`;
   const pts = run?.points || [];
   const step = pts.length ? pts[pts.length - 1][0] : 0;
   const total = run?.steps_total || 0;

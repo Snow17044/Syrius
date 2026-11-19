@@ -22,7 +22,8 @@ for i in range(n):
         continue
     total_added += res.get("added", 0)
     print(f"Lot {i + 1} « {res.get('theme', '')[:50]} » : {res.get('added', 0)} gardés, "
-          f"{res.get('rejected', 0)} refusés {res.get('provider', '')} {res.get('error', '')}")
+          f"{res.get('rejected', 0)} refusés {res.get('provider', '')} (relu par {res.get('judge') or 'personne'}) "
+          f"{res.get('error', '')}")
     for why, k in (res.get("reasons") or {}).items():
         print(f"    refusé ×{k} : {why}")
         why_total[why] = why_total.get(why, 0) + k

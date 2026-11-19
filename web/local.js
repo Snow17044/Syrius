@@ -34,7 +34,34 @@
     set fallback(v) { try { localStorage.setItem("syrius:local:fallback", v ? "1" : "0"); } catch (_) { /* */ } },
     get force() { try { return localStorage.getItem("syrius:local:force") === "1"; } catch (_) { return false; } },
     set force(v) { try { localStorage.setItem("syrius:local:force", v ? "1" : "0"); } catch (_) { /* */ } },
+    // Ordres simples (minuteur, rappel, lampe…) traités par l'IA du téléphone, même avec Internet : plus rapide.
+    get hybrid() { try { return localStorage.getItem("syrius:local:hybrid") !== "0"; } catch (_) { return true; } },
+    set hybrid(v) { try { localStorage.setItem("syrius:local:hybrid", v ? "1" : "0"); } catch (_) { /* */ } },
   };
+
+  // Répartition du travail : l'IA du téléphone est bonne pour AGIR (ordres courts), les grandes IA en ligne pour SAVOIR.
+  const CMD = [
+    /\b(minuteur|compte à rebours|chrono(mètre)?)\b/,
+    /\b(réveil|réveille[- ]moi|alarme)\b/,
+    /\b(rappelle[- ]moi|fais[- ]moi penser|n'oublie pas de me)\b/,
+    /\b(allume|éteins|éteint|active|désactive|coupe)\b.*\b(lampe|torche|flash|lumière)\b/,
+    /\b(lampe torche|lampe de poche)\b/,
+    /\bvolume\b/,
+    /^(appelle|téléphone à|passe un appel)\b/,
+    /\b(envoie|écris)\b.*\b(sms|texto|message)\b/,
+    /^(joue|mets|lance)\b.*\b(musique|chanson|morceau|playlist|album)\b/,
+    /^joue\b/,
+    /^(ouvre|lance)\b/,
+    /\b(emmène[- ]moi|itinéraire|navigue|guide[- ]moi)\b/,
+    /\b(ajoute|crée|note)\b.*\b(rendez-vous|rdv|événement|agenda|calendrier)\b/,
+    /^(retiens|souviens[- ]toi|note que)\b/,
+  ];
+  const NOT_CMD = /\b(pourquoi|comment (fonctionne|ça marche)|qu'est-ce|combien|c'est quoi|explique|qui est|quand a|quel(le)?s? est)\b/;
+  function isCommand(text) {
+    const t = String(text || "").toLowerCase().replace(/^(hey |ok )?syrius[ ,:!-]*/, "").trim();
+    if (!t || t.length > 120 || NOT_CMD.test(t)) return false;
+    return CMD.some((rx) => rx.test(t));
+  }
 
   // NOTRE IA Syrius (entraînée pour Syrius : caractère, outils). Même consigne que pendant son entraînement.
   const JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
@@ -187,6 +214,6 @@
     if (done) { pending.delete(id); p.resolve(p.text); }
   }
 
-  window.SyriusLocal = { available, info, ready, prefs, chat, stop, _chunk, packs, visionReady, imageReady, syriusReady,
+  window.SyriusLocal = { available, info, ready, prefs, chat, stop, _chunk, packs, visionReady, imageReady, syriusReady, isCommand,
     askPhoto, wantsImage, imagePrompt, makeImage, saveImage, _image };
 })();
