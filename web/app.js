@@ -540,7 +540,14 @@ function addMessage(role, text) {
   renderText(view, role);
   state.views = (state.views || []).filter((v) => v.wrap.isConnected);
   state.views.push(view);
-  if (role === "assistant") { addReportButton(view); addFeedbackButtons(view); }
+  if (role === "assistant") {
+    // Boutons sur une ligne À PART sous la réponse (jamais à côté : ils écraseraient le texte).
+    view.actions = document.createElement("div");
+    view.actions.className = "msg-actions";
+    wrap.appendChild(view.actions);
+    addFeedbackButtons(view);
+    addReportButton(view);
+  }
   return view;
 }
 
@@ -548,8 +555,6 @@ function addMessage(role, text) {
 // d'entraînement de la nuit. Les discussions des autres membres de la famille ne servent jamais à entraîner Syrius.
 function addFeedbackButtons(view) {
   if (state.settings?.account?.owner === false || state.offline) return;
-  const bar = document.createElement("div");
-  bar.className = "msg-feedback";
   const mk = (icon, label) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -584,8 +589,7 @@ function addFeedbackButtons(view) {
     const fix = prompt("Quelle aurait dû être la bonne réponse de Syrius ?\n(elle sera apprise cette nuit)");
     if (fix && fix.trim()) send(q, fix.trim(), down, "Correction ajoutée");
   });
-  bar.append(up, down);
-  view.wrap.append(bar);
+  view.actions.append(up, down);
 }
 
 // Signaler une réponse ou une image de l'IA (règle Google Play sur l'IA générative)
@@ -607,7 +611,7 @@ function addReportButton(view) {
       btn.disabled = true;
     } catch (err) { Icons.set(btn, "alert", "⚠ " + err.message); }
   });
-  view.wrap.append(btn);
+  view.actions.append(btn);
 }
 
 function renderText(view, role) {

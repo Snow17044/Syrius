@@ -546,13 +546,13 @@ body.voice-split #voice .voice-hint { display: none; }
 #join-form { display: grid; gap: 12px; }
 .family-list li.diag { flex-direction: column; align-items: flex-start; gap: 2px; }
 .family-list li.diag.ko strong { color: var(--danger, #f08a8a); }
-.msg-report { align-self: flex-start; margin: 2px 0 0 6px; padding: 2px 8px; font-size: .74rem; gap: .35em;
+.msg-report { margin: 0; padding: 2px 8px; font-size: .74rem; gap: .35em;
   background: transparent; border: 0; color: var(--muted); opacity: .55; display: inline-flex; align-items: center; }
 .msg-report:hover, .msg-report:focus-visible { opacity: 1; }
 .msg-report svg { width: 13px; height: 13px; }
-.msg-feedback { display: flex; align-self: flex-start; }
-.msg-feedback .msg-report { margin: 2px 0 0 2px; }
-.msg-feedback .msg-report:disabled { opacity: .9; }
+.msg.assistant { flex-wrap: wrap; }
+.msg-actions { flex: 0 0 100%; display: flex; flex-wrap: wrap; align-items: center; padding-left: 40px; margin-top: -2px; }
+.msg-actions .msg-report:disabled { opacity: .9; }
 #del-box input { margin: 8px 0; }
 
 /* ------------------------------------------------------------------ entraînement de Syrius */
