@@ -14,7 +14,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import bench, edits, mutate, sandbox, tasks
+from . import bench, edits, mutate, sandbox, stub, tasks
 
 OUT = Path(__file__).resolve().parent.parent / "training" / "data" / "coder.jsonl"
 MAX_FILE = 3500
@@ -24,17 +24,27 @@ def bug_examples(projects: dict, n: int, seed: int, avoid: set | None = None) ->
     rng = random.Random(seed)
     avoid, out = avoid or set(), []
     names = sorted(projects)
-    for _ in range(n * 6):
+    for _ in range(n * 25):
         if len(out) >= n:
             break
         name = rng.choice(names)
         files = projects[name]
         src = rng.choice(tasks.source_files(files))
-        m = mutate.mutate(files[src], rng)
-        if not m:
-            continue
-        buggy, good, bad = m
-        fix = mutate.edit_for(buggy, good, bad)
+        kind = "implement" if rng.random() < 0.35 else "bug"
+        if kind == "implement":
+            m = stub.make(files[src], rng)
+            if not m:
+                continue
+            buggy, fname, bad, good = m  # « bad » = fonction vide, « good » = vraie fonction
+            fix = (bad, good)
+            good_line = bad_line = fname
+        else:
+            m = mutate.mutate(files[src], rng)
+            if not m:
+                continue
+            buggy, good, bad = m
+            fix = mutate.edit_for(buggy, good, bad)
+            good_line, bad_line = good, bad
         key = (name, src, bad)
         if fix is None or key in avoid:
             continue
@@ -52,8 +62,11 @@ def bug_examples(projects: dict, n: int, seed: int, avoid: set | None = None) ->
         if not ok:
             continue
         avoid.add(key)
-        explain = f"Le bug est dans {src} : « {bad.strip()[:70]} » est faux, je rétablis « {good.strip()[:70]} »."
-        out.append(tasks.messages(tasks.make_prompt(broken, "Les tests échouent. Corrige le bug avec une modification minimale.", log),
+        if kind == "implement":
+            explain = f"J'implémente `{fname}` dans {src} en suivant ce que les tests attendent."
+        else:
+            explain = f"Le bug est dans {src} : « {bad_line.strip()[:70]} » est faux, je rétablis « {good_line.strip()[:70]} »."
+        out.append(tasks.messages(tasks.make_prompt(broken, tasks.instruction(kind), log),
                                   tasks.answer(explain, [(src, *fix)])))
     return out
 
@@ -112,7 +125,8 @@ TOPICS = ["dates et durées", "mots de passe et validation", "recettes et quanti
 
 def run(ask, out: Path = OUT, bugs: int = 120, projects_n: int = 6, features_per: int = 2, seed: int = 7,
         log=print) -> dict:
-    projects = dict(tasks.SEEDS)
+    projects = {k: v for k, v in tasks.SEEDS.items() if k not in bench.BENCH_ONLY}  # le banc reste inédit
+    bench_tasks = bench.build()
     got_projects = 0
     rng = random.Random(seed)
     for topic in rng.sample(TOPICS, min(projects_n, len(TOPICS))):
@@ -126,8 +140,7 @@ def run(ask, out: Path = OUT, bugs: int = 120, projects_n: int = 6, features_per
             got_projects += 1
         else:
             log(f"projet « {topic} » : refusé (tests ne passent pas)")
-    bench_keys = {(t["project"], t["file"], t["fix"][2].split("\n")[0]) for t in bench.build()}
-    items = bug_examples(projects, bugs, seed + 1)
+    items = bug_examples(projects, bugs, seed + 1, avoid={t["key"] for t in bench_tasks})  # jamais un bug du banc
     feats = 0
     for name, files in sorted(projects.items()):
         for i in range(features_per):
@@ -153,7 +166,7 @@ def run(ask, out: Path = OUT, bugs: int = 120, projects_n: int = 6, features_per
             f.write(json.dumps(x, ensure_ascii=False) + "\n")
     total = len(out.read_text(encoding="utf-8").splitlines()) if out.exists() else 0
     return {"bugs": len(items) - feats, "features": feats, "projects": got_projects, "added": len(fresh),
-            "total": total, "bench_excluded": len(bench_keys)}
+            "total": total, "bench_tasks": len(bench_tasks)}
 
 
 def http_ask():
@@ -175,5 +188,7 @@ def http_ask():
 
 
 if __name__ == "__main__":
-    res = run(http_ask(), bugs=int(sys.argv[1]) if len(sys.argv) > 1 else 120)
+    import time
+    # graine = le jour : de nouveaux bugs chaque nuit (sinon on referait toujours les mêmes exemples)
+    res = run(http_ask(), bugs=int(sys.argv[1]) if len(sys.argv) > 1 else 120, seed=int(time.time() // 86400))
     print(json.dumps(res, ensure_ascii=False))

@@ -42,16 +42,26 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --quiet -r training/requirements.txt pytest
+      - name: Score AVANT entraînement (modèle de départ)
+        if: steps.check.outputs.go == 'true'
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          mkdir -p build
+          .venv/bin/python -m coder.bench_run local "${{ inputs.model || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}" 31 | tee build/bench-avant.json
       - name: Entraînement
         if: steps.check.outputs.go == 'true'
         env:
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
           .venv/bin/python training/train.py --coder --model "${{ inputs.model || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}" \
-            --data training/data/coder.jsonl --max-len 2048 --minutes "${{ inputs.minutes || '240' }}" --out build/coder
+            --data training/data/coder.jsonl --max-len 2048 --epochs 3 --minutes "${{ inputs.minutes || '240' }}" --out build/coder
       - name: Banc d'essai (bugs réels, tests exécutés)
         if: steps.check.outputs.go == 'true'
-        run: .venv/bin/python -m coder.bench_run local build/coder 17 | tee build/coder-bench.json
+        run: .venv/bin/python -m coder.bench_run local build/coder 31 | tee build/bench-apres.json
+          .venv/bin/python -m coder.compare build/bench-avant.json build/bench-apres.json | tee build/verdict.txt || true
+          { echo "## IA programmeuse"; cat build/verdict.txt; } >> "$GITHUB_STEP_SUMMARY"
+          gh release upload coder-data build/bench-apres.json build/verdict.txt --clobber || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.check.outputs.go == 'true'
         with:

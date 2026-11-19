@@ -163,3 +163,45 @@ def test_point_d_acces_serveur(make_client, monkeypatch):
     monkeypatch.setattr(coderask, "DAILY_BUDGET", 1)
     assert worker.post("/api/training/worker/coder-ask", headers=W, json={"prompt": "Écris une fonction."}).status_code == 429
     assert worker.post("/api/training/worker/coder-ask", headers=W, json={"prompt": "court"}).status_code == 422
+
+
+def test_taches_implemente_et_banc_plus_large():
+    ts = bench.build()
+    kinds = {t["kind"] for t in ts}
+    assert kinds == {"bug", "implement"} and len(ts) >= 25
+    imp = next(t for t in ts if t["kind"] == "implement")
+    assert "NotImplementedError" in imp["files"][imp["file"]] and "Implémente" in tasks.make_prompt(
+        imp["files"], tasks.instruction("implement"), imp["failing"])
+    assert all(bench.solve(t, oracle(t))[0] for t in ts)
+    r = bench.run(lambda s, p: "rien", limit=6)
+    assert r["n"] == 6 and r["version"] == bench.BENCH_VERSION and len({f["project"] for f in r["fails"]}) >= 2  # réparti
+
+
+def test_le_banc_reste_inedit(tmp_path):
+    bench_keys = {t["key"] for t in bench.build()}
+    r = make_data.run(lambda s, p: "x", out=tmp_path / "c.jsonl", bugs=60, projects_n=0, features_per=0,
+                      log=lambda *_: None)
+    assert r["added"] >= 30
+    text = (tmp_path / "c.jsonl").read_text()
+    for proj in bench.BENCH_ONLY:  # projets réservés au banc : jamais dans l'entraînement
+        for t in bench.build():
+            if t["project"] == proj:
+                assert t["files"][t["file"]] not in text
+    ex = make_data.bug_examples({k: v for k, v in tasks.SEEDS.items() if k not in bench.BENCH_ONLY}, 40, 5, avoid=set(bench_keys))
+    assert len(ex) >= 25  # les bugs possibles de 5 petits projets sont en nombre limité
+
+
+def test_graines_differentes_donnent_de_nouveaux_exemples(tmp_path):
+    out = tmp_path / "c.jsonl"
+    a = make_data.run(lambda s, p: "x", out=out, bugs=20, projects_n=0, features_per=0, seed=1, log=lambda *_: None)
+    b = make_data.run(lambda s, p: "x", out=out, bugs=20, projects_n=0, features_per=0, seed=2, log=lambda *_: None)
+    assert b["added"] >= 5 and b["total"] == a["total"] + b["added"]
+
+
+def test_comparaison_avant_apres():
+    from coder import compare
+    av = {"version": 2, "score": 0.20, "passed": 6, "n": 31}
+    assert compare.verdict(av, {**av, "score": 0.40, "passed": 12})[0]
+    assert not compare.verdict(av, {**av, "score": 0.22})[0]  # gain trop faible
+    assert "Moins bon" in compare.verdict(av, {**av, "score": 0.1})[1]
+    assert not compare.verdict(av, {**av, "version": 3, "score": 0.9})[0]  # banc différent

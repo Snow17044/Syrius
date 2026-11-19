@@ -144,12 +144,25 @@ def test_second_largest():
 }
 
 
+from .seeds_more import MORE  # noqa: E402
+
+SEEDS.update(MORE)
+
+
 def source_files(files: dict) -> list[str]:
     return sorted(p for p in files if p.endswith(".py") and not p.split("/")[-1].startswith("test_"))
 
 
 def render_files(files: dict, only: list[str] | None = None) -> str:
     return "\n\n".join(f"### {p}\n```python\n{files[p].rstrip()}\n```" for p in (only or sorted(files)))
+
+
+INSTRUCTIONS = {"bug": "Les tests échouent. Corrige le bug avec une modification minimale.",
+                "implement": "Implémente la fonction qui est vide (raise NotImplementedError) pour que les tests passent."}
+
+
+def instruction(kind: str) -> str:
+    return INSTRUCTIONS.get(kind, INSTRUCTIONS["bug"])
 
 
 def make_prompt(files: dict, instruction: str, failing: str = "") -> str:
