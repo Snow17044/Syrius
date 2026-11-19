@@ -19,7 +19,7 @@
       <button class="entete-logo-btn" data-aller="accueil" aria-label="Retour à l'accueil">
         <img src="/icons/logo.png" alt="Nouvel Élan" class="entete-logo">
       </button>
-      <a class="entete-rejoindre" id="btn-rejoindre-entete" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
+      <a class="entete-rejoindre" id="btn-rejoindre-entete" href="#rejoindre" data-aller="rejoindre">Nous rejoindre</a>
     </div>
     <!-- Rubriques, comme dans un journal : on choisit ce qu'on veut voir -->
     <nav class="rubriques" id="rubriques" aria-label="Rubriques"></nav>
@@ -35,7 +35,7 @@
         <p id="banniere-texte">Découvre nos propositions et rejoins celles et ceux qui veulent changer les choses.</p>
         <div class="banniere-actions">
           <button class="btn-blanc" data-aller="programme" type="button">Découvrir notre programme</button>
-          <a class="btn-contour" id="btn-rejoindre-accueil" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
+          <a class="btn-contour" id="btn-rejoindre-accueil" href="#rejoindre" data-aller="rejoindre">Nous rejoindre</a>
         </div>
       </div>
 
@@ -80,7 +80,7 @@
         </div>
         <div id="programme-axes" class="axes-liste"></div>
         <div class="programme-actions">
-          <a class="btn-principal lien-bouton" id="btn-rejoindre-programme" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
+          <a class="btn-principal lien-bouton" id="btn-rejoindre-programme" href="#rejoindre" data-aller="rejoindre">Nous rejoindre</a>
           <button class="btn-secondaire large" id="btn-partager-programme" type="button">🔗 Partager le programme</button>
           <button class="btn-secondaire large" id="btn-modifier-programme" type="button" hidden>✏️ Modifier le programme</button>
         </div>
@@ -167,10 +167,62 @@
       <div class="carte-form centre">
         <img src="/icons/logo.png" alt="" class="logo-grand">
         <p id="asso-description"></p>
-        <a class="btn-principal lien-bouton" id="btn-rejoindre-asso" target="_blank" rel="noopener noreferrer" hidden>Nous rejoindre</a>
+        <a class="btn-principal lien-bouton" id="btn-rejoindre-asso" href="#rejoindre" data-aller="rejoindre">Nous rejoindre</a>
       </div>
       <h3 class="section-titre">Nous suivre</h3>
       <div class="liste-liens" id="reseaux"></div>
+    </section>
+    <!-- NOUS REJOINDRE -->
+    <section class="page" id="page-rejoindre" data-titre="Nous rejoindre" hidden>
+      <div class="carte-form">
+        <h2>Rejoins Nouvel Élan ✊</h2>
+        <p class="aide">Laisse-nous tes coordonnées : quelqu'un du bureau te recontacte pour t'expliquer comment on fonctionne et comment participer.</p>
+        <form id="form-adhesion" autocomplete="on" novalidate>
+          <div class="deux-colonnes">
+            <div><label class="etiquette" for="ad-prenom">Prénom *</label><input type="text" id="ad-prenom" autocomplete="given-name" maxlength="60" required></div>
+            <div><label class="etiquette" for="ad-nom">Nom *</label><input type="text" id="ad-nom" autocomplete="family-name" maxlength="60" required></div>
+          </div>
+          <label class="etiquette" for="ad-email">E-mail *</label>
+          <input type="email" id="ad-email" autocomplete="email" inputmode="email" maxlength="120" required>
+          <label class="etiquette" for="ad-tel">Téléphone (facultatif)</label>
+          <input type="tel" id="ad-tel" autocomplete="tel" inputmode="tel" maxlength="25">
+          <label class="etiquette" for="ad-ville">Ville *</label>
+          <input type="text" id="ad-ville" autocomplete="address-level2" maxlength="80" required>
+          <span class="etiquette">Ton âge *</span>
+          <div class="choix-age" role="radiogroup" aria-label="Ton âge">
+            <label><input type="radio" name="ad-age" value="moins16"> Moins de 16 ans</label>
+            <label><input type="radio" name="ad-age" value="16-17"> 16 – 17 ans</label>
+            <label><input type="radio" name="ad-age" value="18plus"> 18 ans ou plus</label>
+          </div>
+          <label class="case" id="bloc-parent" hidden><input type="checkbox" id="ad-parent"> <span>Un de mes parents (ou responsable légal) est d'accord pour que je rejoigne l'association.</span></label>
+          <label class="etiquette" for="ad-message">Un mot pour nous ? (facultatif)</label>
+          <textarea id="ad-message" rows="3" maxlength="1500" placeholder="Ce qui te motive, ce que tu aimerais faire…"></textarea>
+          <input type="text" id="ad-site" name="site" tabindex="-1" autocomplete="off" class="piege" aria-hidden="true">
+          <label class="case"><input type="checkbox" id="ad-consent"> <span>J'accepte que Nouvel Élan conserve ces informations pour traiter ma demande d'adhésion. Elles ne sont vues que par le bureau et ne sont jamais transmises à qui que ce soit. <a href="#confidentialite" data-aller="confidentialite">En savoir plus</a></span></label>
+          <button type="submit" class="btn-principal" id="ad-envoyer">Envoyer ma demande</button>
+          <p class="message" id="ad-message-retour" role="status"></p>
+        </form>
+        <div id="ad-merci" class="merci" hidden>
+          <p class="merci-titre">🎉 Merci !</p>
+          <p>Ta demande est bien arrivée. Quelqu'un du bureau te recontacte très vite.</p>
+          <a class="btn-principal lien-bouton" id="ad-cotisation" target="_blank" rel="noopener noreferrer" hidden>Payer ma cotisation en ligne</a>
+          <button type="button" class="btn-secondaire large" data-aller="programme">Découvrir le programme</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DEMANDES D'ADHÉSION (équipe) -->
+    <section class="page" id="page-adhesions" data-titre="Demandes d'adhésion" hidden>
+      <h2 class="rubrique-titre">Demandes d'adhésion</h2>
+      <p class="aide petite">🔒 Visible uniquement par l'équipe. Les demandes sans suite sont effacées automatiquement au bout de 12 mois. Supprime une demande si la personne le demande.</p>
+      <div class="puces" id="ad-filtres"></div>
+      <div class="liste" id="ad-liste"></div>
+      <button type="button" class="btn-secondaire large" id="ad-export">⬇️ Télécharger la liste (tableur)</button>
+    </section>
+
+    <!-- CONFIDENTIALITÉ -->
+    <section class="page" id="page-confidentialite" data-titre="Confidentialité" hidden>
+      <div class="carte-form texte-long" id="confidentialite-texte"></div>
     </section>
   </main>
 

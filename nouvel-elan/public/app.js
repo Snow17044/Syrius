@@ -2,6 +2,9 @@
 //  À PERSONNALISER : présentation et réseaux de l'association
 // ─────────────────────────────────────────────────────────────
 const ASSOCIATION = {
+  // Pour la page « Confidentialité » (obligatoire, car le formulaire d'adhésion collecte des données)
+  nomLegal: "", // ex. "Association Nouvel Élan" (nom déclaré en préfecture)
+  contact: "",  // ex. "contact@nouvel-elan.fr" : où écrire pour consulter ou supprimer ses données
   description:
     "Nouvel Élan est un mouvement politique de jeunes qui veulent faire bouger les choses. " +
     "Débats, actions de terrain, propositions : rejoins le mouvement !",
@@ -16,14 +19,16 @@ const ASSOCIATION = {
 // ─────────────────────────────────────────────────────────────
 
 const $ = (s) => document.querySelector(s);
-const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso"];
+const PAGES = ["accueil", "programme", "articles", "lire", "ajouter", "menu", "asso", "rejoindre", "adhesions", "confidentialite"];
 const CLE_CACHE = "ne-articles";
 const CLE_PROGRAMME = "ne-programme";
-const VERSION = "14 — 18 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
+const VERSION = "15 — 19 novembre 2026"; // affichée en bas du Menu, pour vérifier qu'un téléphone est à jour
 const CLE_CODE = "ne-code-editeur";
 const CLE_QUI = "ne-editeur"; // { nom: "Président", programme: false }
 
 const etat = { articles: [], categories: [], filtre: "Tous", recherche: "", page: "accueil", lecture: null, organiser: false };
+let nbNouvellesDemandes = 0;               // demandes d'adhésion à traiter (équipe)
+let espaceTexte = "💾 Espace utilisé : …"; // place occupée dans la base (équipe)
 const axesOuverts = new Set(); // axes dont on voit les propositions en mode « Organiser »
 let programme = { slogan: "", intro: "", photo: "", lienAdhesion: "", axes: [], maj: null };
 
@@ -191,6 +196,9 @@ function aller(page, { historique = true } = {}) {
   if (historique && location.hash !== cible) history.pushState(null, "", cible);
   window.scrollTo(0, 0);
   if (page === "ajouter") majBlocCode();
+  if (page === "adhesions") { if (!codeEditeur()) return aller("accueil"); chargerDemandes(); }
+  if (page === "menu") { chargerDemandes(); chargerEspace(); }
+  if (page === "rejoindre") ouvertureFormulaire = Date.now();
   if (page !== "programme" && !$("#programme-edition").hidden) fermerEdition();
   if (page !== "programme") etat.organiser = false;
   majNavigation();
@@ -245,7 +253,7 @@ document.addEventListener("click", (e) => {
   const r = e.target.closest("[data-rubrique]");
   if (r) return allerRubrique(r.dataset.rubrique);
   const b = e.target.closest("[data-aller]");
-  if (b) aller(b.dataset.aller);
+  if (b) { if (b.tagName === "A") e.preventDefault(); aller(b.dataset.aller); }
 });
 
 // Lien d'accès personnel : https://…/#acces=JETON (le jeton ne part jamais vers le serveur dans l'adresse).
@@ -276,12 +284,12 @@ window.addEventListener("popstate", routeDepuisHash);
 // La photo est réduite sur le téléphone (1600 px, JPEG) avant l'envoi : rapide même en 4G.
 async function reduirePhoto(fichier) {
   const image = await createImageBitmap(fichier);
-  const echelle = Math.min(1, 1600 / Math.max(image.width, image.height));
+  const echelle = Math.min(1, 1400 / Math.max(image.width, image.height)); // assez net, et léger pour l'offre gratuite
   const toile = document.createElement("canvas");
   toile.width = Math.round(image.width * echelle);
   toile.height = Math.round(image.height * echelle);
   toile.getContext("2d").drawImage(image, 0, 0, toile.width, toile.height);
-  return toile.toDataURL("image/jpeg", 0.85);
+  return toile.toDataURL("image/jpeg", 0.8);
 }
 
 async function demanderCode() {
@@ -674,10 +682,9 @@ function afficherProgramme() {
   $("#banniere").classList.toggle("avec-photo", Boolean(p.photo));
   $("#banniere").style.backgroundImage = p.photo ? `linear-gradient(180deg, rgba(0,36,106,.45), rgba(0,36,106,.92)), url("${p.photo}")` : "";
   $("#banniere").style.backgroundPosition = p.photo ? `center, ${positionValide(p.photoPos)}` : "";
-  for (const id of ["#btn-rejoindre-accueil", "#btn-rejoindre-programme", "#btn-rejoindre-entete", "#btn-rejoindre-asso"]) {
-    $(id).hidden = !p.lienAdhesion;
-    if (p.lienAdhesion) $(id).href = p.lienAdhesion;
-  }
+  // « Nous rejoindre » mène au formulaire de l'appli ; le lien d'adhésion (HelloAsso…) sert à la cotisation.
+  $("#ad-cotisation").hidden = !p.lienAdhesion;
+  if (p.lienAdhesion) $("#ad-cotisation").href = p.lienAdhesion;
 
   // Tuiles des axes sur l'accueil
   $("#axes-accueil").replaceChildren(...(p.axes.length
@@ -912,18 +919,23 @@ function construireMenu() {
     ]],
     ["Le mouvement", [
       ligneMenu("👥", "Qui sommes-nous", () => aller("asso")),
-      p.lienAdhesion ? ligneMenu("✊", "Nous rejoindre", null, p.lienAdhesion) : null,
+      ligneMenu("✊", "Nous rejoindre", () => aller("rejoindre")),
       ...ASSOCIATION.reseaux.map((r) => ligneMenu(r.icone, r.nom, null, r.lien)),
     ]],
     ["L'application", [
       invitationInstall ? ligneMenu("📲", "Installer l'application", installer)
         : !installee ? ligneMenu("📲", "Installer l'application", () => { location.href = "/installer"; }) : null,
+      ligneMenu("🔒", "Confidentialité", () => aller("confidentialite")),
       ligneMenu("🔄", "Actualiser l'application", actualiserApplication),
       ligneMenu("🔗", "Partager le lien d'installation", () => partager("Installe l'application Nouvel Élan", `${location.origin}/installer`)),
       codeEditeur() && qui().nom ? el("p", { class: "aide petite menu-aide" }, `✅ Connecté en mode éditeur : ${qui().nom}`) : null,
       ligneMenu("✏️", codeEditeur() ? "Quitter le mode éditeur" : "Mode éditeur (équipe)", basculerEditeur),
     ]],
   ];
+  if (codeEditeur()) sections.splice(3, 0, ["L'équipe", [
+    ligneMenu("📋", `Demandes d'adhésion${nbNouvellesDemandes ? ` (${nbNouvellesDemandes} nouvelle${nbNouvellesDemandes > 1 ? "s" : ""})` : ""}`, () => aller("adhesions")),
+    el("p", { class: "aide petite menu-aide", id: "espace-utilise" }, espaceTexte),
+  ]]);
   $("#menu-contenu").replaceChildren(...sections.map(([titre, lignes]) =>
     el("div", { class: "menu-section" }, el("h3", { class: "section-titre" }, titre), el("div", { class: "menu-groupe" }, lignes))),
     el("p", { class: "aide petite version" }, `Version ${VERSION}`));
@@ -977,6 +989,126 @@ if (location.hostname.endsWith(".vercel.app") && location.hostname !== ADRESSE) 
     "⚠️ Cette adresse affiche une ancienne version. ",
     el("a", { href: `https://${ADRESSE}/installer` }, "Ouvrir la bonne adresse")));
 }
+
+// ── Nous rejoindre (formulaire d'adhésion) ───────────────────
+let ouvertureFormulaire = Date.now();
+document.querySelectorAll('input[name="ad-age"]').forEach((r) => r.addEventListener("change", () => {
+  $("#bloc-parent").hidden = r.value !== "moins16" || !r.checked;
+}));
+
+$("#form-adhesion").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#ad-message-retour");
+  const erreur = (t, champ) => { msg.className = "message erreur"; msg.textContent = t; champ?.focus(); };
+  const age = document.querySelector('input[name="ad-age"]:checked')?.value || "";
+  const v = (id) => $(id).value.trim();
+  if (!v("#ad-prenom")) return erreur("Indique ton prénom.", $("#ad-prenom"));
+  if (!v("#ad-nom")) return erreur("Indique ton nom.", $("#ad-nom"));
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v("#ad-email"))) return erreur("Indique une adresse e-mail valide.", $("#ad-email"));
+  if (!v("#ad-ville")) return erreur("Indique ta ville.", $("#ad-ville"));
+  if (!age) return erreur("Indique ton âge.");
+  if (age === "moins16" && !$("#ad-parent").checked) return erreur("Avant 16 ans, il faut l'accord d'un parent : coche la case.", $("#ad-parent"));
+  if (!$("#ad-consent").checked) return erreur("Coche la case d'accord pour envoyer ta demande.", $("#ad-consent"));
+  const btn = $("#ad-envoyer");
+  btn.disabled = true; btn.textContent = "Envoi…";
+  try {
+    await api("/api/adhesion", { method: "POST", body: JSON.stringify({
+      prenom: v("#ad-prenom"), nom: v("#ad-nom"), email: v("#ad-email"), telephone: v("#ad-tel"), ville: v("#ad-ville"),
+      age, accordParent: $("#ad-parent").checked, message: v("#ad-message"), consentement: $("#ad-consent").checked,
+      site: $("#ad-site").value, ouvertDepuis: Date.now() - ouvertureFormulaire }) });
+    $("#form-adhesion").reset();
+    $("#bloc-parent").hidden = true;
+    $("#form-adhesion").hidden = true;
+    $("#ad-merci").hidden = false;
+    msg.textContent = "";
+    window.scrollTo(0, 0);
+  } catch (err) { erreur(err.message); }
+  finally { btn.disabled = false; btn.textContent = "Envoyer ma demande"; }
+});
+
+// ── Demandes d'adhésion (équipe) ─────────────────────────────
+const LIBELLES = { nouvelle: "🆕 Nouvelle", contactee: "📞 Contactée", membre: "✅ Membre", refusee: "✖️ Refusée" };
+const AGES_TEXTE = { "moins16": "moins de 16 ans (accord parental)", "16-17": "16 – 17 ans", "18plus": "18 ans ou plus" };
+let demandes = [];
+let filtreDemandes = "nouvelle";
+
+async function chargerDemandes() {
+  if (!codeEditeur()) return;
+  try {
+    demandes = (await api("/api/adhesion")).demandes;
+    nbNouvellesDemandes = demandes.filter((d) => d.statut === "nouvelle").length;
+  } catch (e) { if (etat.page === "adhesions") toast(e.message); }
+  afficherDemandes();
+  construireMenu();
+}
+
+async function chargerEspace() {
+  if (!codeEditeur()) return;
+  try {
+    const d = await api("/api/espace");
+    const mo = d.octets / 1048576;
+    espaceTexte = d.essai ? "💾 Espace utilisé : (essai local)"
+      : `💾 Espace utilisé : ${mo < 10 ? mo.toFixed(1) : Math.round(mo)} Mo sur 512 Mo gratuits (${d.photos} photo${d.photos > 1 ? "s" : ""})${mo > 400 ? " — ⚠️ bientôt plein, pense à supprimer de vieilles photos" : ""}`;
+  } catch { espaceTexte = "💾 Espace utilisé : indisponible"; }
+  construireMenu();
+}
+
+function afficherDemandes() {
+  const compte = (st) => demandes.filter((d) => st === "toutes" || d.statut === st).length;
+  remplir($("#ad-filtres"), ["nouvelle", "contactee", "membre", "refusee", "toutes"].map((st) =>
+    el("button", { type: "button", class: "puce", "aria-pressed": String(filtreDemandes === st), onclick: () => { filtreDemandes = st; afficherDemandes(); } },
+      `${st === "toutes" ? "Toutes" : LIBELLES[st]} (${compte(st)})`)));
+  const liste = demandes.filter((d) => filtreDemandes === "toutes" || d.statut === filtreDemandes);
+  remplir($("#ad-liste"), liste.length ? liste.map((d) => el("div", { class: "demande" },
+    el("div", { class: "demande-tete" },
+      el("strong", {}, `${d.prenom} ${d.nom}`),
+      el("span", { class: "demande-date" }, dateCourte(d.date))),
+    el("p", { class: "demande-infos" },
+      el("a", { href: `mailto:${d.email}` }, d.email),
+      d.telephone ? [" · ", el("a", { href: `tel:${d.telephone.replace(/[^\d+]/g, "")}` }, d.telephone)] : null),
+    el("p", { class: "demande-infos" }, `📍 ${d.ville} · ${AGES_TEXTE[d.age] || ""}`),
+    d.message ? el("p", { class: "demande-message" }, d.message) : null,
+    el("div", { class: "demande-actions" },
+      el("select", { "aria-label": "Statut", onchange: async (ev) => {
+        try { await api("/api/adhesion", { method: "PATCH", body: JSON.stringify({ id: d.id, statut: ev.target.value }) }); d.statut = ev.target.value; toast("Statut mis à jour"); chargerDemandes(); }
+        catch (err) { toast(err.message); }
+      } }, Object.entries(LIBELLES).map(([v, t]) => { const o = el("option", { value: v }, t); if (v === d.statut) o.selected = true; return o; })),
+      el("button", { type: "button", class: "btn-secondaire danger", onclick: async () => {
+        if (!(await confirmerSuppression("Supprimer cette demande ?", `${d.prenom} ${d.nom} — ses informations seront effacées définitivement.`))) return;
+        try { await api(`/api/adhesion?id=${encodeURIComponent(d.id)}`, { method: "DELETE" }); toast("Demande supprimée"); chargerDemandes(); }
+        catch (err) { toast(err.message); }
+      } }, "🗑 Supprimer"))))
+    : [etatVide(demandes.length ? "Aucune demande dans cette catégorie." : "Aucune demande d'adhésion pour l'instant.")]);
+}
+
+$("#ad-export").addEventListener("click", () => {
+  if (!demandes.length) return toast("Aucune demande à télécharger.");
+  const cellule = (x) => `"${String(x ?? "").replace(/"/g, '""').replace(/^([=+\-@])/, "'$1")}"`; // évite les formules dans le tableur
+  const lignes = [["Date", "Prénom", "Nom", "E-mail", "Téléphone", "Ville", "Âge", "Statut", "Message"],
+    ...demandes.map((d) => [new Date(d.date).toLocaleDateString("fr-FR"), d.prenom, d.nom, d.email, d.telephone, d.ville, AGES_TEXTE[d.age], LIBELLES[d.statut], d.message])];
+  const csv = "﻿" + lignes.map((l) => l.map(cellule).join(";")).join("\r\n");
+  const lien = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })), download: `adhesions-nouvel-elan-${new Date().toISOString().slice(0, 10)}.csv` });
+  document.body.append(lien); lien.click(); lien.remove();
+  toast("Liste téléchargée — garde-la en lieu sûr 🔒");
+});
+
+// ── Confidentialité ──────────────────────────────────────────
+function afficherConfidentialite() {
+  const nom = ASSOCIATION.nomLegal || "[NOM DE L'ASSOCIATION — à compléter]";
+  const contact = ASSOCIATION.contact || "[ADRESSE E-MAIL DE CONTACT — à compléter]";
+  const sections = [
+    ["Confidentialité", `Cette page explique ce que ${nom} fait des informations envoyées par le formulaire « Nous rejoindre ».`],
+    ["Qui est responsable ?", `${nom}, qui édite cette application. Contact : ${contact}.`],
+    ["Quelles informations ?", "Prénom, nom, e-mail, ville, tranche d'âge, et si tu le souhaites ton téléphone et un message. Rien d'autre : pas de compte, pas de publicité, pas de pistage."],
+    ["Pourquoi ?", "Uniquement pour traiter ta demande d'adhésion et te recontacter. Comme ces informations révèlent un intérêt pour un mouvement politique, elles ne sont collectées qu'avec ton accord explicite (case à cocher), et utilisées seulement par l'association, pour ses membres et ses contacts (article 9 du RGPD)."],
+    ["Qui les voit ?", "Seulement les membres du bureau, avec un accès protégé. Elles ne sont jamais vendues, publiées, ni transmises à un parti, une entreprise ou qui que ce soit. Elles sont stockées chez notre hébergeur (Vercel et Neon), qui ne s'en sert pas."],
+    ["Combien de temps ?", "Une demande restée sans suite est effacée automatiquement au bout de 12 mois. Si tu deviens membre, tes informations sont gardées tant que tu es membre, puis effacées."],
+    ["Tes droits", `Tu peux à tout moment demander à consulter, corriger ou supprimer tes informations en écrivant à ${contact}. Tu peux aussi saisir la CNIL (cnil.fr) si tu estimes que tes droits ne sont pas respectés.`],
+    ["Moins de 16 ans ?", "Avant 16 ans, il faut l'accord d'un parent ou d'un responsable légal pour rejoindre l'association."],
+  ];
+  remplir($("#confidentialite-texte"), sections.flatMap(([t, x], i) => [i ? el("h3", {}, t) : el("h2", {}, t), el("p", {}, x)]));
+}
+afficherConfidentialite();
 
 // ── Écran de bienvenue ───────────────────────────────────────
 // À la première visite (site ou appli non installée) : présentation + proposition d'installer.
