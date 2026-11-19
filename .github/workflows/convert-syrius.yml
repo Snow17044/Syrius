@@ -82,6 +82,18 @@ jobs:
           run-id: ${{ env.RUN_ID }}
           github-token: ${{ github.token }}
 
+      - name: Contrôle qualité avant publication
+        if: env.RUN_ID != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p build/prev
+          gh release download syrius-ia -p eval-latest.json -D build/prev 2>/dev/null || echo "(pas de version de référence)"
+          # Automatique (après l'entraînement de la nuit) : le contrôle est obligatoire.
+          req=""; [ "$GITHUB_EVENT_NAME" = "workflow_run" ] && req="--require"
+          python3 training/eval_gate.py build/syrius/eval.json build/prev/eval-latest.json $req
+
       - name: Outils de conversion (versions figées)
         run: |
           python3 -m venv .cvenv
@@ -132,6 +144,10 @@ jobs:
           gh release view syrius-ia >/dev/null 2>&1 || gh release create syrius-ia --title "IA Syrius (modèles)" \
             --notes "Fichiers de l'IA Syrius pour l'application (LiteRT-LM). Téléchargés automatiquement par l'app."
           gh release upload syrius-ia "$FILE" "$FILE.sha256" --clobber
+          # Résultat du contrôle qualité : référence pour la prochaine nuit
+          if [ -f build/syrius/eval.json ]; then
+            cp build/syrius/eval.json out/eval-latest.json && gh release upload syrius-ia out/eval-latest.json --clobber
+          fi
           # Ménage : on garde les 3 dernières versions + celle inscrite dans l'application (version de départ).
           keep=$(grep -oE 'syrius-1\.5b-[0-9]+-[a-z0-9_]+\.litertlm' android/app/src/main/java/fr/syrius/app/SyriusAI.java | head -1)
           gh release view syrius-ia --json assets --jq '.assets | sort_by(.createdAt) | reverse | .[].name' \

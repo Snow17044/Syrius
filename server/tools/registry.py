@@ -7,7 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import Config
-from .. import family, memory
+from .. import family, memory, sitescan
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
@@ -123,6 +123,7 @@ WEB_SEARCH_URL = "https://ollama.com/api/web_search"
 TOOL_LABELS = {
     "get_current_time": "Je regarde l'heure",
     "remember": "Je note ça dans ma mémoire",
+    "scan_site": "Je scanne ton site (lecture seule)",
     "forget": "J'efface ce souvenir",
     "list_emails": "Je consulte tes emails",
     "search_emails": "Je cherche dans tes emails",
@@ -139,6 +140,15 @@ TOOL_LABELS = {
 }
 
 
+SCAN_SITE_TOOL = _tool(
+    "scan_site",
+    "Lance un scan de sécurité PASSIF (en-têtes, fichiers sensibles exposés, clés secrètes visibles, cookies, "
+    "contenu mixte, bibliothèques anciennes) sur un site du propriétaire. Ne marche QUE pour un site que le "
+    "propriétaire a ajouté dans ses réglages et dont il a prouvé la propriété : n'essaie jamais un autre site. "
+    "Résume ensuite les problèmes par ordre de gravité, avec le correctif, en langage simple.",
+    {"domain": {"type": "string", "description": "Nom du site, par exemple monsite.fr"}}, ["domain"])
+
+
 def build_tools(cfg: Config, settings: dict) -> list[dict]:
     """Liste triée et stable (important pour le cache)."""
     tools = list(BASE_TOOLS) + DEVICE_TOOLS
@@ -146,6 +156,8 @@ def build_tools(cfg: Config, settings: dict) -> list[dict]:
         tools += EMAIL_TOOLS
     if settings.get("internet", True):
         tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL, WEATHER_TOOL]
+    if family.is_owner():
+        tools += [SCAN_SITE_TOOL]
     return tools
 
 
@@ -193,6 +205,16 @@ class ToolExecutor:
             return "Erreur interne de l'outil.", True, None
 
     async def _run(self, name: str, args, ctx: dict):
+        if name == "scan_site":
+            if not family.is_owner():
+                return "Le scan de sécurité est réservé au propriétaire de Syrius.", True, None
+            a = _check(args, {"domain": str}, ["domain"])
+            try:
+                res = await asyncio.to_thread(sitescan.run, getattr(self.db, "base", self.db), a["domain"])
+            except sitescan.ScanError as e:
+                return str(e), True, None
+            return web.wrap_untrusted(sitescan.chat_summary(res)), False, None
+
         if name == "get_current_time":
             _check(args, {}, [])
             now = datetime.now(TIMEZONE)

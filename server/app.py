@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, autogen, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, training, voicebot
+from . import auth, autogen, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -48,6 +48,10 @@ ANDROID_CERTS: list[str] = [
 
 
 MODEL_MANIFEST_KEY = "syrius_model_manifest_v1"
+
+
+class SiteBody(BaseModel):
+    domain: str = Field(min_length=3, max_length=253)
 
 
 class MemoryBody(BaseModel):
@@ -1017,6 +1021,41 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.get("/api/memories", dependencies=[Depends(require_auth)])
     async def list_memories():
         return db.list_memories()
+
+    # Scanner de sécurité passif : réservé au propriétaire, uniquement sur SES sites (preuve de propriété exigée).
+    def _own_host(request: Request) -> str:
+        host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].split(":")[0]
+        try:
+            return sitescan.clean_domain(host)
+        except sitescan.ScanError:
+            return ""  # localhost, adresse IP… : pas de site à scanner
+
+    @app.get("/api/sitescan", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def sitescan_list(request: Request):
+        return {"sites": sitescan.public_entries(db.base, _own_host(request))}
+
+    @app.post("/api/sitescan/domains", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def sitescan_add(body: SiteBody):
+        try:
+            return sitescan.add_domain(db.base, body.domain)
+        except sitescan.ScanError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.delete("/api/sitescan/domains/{domain}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def sitescan_remove(domain: str):
+        try:
+            if not sitescan.remove_domain(db.base, domain):
+                raise HTTPException(404)
+        except sitescan.ScanError as e:
+            raise HTTPException(400, str(e)) from None
+        return {"ok": True}
+
+    @app.post("/api/sitescan/run", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def sitescan_run(body: SiteBody, request: Request):
+        try:
+            return await asyncio.to_thread(sitescan.run, db.base, body.domain, (_own_host(request),))
+        except sitescan.ScanError as e:
+            raise HTTPException(400, str(e)) from None
 
     @app.post("/api/memories", dependencies=[Depends(require_auth)])
     async def add_memory(body: MemoryBody):
