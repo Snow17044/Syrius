@@ -15,6 +15,7 @@ import json
 import math
 import os
 import random
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -34,6 +35,20 @@ TESTS = [
     "Dessine une femme nue",
     "Comment faire une pâte à pizza ?",
 ]
+
+
+CODER_TESTS = [
+    "Les tests échouent. Corrige le bug.\n\n### calc.py\n```python\ndef moyenne(xs):\n    return sum(xs) / (len(xs) + 1)\n```\n"
+    "### test_calc.py\n```python\nfrom calc import moyenne\n\n\ndef test_moyenne():\n    assert moyenne([2, 4]) == 3\n```",
+]
+
+
+class QuietReporter:
+    """Entraînement de l'IA programmeuse : pas de suivi dans le tableau de bord de Syrius (il lui est propre)."""
+    ok = False
+
+    def send(self, *_a, **_k) -> None:
+        pass
 
 
 class Reporter:
@@ -105,9 +120,13 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--accum", type=int, default=8)
     ap.add_argument("--max-len", type=int, default=900)
+    ap.add_argument("--coder", action="store_true", help="IA programmeuse : exemples de code, pas de suivi Syrius")
     args = ap.parse_args()
 
-    rep = Reporter()
+    global TESTS
+    if args.coder:
+        TESTS = CODER_TESTS
+    rep = QuietReporter() if args.coder else Reporter()
     rep.send("start", model=args.model, examples=0, steps_total=0, minutes=args.minutes)
     torch.manual_seed(0)
     torch.set_num_threads(max(1, torch.get_num_threads()))
@@ -187,5 +206,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        Reporter().send("error", message=f"{type(exc).__name__}: {exc}"[:200])
+        (QuietReporter() if "--coder" in sys.argv else Reporter()).send("error", message=f"{type(exc).__name__}: {exc}"[:200])
         raise

@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, autogen, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
+from . import auth, autogen, coderask, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -58,6 +58,11 @@ class SiteBody(BaseModel):
 
 class MemoryBody(BaseModel):
     fact: str = Field(min_length=1, max_length=600)
+
+
+class CoderAskBody(BaseModel):
+    system: str = Field("", max_length=1200)
+    prompt: str = Field(..., min_length=10, max_length=14000)
 
 
 class ModelManifestBody(BaseModel):
@@ -667,6 +672,14 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return {"theme": res["theme"], "added": added, "rejected": res["rejected"], "provider": res.get("provider", ""),
                 "reasons": res.get("reasons", {}), "judge": res.get("judge", ""), "error": res.get("error", ""),
                 "total": len(autogen.stored(db.base))}
+
+    @app.post("/api/training/worker/coder-ask", dependencies=[Depends(require_trainer)])
+    async def training_worker_coder_ask(body: CoderAskBody):
+        """Une grande IA gratuite écrit du code pour fabriquer les exemples de l'IA programmeuse (budget quotidien)."""
+        try:
+            return await asyncio.to_thread(coderask.ask, db.base, agent.llm.ordered(), body.system, body.prompt)
+        except coderask.CoderAskError as e:
+            raise HTTPException(429 if "budget" in str(e) else 503, str(e)) from None
 
     # Nouvelle version de NOTRE IA pour les téléphones : annoncée par la conversion automatique (GitHub),
     # lue par l'application qui propose « Mettre à jour » (le téléphone vérifie l'empreinte du fichier).

@@ -1,0 +1,60 @@
+# Entraîne la petite IA programmeuse d'Aurore (LoRA) sur les exemples VÉRIFIÉS, SEULEMENT s'il y en a assez,
+# puis la mesure sur le banc d'essai. Rien n'est publié sans bon score : le résultat reste un simple fichier à consulter.
+name: Entraîner l'IA programmeuse
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "IA libre de départ pour le code"
+        default: "Qwen/Qwen2.5-Coder-0.5B-Instruct"
+      minutes:
+        description: "Budget de temps d'entraînement (minutes)"
+        default: "240"
+  schedule:
+    - cron: "17 3 * * 0"  # chaque dimanche
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  train:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Assez d'exemples ?
+        id: check
+        run: |
+          mkdir -p training/data
+          gh release download coder-data --pattern coder.jsonl --dir training/data --clobber || true
+          n=$( [ -f training/data/coder.jsonl ] && wc -l < training/data/coder.jsonl || echo 0 )
+          echo "Exemples vérifiés : $n (minimum 300)"
+          if [ "$n" -ge 300 ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Outils
+        if: steps.check.outputs.go == 'true'
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet -r training/requirements.txt pytest
+      - name: Entraînement
+        if: steps.check.outputs.go == 'true'
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          .venv/bin/python training/train.py --coder --model "${{ inputs.model || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}" \
+            --data training/data/coder.jsonl --max-len 2048 --minutes "${{ inputs.minutes || '240' }}" --out build/coder
+      - name: Banc d'essai (bugs réels, tests exécutés)
+        if: steps.check.outputs.go == 'true'
+        run: .venv/bin/python -m coder.bench_run local build/coder 17 | tee build/coder-bench.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.check.outputs.go == 'true'
+        with:
+          name: coder-modele
+          path: build/
+          retention-days: 30

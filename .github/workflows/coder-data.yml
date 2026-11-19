@@ -1,0 +1,43 @@
+# Chaque nuit : une grande IA gratuite aide à fabriquer des exemples de code VÉRIFIÉS (les tests doivent passer),
+# puis on mesure combien de bugs du banc d'essai elle répare. Les exemples sont gardés dans la publication « coder-data ».
+name: Exemples de code pour Aurore
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "47 0 * * *"
+
+permissions:
+  contents: write  # publication « coder-data » (exemples et score)
+  id-token: write  # identité officielle GitHub pour parler à ton Syrius
+
+jobs:
+  data:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Outils
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet pytest
+      - name: Récupérer les exemples déjà fabriqués
+        run: |
+          gh release view coder-data >/dev/null 2>&1 || gh release create coder-data --title "Exemples de code (Aurore)" \
+            --notes "Fichiers créés automatiquement chaque nuit. Ne rien modifier à la main." --prerelease
+          mkdir -p training/data
+          gh release download coder-data --pattern coder.jsonl --dir training/data --clobber || true
+      - name: Fabriquer et vérifier de nouveaux exemples
+        run: .venv/bin/python -m coder.make_data 120
+      - name: Score de la grande IA sur le banc d'essai (référence)
+        continue-on-error: true
+        run: .venv/bin/python -m coder.bench_run teacher 8 | tee /tmp/teacher.json
+      - name: Publier
+        run: |
+          gh release upload coder-data training/data/coder.jsonl --clobber
+          [ -f /tmp/teacher.json ] && cp /tmp/teacher.json bench-teacher.json && gh release upload coder-data bench-teacher.json --clobber || true
