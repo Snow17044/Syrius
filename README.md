@@ -127,6 +127,16 @@ et `SYRIUS_KEY_ALIAS` (demande-moi, je t'explique).
 
 ---
 
+## IA gratuite Cloudflare (facultatif)
+Cloudflare Workers AI offre **10 000 « neurones » gratuits par jour** (environ 120 à 270 questions avec `glm-4.7-flash`).
+Syrius et Aurore s'en servent en secours, et l'IA programmeuse s'en sert avant OpenRouter.
+1. Crée un compte gratuit sur <https://dash.cloudflare.com>, puis ouvre **AI → Workers AI** et choisis « Use REST API » :
+   la page donne ton **Account ID** (32 caractères) et un bouton pour créer une **clé d'accès** (API token) pour Workers AI.
+2. Dans Vercel (Settings → Environment Variables) : `CLOUDFLARE_API_TOKEN` (la clé) et `CLOUDFLARE_ACCOUNT_ID`, puis Redeploy.
+3. Dans GitHub (Settings → Secrets and variables → Actions) : `CLOUDFLARE_API_KEY` (la même clé) et `CLOUDFLARE_ACCOUNT_ID`.
+Modèles : `SYRIUS_CLOUDFLARE_MODELS` (par défaut `@cf/zai-org/glm-4.7-flash,@cf/google/gemma-4-26b-a4b-it`).
+Au-delà de la limite du jour, les demandes échouent jusqu'à minuit (heure UTC) : Syrius passe alors sur une autre IA.
+
 ## J'ai oublié mon mot de passe
 1. Dans Vercel : **Settings → Environment Variables** → ajoute `SYRIUS_RESET_CODE` avec un code que tu inventes
    (12 caractères au moins), puis **Deployments → ⋯ → Redeploy**.

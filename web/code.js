@@ -108,6 +108,7 @@
     document.querySelectorAll("#c-nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
     if (tab === "sites") renderSites();
     if (tab === "tableaux") renderDashboards();
+    if (tab === "code") renderCodeTab();
     if (tab === "aurore") scrollDown(true);
   }
   document.querySelectorAll("#c-nav button").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
@@ -563,6 +564,117 @@
       $("#c-site-msg").textContent = "Site ajouté : place le code de preuve indiqué ci-dessous sur ton site, puis touche « Scanner ».";
       renderSites();
     } catch (err) { $("#c-site-msg").textContent = "⚠ " + err.message; }
+  });
+
+  // ------------------------------------------------------------------ code : demandes à l'IA programmeuse + compétences d'Aurore
+  const CR_LABEL = { pending: "En attente (démarre sous 15 min)", running: "L'IA programme…", proposed: "Proposition prête", failed: "Échec", refused: "Annulée" };
+  function codeMsg(sel, text) { $(sel).textContent = text; }
+  async function renderCodeTab() {
+    renderChangeRequests();
+    renderLessons();
+    renderSkills();
+  }
+  async function renderChangeRequests() {
+    let items;
+    try { items = await api("/api/selfcode"); } catch (_) { return; }
+    const ul = $("#c-cr-list");
+    ul.replaceChildren();
+    if (!items.length) ul.appendChild(el("li", "c-card muted small", "Aucune demande pour l'instant."));
+    for (const it of items) {
+      const li = el("li", "c-card c-site");
+      li.appendChild(el("strong", "", "« " + it.text + " »"));
+      li.appendChild(el("span", "c-tool c-status " + it.status, CR_LABEL[it.status] || it.status));
+      if (it.summary) li.appendChild(el("span", "muted small", it.summary));
+      if (it.tests) li.appendChild(el("span", "muted small", "Tests : " + it.tests));
+      const row = el("div", "c-actions");
+      if (it.pr) {
+        const a = el("a", "ghost c-linkbtn", "Voir la proposition sur GitHub");
+        a.href = it.pr; a.target = "_blank"; a.rel = "noopener";
+        row.appendChild(a);
+      }
+      if (it.status === "proposed" || it.status === "failed") {
+        row.appendChild(btn("Pas satisfaite : réessayer", "refresh", async () => {
+          const fb = prompt("Qu'est-ce qui ne va pas ? (ta remarque servira aussi pour les prochaines fois)");
+          if (!fb) return;
+          try { await api(`/api/selfcode/${encodeURIComponent(it.id)}/retry`, { method: "POST", body: JSON.stringify({ text: fb }) }); codeMsg("#c-cr-msg", "✅ Nouvel essai demandé, avec ta remarque."); renderCodeTab(); }
+          catch (err) { codeMsg("#c-cr-msg", "⚠ " + err.message); }
+        }));
+      }
+      if (it.status === "pending") {
+        row.appendChild(btn("Annuler", "close", async () => {
+          try { await api(`/api/selfcode/${encodeURIComponent(it.id)}`, { method: "DELETE" }); renderCodeTab(); } catch (err) { codeMsg("#c-cr-msg", "⚠ " + err.message); }
+        }, "ghost subtle"));
+      }
+      if (row.childNodes.length) li.appendChild(row);
+      if (it.pr) li.appendChild(el("span", "muted small", "Pour publier : ouvre la proposition puis « Merge pull request »."));
+      ul.appendChild(li);
+    }
+  }
+  async function renderLessons() {
+    let s;
+    try { s = await api("/api/selfcode/settings"); } catch (_) { return; }
+    const ul = $("#c-lessons");
+    ul.replaceChildren();
+    if (!s.lessons.length) ul.appendChild(el("li", "c-card muted small", "Aucun conseil pour l'instant."));
+    for (const l of s.lessons) {
+      const li = el("li", "c-card c-row");
+      li.appendChild(el("span", "c-link", l.text));
+      li.appendChild(btn("", "trash", async () => {
+        try { await api(`/api/selfcode/lessons/${encodeURIComponent(l.id)}`, { method: "DELETE" }); renderLessons(); } catch (err) { codeMsg("#c-cr-msg", "⚠ " + err.message); }
+      }, "ghost subtle"));
+      ul.appendChild(li);
+    }
+  }
+  $("#c-cr-send").addEventListener("click", async () => {
+    const text = $("#c-cr-text").value.trim();
+    if (text.length < 10) { codeMsg("#c-cr-msg", "⚠ Décris le changement en une phrase ou deux."); return; }
+    try {
+      const app = $("#c-cr-app").value === "syrius-code" ? "Syrius Code" : "Syrius";
+      await api("/api/selfcode", { method: "POST", body: JSON.stringify({ text: `[Application ${app}] ${text}`.slice(0, 1500) }) });
+      $("#c-cr-text").value = "";
+      codeMsg("#c-cr-msg", "✅ Demande envoyée : l'IA programmeuse s'en occupe d'ici 15 minutes.");
+      renderChangeRequests();
+    } catch (err) { codeMsg("#c-cr-msg", "⚠ " + err.message); }
+  });
+  $("#c-lesson-add").addEventListener("click", async () => {
+    const text = $("#c-lesson").value.trim();
+    if (text.length < 5) { codeMsg("#c-cr-msg", "⚠ Écris un conseil un peu plus long."); return; }
+    try { await api("/api/selfcode/lessons", { method: "POST", body: JSON.stringify({ text }) }); $("#c-lesson").value = ""; renderLessons(); }
+    catch (err) { codeMsg("#c-cr-msg", "⚠ " + err.message); }
+  });
+
+  async function renderSkills() {
+    let list;
+    try { list = await api("/api/code/skills"); } catch (_) { return; }
+    const ul = $("#c-skills");
+    ul.replaceChildren();
+    for (const s of list) {
+      const li = el("li", "c-card c-site");
+      const head = el("div", "c-row");
+      head.appendChild(el("strong", "c-link", s.name));
+      head.appendChild(el("span", "c-tool", s.builtin ? "intégrée" : "à toi"));
+      if (!s.builtin) head.appendChild(btn("", "trash", async () => {
+        if (!confirm(`Supprimer la compétence « ${s.name} » ?`)) return;
+        try { await api(`/api/code/skills/${encodeURIComponent(s.name)}`, { method: "DELETE" }); renderSkills(); } catch (err) { codeMsg("#c-sk-msg", "⚠ " + err.message); }
+      }, "ghost subtle"));
+      li.appendChild(head);
+      li.appendChild(el("span", "muted small", s.description));
+      const view = btn("Voir les consignes", "eye", async () => {
+        const box = li.querySelector(".c-skill-body");
+        if (box) { box.remove(); return; }
+        try { const full = await api(`/api/code/skills/${encodeURIComponent(s.name)}`); li.appendChild(el("pre", "c-skill-body", full.body)); } catch (_) { /* */ }
+      }, "ghost subtle");
+      li.appendChild(view);
+      ul.appendChild(li);
+    }
+  }
+  $("#c-sk-add").addEventListener("click", async () => {
+    try {
+      await api("/api/code/skills", { method: "POST", body: JSON.stringify({ name: $("#c-sk-name").value, description: $("#c-sk-desc").value, body: $("#c-sk-body").value }) });
+      for (const id of ["#c-sk-name", "#c-sk-desc", "#c-sk-body"]) $(id).value = "";
+      codeMsg("#c-sk-msg", "✅ Compétence enregistrée : Aurore s'en servira.");
+      renderSkills();
+    } catch (err) { codeMsg("#c-sk-msg", "⚠ " + err.message); }
   });
 
   // ------------------------------------------------------------------ démarrage

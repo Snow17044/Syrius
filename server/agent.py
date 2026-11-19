@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import Config
 from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
+from . import skills
 from .tools import dashboard, diagram, model3d
 from . import family, vision
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, select_tools
@@ -17,8 +18,10 @@ from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, se
 log = logging.getLogger("syrius.agent")
 
 UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read", "show_places",
-                   "get_weather"}
+                   "get_weather", "list_site_files", "read_site_file", "scan_site"}
 WEB_TOOLS = {"web_search", "web_read", "show_places", "get_weather"}
+SITE_TOOLS = {"list_site_files", "read_site_file"}
+MAX_SITE_CALLS = 14  # fichiers de site lus au maximum par réponse
 MAX_WEB_CALLS = 8  # pages / recherches web maximum par réponse
 MAX_STEPS = 8          # allers-retours max avec les outils pour une seule question
 MAX_HISTORY = 40       # messages gardés en contexte (au-delà, les plus anciens sont oubliés)
@@ -36,7 +39,7 @@ def load_persona() -> str:
 AURORE_FILE = Path(__file__).with_name("aurore.md")
 
 
-def build_aurore_system(settings: dict) -> str:
+def build_aurore_system(settings: dict, skills_text: str = "") -> str:
     """Consigne d'Aurore (Syrius Code) : personnalité pro, pas de souvenirs personnels de Syrius."""
     now = datetime.now(TIMEZONE)
     parts = [AURORE_FILE.read_text(encoding="utf-8").strip(),
@@ -45,6 +48,8 @@ def build_aurore_system(settings: dict) -> str:
         parts.append(f"Prénom de l'utilisateur : {settings['user_name']}")
     if settings.get("internet", True) is False:
         parts.append("Internet est DÉSACTIVÉ dans les réglages : tu n'as pas les outils web_search / web_read.")
+    if skills_text:
+        parts.append(skills_text)
     return "\n\n".join(parts)
 
 
@@ -230,6 +235,7 @@ class Agent:
         history = trim_history(stored) + [{"role": "user", "content": user_content}]
         to_save = [history[-1]]
         aurore = profile == "aurore"
+        base_db = getattr(self.db, "base", self.db)
         preferred = "" if aurore else settings.get("brain", "")
         if not preferred and not image and _WANTS_CODE.search(user_text):
             preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation
@@ -254,9 +260,10 @@ class Agent:
         keep_all = any(b.get("type") == "tool_use" for m in history[-6:] for b in m["content"])  # conversation d'action
         untrusted_seen = False
         web_calls = 0
+        site_calls = 0
 
         for _step in range(MAX_STEPS):
-            system = (build_aurore_system(settings) if aurore
+            system = (build_aurore_system(settings, skills.prompt_list(base_db)) if aurore
                       else build_system(settings, self.db.list_memories()))  # les souvenirs peuvent changer
             if voice:
                 system += ("\n\nMODE CONVERSATION VOCALE : ta réponse sera lue à voix haute. Réponds en 1 à 3 "
@@ -357,13 +364,18 @@ class Agent:
             if any(c["name"] in UNTRUSTED_TOOLS for c in state["calls"]):
                 untrusted_seen = True  # même si l'action téléphone est demandée dans le même lot
             for call in state["calls"]:
+                if call["name"] in SITE_TOOLS:
+                    site_calls += 1
                 if call["name"] in WEB_TOOLS:
                     web_calls += 1
-                if call["name"] in WEB_TOOLS and web_calls > MAX_WEB_CALLS:
+                if call["name"] in SITE_TOOLS and site_calls > MAX_SITE_CALLS:
+                    result, is_error, ui_event = ("Limite de fichiers lus pour cette réponse : fais le point sur ce que tu as "
+                                                  "lu, puis continue dans un nouveau message."), True, None
+                elif call["name"] in WEB_TOOLS and web_calls > MAX_WEB_CALLS:
                     result, is_error, ui_event = "Limite de pages web atteinte pour cette réponse.", True, None
                 else:
                     result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
-                                                                         {"location": location})
+                                                                         {"location": location, "untrusted": untrusted_seen})
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:

@@ -1,7 +1,12 @@
 # Guide de Syrius pour l'IA programmeuse
 
-Syrius est un assistant personnel, utilisé par une famille. Il est hébergé gratuitement sur Vercel (serveur
-Python) et existe aussi en application Android (une WebView qui affiche le site).
+Ce dépôt contient DEUX applications qui partagent le même serveur (FastAPI sur Vercel) et existent en application
+Android (une WebView qui affiche le site) :
+- **Syrius** : l'assistant personnel d'une famille (discussion, téléphone, mémoire, IA hors ligne) ;
+- **Syrius Code** : le laboratoire d'essai du propriétaire, avec Aurore, son IA professionnelle (code, tableaux de bord,
+  emails pro, sites et sécurité). Réservé au propriétaire.
+Une demande commence par « [Application Syrius] » ou « [Application Syrius Code] » : ne modifie que l'application
+demandée, sauf si le changement est partagé.
 
 ## Où se trouve quoi
 
@@ -15,6 +20,9 @@ Python) et existe aussi en application Android (une WebView qui affiche le site)
 | Routes du serveur (FastAPI) | `server/app.py` |
 | Caractère et consignes de l'IA de discussion | `server/persona.md` |
 | Outils de l'IA (définitions et exécution) | `server/tools/registry.py`, `server/tools/*.py` |
+| Syrius Code : page, comportement, styles (deux thèmes : syrius et nature) | `web/code.html`, `web/code.js`, `web/code.css` |
+| Syrius Code : personnalité d'Aurore et compétences (fiches de méthode) | `server/aurore.md`, `server/skills/*.md` |
+| Syrius Code : routes (tout `/api/code/…` est réservé au propriétaire) | `server/app.py` |
 | Actions sur le téléphone | `server/tools/device.py` (serveur) et `android/app/src/main/java/fr/syrius/app/*.java` |
 | Tests automatiques | `tests/test_*.py` (pytest, client `TestClient` de FastAPI) |
 
@@ -33,7 +41,10 @@ Python) et existe aussi en application Android (une WebView qui affiche le site)
   `Depends(require_owner)` si elle est réservée au propriétaire.
 - Données : `db` est déjà aiguillée vers l'espace de la personne connectée. N'accède jamais aux données d'un autre
   membre.
-- Quand tu modifies `web/app.js`, `web/index.html` ou `web/style.css`, augmente le numéro de `VERSION` dans
+- Syrius Code utilise la fonction `api()` de `web/code.js` (même en-tête anti-CSRF) et les mêmes règles : pas d'emoji,
+  pas de `innerHTML` avec du texte venant de l'utilisateur ou de l'IA, aucun `style=""` dans les pages (la politique de
+  sécurité l'interdit). Les couleurs passent par les variables CSS des deux thèmes.
+- Quand tu modifies `web/app.js`, `web/code.js`, `web/code.css`, `web/index.html`, `web/code.html` ou `web/style.css`, augmente le numéro de `VERSION` dans
   `web/sw.js` (par exemple `syrius-v32` devient `syrius-v33`) pour que les téléphones reçoivent la nouvelle version.
 - Ajoute un **nouveau** fichier de test pour ce que tu crées, par exemple `tests/test_ma_fonction.py`, en t'inspirant
   des tests existants (`make_client`, `login`, en-tête `H = {"X-Syrius": "1"}`).

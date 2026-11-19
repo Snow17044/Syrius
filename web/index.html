@@ -255,25 +255,6 @@
       <p id="t-auto-count" class="small"></p>
       <ul id="t-auto" class="family-list"></ul>
 
-      <h4 data-icon="code"><span>Améliorer Syrius</span></h4>
-      <p class="muted small">Demande un changement : une IA programmeuse gratuite le prépare, tous les tests le
-        vérifient, puis tu décides de le publier ou non. Idéal pour de petits changements (un texte, une couleur,
-        un bouton…). Les parties sécurité, comptes et filtres sont protégées.</p>
-      <label>Ce que Syrius doit changer<textarea id="sc-text" rows="3" maxlength="1500" placeholder="Ex. : Ajoute un bouton pour copier une réponse de Syrius."></textarea></label>
-      <button type="button" id="sc-add" class="primary wide" data-icon="send"><span>Envoyer la demande</span></button>
-      <p id="sc-msg" class="small"></p>
-      <ul id="sc-list" class="family-list"></ul>
-      <details class="train-setup" id="sc-better">
-        <summary>Rendre l'IA programmeuse meilleure</summary>
-        <label>IA programmeuse
-          <select id="sc-model"><option value="">Automatique (la meilleure gratuite disponible)</option></select></label>
-        <p class="muted small">Conseils qu'elle suivra à chaque fois (ex. « Garde toujours le style des boutons
-          existants », « Écris des messages courts »). Quand tu refuses une proposition, ta remarque est ajoutée ici.</p>
-        <label>Nouveau conseil<input id="sc-lesson" type="text" maxlength="400" placeholder="Ex. : Les nouveaux boutons doivent avoir une icône."></label>
-        <button type="button" id="sc-lesson-add" class="ghost wide" data-icon="plus"><span>Ajouter le conseil</span></button>
-        <ul id="sc-lessons" class="family-list"></ul>
-      </details>
-
       <h4 data-icon="eye"><span>Réponses de test</span></h4>
       <p class="muted small">Les mêmes questions, posées avant et après l'entraînement.</p>
       <div id="t-tests" class="train-tests"></div>
@@ -284,10 +265,10 @@
       <details class="train-setup">
         <summary>Comment Syrius reconnaît GitHub</summary>
         <p class="small muted">Rien à configurer : les automatisations de ton dépôt GitHub (entraînement chaque nuit,
-          « Améliorer Syrius ») prouvent leur identité avec la signature officielle de GitHub. Ton Syrius vérifie
+          les demandes de code de Syrius Code) prouvent leur identité avec la signature officielle de GitHub. Ton Syrius vérifie
           qu'elles viennent bien de ton dépôt, sur la branche principale. Elles ne peuvent que suivre l'entraînement,
           lire tes phrases d'entraînement et tes demandes de changement, jamais tes discussions.</p>
-        <p class="small"><strong>Pour « Améliorer Syrius »</strong> : secret GitHub <code>OPENROUTER_API_KEY</code>
+        <p class="small"><strong>Pour les demandes de code (Syrius Code)</strong> : secret GitHub <code>OPENROUTER_API_KEY</code>
           (et, en option, <code>MISTRAL_API_KEY</code> : Devstral, l'IA de Mistral spécialisée dans le code, devient
           alors la programmeuse principale), et « Allow GitHub Actions to create and approve pull requests » coché (Settings → Actions → General).</p>
         <p id="t-setup-msg" class="small"></p>

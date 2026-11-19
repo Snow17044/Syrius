@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, autogen, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, training, voicebot
+from . import auth, autogen, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
 from . import transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
@@ -84,6 +84,12 @@ class JoinBody(BaseModel):
 
 class CodeMessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+
+
+class SkillBody(BaseModel):
+    name: str = Field(min_length=2, max_length=60)
+    description: str = Field(min_length=10, max_length=200)
+    body: str = Field(min_length=20, max_length=skills.MAX_BODY + 500)
 
 
 class DashboardBody(BaseModel):
@@ -859,6 +865,30 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"})
+
+    @app.get("/api/code/skills", dependencies=owner_only)
+    async def code_skills():
+        return skills.catalog(db.base)
+
+    @app.get("/api/code/skills/{name}", dependencies=owner_only)
+    async def code_skill_get(name: str):
+        s = skills.get(db.base, name)
+        if not s:
+            raise HTTPException(404)
+        return s
+
+    @app.post("/api/code/skills", dependencies=owner_only)
+    async def code_skill_add(body: SkillBody):
+        try:
+            return skills.add(db.base, body.name, body.description, body.body)
+        except skills.SkillError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.delete("/api/code/skills/{name}", dependencies=owner_only)
+    async def code_skill_delete(name: str):
+        if not skills.delete(db.base, name):
+            raise HTTPException(404, "Compétence introuvable (les compétences d'Aurore ne se suppriment pas).")
+        return {"ok": True}
 
     @app.get("/api/code/dashboards", dependencies=owner_only)
     async def code_dashboards():

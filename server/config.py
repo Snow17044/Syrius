@@ -66,6 +66,13 @@ class Config:
                                 _env("SYRIUS_OPENROUTER_MODEL") or
                                 "nvidia/nemotron-3-ultra-550b-a55b:free,google/gemma-4-31b-it:free").split(",")
         if m.strip()][:4])
+    # Cloudflare Workers AI : 10 000 « neurones » gratuits par jour (quelques centaines de questions), IA de secours.
+    # Il faut la clé d'accès (CLOUDFLARE_API_TOKEN) ET l'identifiant du compte (CLOUDFLARE_ACCOUNT_ID, 32 caractères).
+    cloudflare_api_key: str = field(default_factory=lambda: _env("CLOUDFLARE_API_TOKEN") or _env("CLOUDFLARE_API_KEY"))
+    cloudflare_account_id: str = field(default_factory=lambda: _env("CLOUDFLARE_ACCOUNT_ID"))
+    cloudflare_models: list = field(default_factory=lambda: [
+        m.strip() for m in _env("SYRIUS_CLOUDFLARE_MODELS", "@cf/zai-org/glm-4.7-flash,@cf/google/gemma-4-26b-a4b-it").split(",")
+        if m.strip()][:3])
     # IA gratuites qui « voient », utilisées seulement pour les photos (relais si les autres échouent).
     openrouter_vision_models: list = field(default_factory=lambda: [
         m.strip() for m in _env("SYRIUS_OPENROUTER_VISION_MODELS",
