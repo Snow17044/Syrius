@@ -14,10 +14,10 @@ def test_identifiants_uniques():
 def test_elements_cherches_par_le_code_existent():
     # Créés par le code lui-même (pas dans index.html)
     dynamic = set()
-    for js in ("app.js", "voice.js", "local.js", "hud.js", "diagram.js", "model3d.js"):
+    for js in ("app.js", "voice.js", "local.js", "hud.js", "diagram.js", "model3d.js", "journal.js", "debate.js"):
         dynamic |= set(re.findall(r'\.id\s*=\s*["\']([\w-]+)["\']', (WEB / js).read_text(encoding="utf-8")))
     missing = {}
-    for js in ("app.js", "voice.js", "local.js"):
+    for js in ("app.js", "voice.js", "local.js", "journal.js", "debate.js"):
         src = (WEB / js).read_text(encoding="utf-8")
         for m in re.finditer(r'\$\(\s*["\']#([\w-]+)["\']\s*\)', src):
             if m.group(1) not in IDS and m.group(1) not in dynamic:

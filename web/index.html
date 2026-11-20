@@ -27,6 +27,8 @@
   <script src="/static/local.js" defer></script>
   <script src="/static/voice.js" defer></script>
   <script src="/static/app.js" defer></script>
+  <script src="/static/journal.js" defer></script>
+  <script src="/static/debate.js" defer></script>
 </head>
 <body>
   <!-- Écran de connexion -->
@@ -72,6 +74,9 @@
       <div class="list-label">Discussions</div>
       <ul id="conv-list"></ul>
       <div class="drawer-foot">
+        <button id="open-wakeup" class="ghost wide" data-icon="sun"><span>Réveil Jarvis</span></button>
+        <button id="open-journal" class="ghost wide" data-icon="book"><span>Journal intime</span></button>
+        <button id="open-debate" class="ghost wide" data-icon="message"><span>Débat d'IA</span></button>
         <button id="open-training" class="ghost wide hidden" data-icon="chart"><span>Entraînement de Syrius</span></button>
         <button id="open-settings" class="ghost wide" data-icon="settings"><span>Réglages</span></button>
         <button id="logout" class="ghost wide subtle" data-icon="logout"><span>Déconnexion</span></button>
@@ -100,6 +105,9 @@
             <button class="chip" data-prompt="Quelles sont les actus importantes aujourd'hui ?"><b data-icon="news"></b><span>Actus du jour</span></button>
             <button class="chip" data-prompt="Dessine-moi un paysage de montagne au coucher du soleil"><b data-icon="sparkle"></b><span>Créer une image</span></button>
             <button class="chip" data-prompt="Fais-moi un schéma pour organiser ma semaine"><b data-icon="nodes"></b><span>Organiser ma semaine</span></button>
+            <button class="chip" data-action="wakeup"><b data-icon="sun"></b><span>Réveil Jarvis</span></button>
+            <button class="chip" data-action="journal"><b data-icon="moon"></b><span>Journal du soir</span></button>
+            <button class="chip wide-chip" data-action="debate"><b data-icon="message"></b><span>Débat Nova contre Aurora</span></button>
           </div>
         </div>
       </div>
@@ -438,14 +446,15 @@
       </div>
 
       <div id="briefing-box" class="set-card hidden">
-        <h4 data-icon="sun"><span>Briefing du matin</span></h4>
-        <p class="muted small">Chaque jour, une notification : touche-la et Syrius te fait ton briefing. Pour les anniversaires, dis-lui par exemple « Retiens que l'anniversaire de Maman est le 12 mars ».</p>
-        <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le briefing</span></label>
+        <h4 data-icon="sun"><span>Réveil Jarvis</span></h4>
+        <p class="muted small">Chaque matin, une notification : touche-la et Nova te réveille à la façon de J.A.R.V.I.S., à voix haute. Pour les anniversaires, dis-lui par exemple « Retiens que l'anniversaire de Maman est le 12 mars ».</p>
+        <label class="switch"><input id="briefing-on" type="checkbox"><span>Activer le réveil</span></label>
         <p class="muted small">Ce qu'il contient :</p>
         <label class="switch"><input type="checkbox" data-bopt="meteo" checked><span>Météo et pluie</span></label>
         <label class="switch"><input type="checkbox" data-bopt="rappels" checked><span>Mes rappels du jour</span></label>
         <label class="switch"><input type="checkbox" data-bopt="anniv" checked><span>Anniversaires et événements</span></label>
         <label class="switch"><input type="checkbox" data-bopt="actus" checked><span>3 actualités</span></label>
+        <label class="switch"><input type="checkbox" data-bopt="journal" checked><span>Un mot sur mon journal d'hier</span></label>
         <label>Heure <input id="briefing-time" type="time" value="07:30"></label>
         <p id="briefing-msg" class="small"></p>
       </div>
@@ -551,6 +560,60 @@
       <button id="cm-pin" class="ghost wide"></button>
       <button id="cm-delete" class="danger wide" data-icon="trash"><span>Supprimer</span></button>
       <button id="cm-close" class="ghost wide">Annuler</button>
+    </div>
+  </dialog>
+
+  <!-- Journal intime -->
+  <dialog id="journal">
+    <form method="dialog" class="sheet">
+      <header class="sheet-head"><h3>Journal intime</h3><button class="icon-btn" value="close" aria-label="Fermer" data-icon="close"></button></header>
+      <p class="muted small">Le soir, Nova te pose trois petites questions sur ta journée, puis range un court résumé ici.
+        Ton journal est privé : seul ton compte le voit, et tu peux effacer chaque page.</p>
+      <button type="button" id="journal-start" class="primary wide" data-icon="moon"><span>Raconter ma journée</span></button>
+      <div id="journal-evening" class="hidden">
+        <h4 data-icon="bell"><span>Me le proposer chaque soir</span></h4>
+        <label class="switch"><input id="journal-on" type="checkbox"><span>Notification du journal du soir</span></label>
+        <label>Heure <input id="journal-time" type="time" value="21:30"></label>
+        <p id="journal-msg" class="small"></p>
+      </div>
+      <h4 data-icon="book"><span>Mes pages</span></h4>
+      <ul id="journal-list" class="journal-list"></ul>
+    </form>
+  </dialog>
+
+  <!-- Débat entre IA -->
+  <dialog id="debate">
+    <div class="sheet debate-sheet">
+      <header class="sheet-head"><h3>Débat d'IA</h3><button type="button" id="debate-close" class="icon-btn" aria-label="Fermer" data-icon="close"></button></header>
+      <form id="debate-setup">
+        <p class="muted small"><b class="nova-name">Nova</b> défend le <b>pour</b>, <b class="aurora-name">Aurora</b> le
+          <b>contre</b>. Tu regardes, et tu interviens seulement si tu en as envie : elles te répondront.</p>
+        <label>Sujet du débat<input id="debate-topic" type="text" maxlength="300" placeholder="Ex. : Faut-il interdire les devoirs à la maison ?" required></label>
+        <div class="debate-ideas" id="debate-ideas"></div>
+        <label>Durée
+          <select id="debate-rounds">
+            <option value="2">Court (2 tours chacune)</option>
+            <option value="3" selected>Normal (3 tours chacune)</option>
+            <option value="5">Long (5 tours chacune)</option>
+          </select></label>
+        <label class="switch"><input id="debate-voice" type="checkbox"><span>Lire le débat à voix haute</span></label>
+        <button type="submit" class="primary wide" data-icon="play"><span>Lancer le débat</span></button>
+      </form>
+      <div id="debate-live" class="hidden">
+        <p id="debate-title" class="debate-title"></p>
+        <div id="debate-log" class="debate-log" aria-live="polite"></div>
+        <p id="debate-status" class="small muted"></p>
+        <div class="debate-controls">
+          <button type="button" id="debate-pause" class="ghost" data-icon="pause"><span>Pause</span></button>
+          <button type="button" id="debate-more" class="ghost hidden" data-icon="plus"><span>Encore un tour</span></button>
+          <button type="button" id="debate-verdict" class="ghost" data-icon="flag"><span>Verdict</span></button>
+          <button type="button" id="debate-new" class="ghost subtle" data-icon="refresh"><span>Nouveau</span></button>
+        </div>
+        <form id="debate-say" class="debate-say">
+          <input id="debate-input" type="text" maxlength="1000" placeholder="Intervenir (facultatif)…" aria-label="Ton intervention" autocomplete="off">
+          <button type="submit" class="send" aria-label="Envoyer" data-icon="send"></button>
+        </form>
+      </div>
     </div>
   </dialog>
 

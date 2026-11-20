@@ -514,7 +514,7 @@ function newConversationView() {
 
 $("#new-chat").addEventListener("click", newConversationView);
 $("#new-chat-drawer").addEventListener("click", () => { newConversationView(); closeDrawer(); });
-document.querySelectorAll(".chip").forEach((b) =>
+document.querySelectorAll(".chip[data-prompt]").forEach((b) =>
   b.addEventListener("click", () => sendMessage(b.dataset.prompt)));
 
 async function openConversation(id) {
@@ -1322,6 +1322,7 @@ async function sendMessage(text) {
           if (window.SyriusModel) window.SyriusModel.show(ev);
           realModel(view, ev);
         }
+        else if (ev.type === "journal") { tools.push("Page du " + ev.day.split("-").reverse().join("/") + " rangée dans ton journal"); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "memory") { tools.push("Souvenir enregistré : " + ev.content); setTools(view, [...new Set(tools)]); }
         else if (ev.type === "title") { $("#conv-title").textContent = ev.title; loadConversations(); }
         else if (ev.type === "error") { gotError = true; showError(view, ev.message); }
@@ -1660,19 +1661,20 @@ const BRIEFING_PARTS = {
   rappels: "mes rappels prévus aujourd'hui",
   anniv: "les anniversaires ou événements de mes souvenirs qui tombent aujourd'hui ou dans les 7 prochains jours",
   actus: "3 actualités importantes du jour",
+  journal: "un mot bienveillant sur ce que j'ai écrit hier dans mon journal intime (s'il y a une page)",
 };
 function briefingOptions() {
   let o = {};
   try { o = JSON.parse(store.get("syrius:briefing:opts") || "{}"); } catch (_) { /* défaut */ }
   const on = (k) => (o[k] === undefined ? true : !!o[k]);
-  const opts = { meteo: on("meteo"), rappels: on("rappels"), anniv: on("anniv"), actus: on("actus") };
+  const opts = { meteo: on("meteo"), rappels: on("rappels"), anniv: on("anniv"), actus: on("actus"), journal: on("journal") };
   if (!Object.values(opts).some(Boolean)) opts.meteo = opts.rappels = true;  // jamais un briefing vide
   return opts;
 }
 function briefingPrompt() {
   const o = briefingOptions();
   const items = Object.keys(BRIEFING_PARTS).filter((k) => o[k]).map((k) => BRIEFING_PARTS[k]);
-  return "Fais-moi mon briefing du matin : " + items.join(" ; ") +
+  return "Réveil Jarvis : réveille-moi, avec l'heure exacte, puis : " + items.join(" ; ") +
     ". Le tout en quelques phrases claires. Si un point n'a rien à signaler, ne le mentionne pas.";
 }
 let briefingWaiting = false;

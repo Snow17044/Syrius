@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import Config
-from .. import family, memory, selfcode, sitecode, sitescan, skills
+from .. import family, journal, memory, selfcode, sitecode, sitescan, skills
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
@@ -36,6 +36,17 @@ BASE_TOOLS = [
     _tool("forget", "Supprime un souvenir par son numéro (voir la liste des souvenirs).",
           {"memory_id": {"type": "integer"}}, ["memory_id"]),
     _tool("list_reminders", "Liste les rappels programmés (identifiant, date, texte).", {}, []),
+    _tool("save_journal",
+          "Range dans le JOURNAL INTIME de l'utilisateur le résumé de sa journée (une entrée par jour : refaire le "
+          "journal le même jour remplace l'entrée). À utiliser seulement pendant le « journal du soir », après lui "
+          "avoir posé tes questions. Écris le résumé à la première personne, comme si c'était lui qui l'écrivait.",
+          {"text": {"type": "string", "description": "Résumé chaleureux de la journée, 3 à 8 phrases, à la 1re personne."},
+           "mood": {"type": "string", "description": "Humeur du jour en 1 à 3 mots (ex. : fatigué mais content)."}},
+          ["text"]),
+    _tool("read_journal",
+          "Relit le journal intime de l'utilisateur (ses derniers jours). Pour le réveil du matin (« hier, tu "
+          "disais… »), ou quand il demande ce qu'il a fait / ressenti tel jour.",
+          {"days": {"type": "integer", "description": "Nombre de jours à relire (1 à 62, 7 par défaut)."}}, []),
     _tool("show_diagram",
           "Dessine un SCHÉMA 3D holographique dans l'app : un PLAN D'ACTION CONCRET pour une idée, un projet, "
           "un objectif, un concept ou une organisation. Utilise-le dès qu'on demande un schéma, une carte "
@@ -140,6 +151,8 @@ TOOL_LABELS = {
     "web_read": "Je lis la page",
     "show_places": "J'affiche la carte",
     "list_reminders": "Je regarde tes rappels",
+    "save_journal": "Je range ta journée dans ton journal",
+    "read_journal": "Je relis ton journal",
     "get_weather": "Je regarde la météo",
     "show_diagram": "Je dessine le schéma 3D",
     "show_model": "Je construis la maquette 3D",
@@ -234,6 +247,9 @@ _CODECHANGE_RX = re.compile(r"modifi|ajout|corrig|am[ée]lior|chang|fonctionnali
 _DASH_RX = re.compile(r"tableau de bord|dashboard|graphique|courbe|histogramme|camembert|\bkpi\b|statistique|chiffre|donn[ée]es|\bcsv\b|"
                       r"ventes|recettes|d[ée]penses|[ée]volution|\d+[ ;,]+\d+", re.I)
 
+_JOURNAL_RX = re.compile(r"journal|journ[ée]e|hier|semaine derni|r[ée]veil|briefing|bonjour|matin|ressenti|humeur|"
+                         r"qu'est-ce que j'ai fait|souviens", re.I)
+
 
 def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[dict]:
     """Garde le cœur (mémoire, heure, rappels, web, météo, lieux) + les groupes que la demande évoque.
@@ -253,6 +269,8 @@ def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[d
         drop.add("show_dashboard")
     if not _CODECHANGE_RX.search(text):
         drop |= {"propose_code_change", "list_code_changes"}
+    if not _JOURNAL_RX.search(text):
+        drop.add("read_journal")  # save_journal reste toujours là : le journal se termine souvent par « c'est tout »
     return [t for t in tools if t["function"]["name"] not in drop]
 
 
@@ -411,6 +429,27 @@ class ToolExecutor:
             elif name == "phone_reminder_cancel" and not reminders.remove(self.db, event["params"]["id"]):
                 return "Aucun rappel avec cet identifiant (utilise list_reminders).", True, None
             return done, False, event
+
+        if name == "save_journal":
+            if ctx.get("profile") == "aurore":
+                return "Le journal intime se fait avec Nova, dans l'application Syrius.", True, None
+            a = _check(args, {"text": str, "mood": str}, ["text"])
+            try:
+                entry = journal.save(self.db, a["text"], a.get("mood", ""))
+            except journal.JournalError as e:
+                raise InvalidInput(str(e)) from None
+            return ("Journal du jour enregistré. Montre le résumé à l'utilisateur et souhaite-lui une bonne soirée."
+                    ), False, {"type": "journal", "day": entry["day"], "text": entry["text"], "mood": entry["mood"]}
+
+        if name == "read_journal":
+            if ctx.get("profile") == "aurore":
+                return "Le journal intime se lit avec Nova, dans l'application Syrius.", True, None
+            a = _check(args, {"days": int}, [])
+            items = journal.recent(self.db, a.get("days", 7))
+            if not items:
+                return "Le journal est vide pour cette période.", False, None
+            return json.dumps([{"jour": e["day"], "humeur": e["mood"], "resume": e["text"]} for e in items],
+                              ensure_ascii=False), False, None
 
         if name == "list_reminders":
             items = reminders.upcoming(self.db)

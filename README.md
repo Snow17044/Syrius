@@ -13,6 +13,9 @@ C'est une **vraie application Android**, et il est disponible 24h/24 sans rien �
 | 📬 **Emails** | Gérés par **Aurora dans Syrius Code** (réservé au propriétaire) : lister, chercher, lire, résumer, brouillons. **Rien ne part sans que tu appuies sur « Envoyer »** |
 | 🌐 **Web** | Recherche l'actu (optionnel) |
 | 🎙 **Voix** | Dictée au micro et lecture des réponses à voix haute |
+| ☀️ **Réveil Jarvis** | Le matin, Nova te réveille à voix haute : heure, météo, rappels, anniversaires, actus, et un mot sur ton journal d'hier |
+| 🌙 **Journal intime** | Le soir, Nova te pose 3 questions sur ta journée et range un résumé dans ton journal privé (Menu → Journal intime) |
+| 🗣 **Débat d'IA** | Nova (pour) contre Aurora (contre) sur le sujet de ton choix ; tu regardes, et tu interviens seulement si tu veux |
 | ⚙ **Réglages** | Prénom, mode Rapide / Réfléchi, cerveau préféré, web, voix, mot de passe |
 
 ## Comment ça marche (et pourquoi c'est gratuit)
