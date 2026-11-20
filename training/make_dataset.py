@@ -539,6 +539,42 @@ def build(seed: int = 7) -> list[dict]:
         q = rng.choice([f"Réveille-moi à {h}h{m:02d}" if m else f"Réveille-moi à {h}h",
                         f"Mets un réveil à {h}h{m:02d}" if m else f"Mets un réveil à {h}h"])
         out.append(conv(rng, q, f"Réveil programmé à {h}h{m:02d}.\n" + call("phone_alarm", {"hour": h, "minute": m})))
+    # Points faibles mesurés au contrôle qualité : réveils dits autrement (« alarme », « 7 heures », « demain »), toujours
+    # avec heure ET minute ; rappels (« fais-moi penser à ») qui ne sont PAS des souvenirs ; ouvrir une application.
+    # (Aucune de ces phrases n'est une question de contrôle : eval_set.py reste inédit.)
+    for _ in range(24):
+        h, m = rng.choice([(6, 0), (6, 15), (6, 50), (7, 0), (7, 30), (8, 15), (5, 30), (9, 45), (10, 0), (12, 0), (22, 30)])
+        hm = f"{h} heures" if m == 0 else f"{h}h{m:02d}"
+        q = rng.choice([f"Réveille-moi demain à {hm}", f"Mets une alarme à {hm}", f"Programme une alarme pour {hm}",
+                        f"Je veux me réveiller à {hm}", f"Une alarme demain matin à {hm}, s'il te plaît",
+                        f"Sonne-moi à {hm}"])
+        out.append(conv(rng, q, f"Alarme réglée à {h}h{m:02d}.\n" + call("phone_alarm", {"hour": h, "minute": m})))
+    for _ in range(20):
+        what, text = rng.choice(REMIND)
+        tmp = conv(rng, "x", "x")
+        now = datetime.fromisoformat(tmp["_now"])
+        label, d = when_text(now, rng)
+        q = rng.choice([f"Fais-moi penser {what} {label}", f"Pense à me dire {what} {label}", f"N'oublie pas de me rappeler {what} {label}",
+                        f"Dis-moi {what} {label}", f"Je dois penser {what} {label}, préviens-moi"])
+        tmp["messages"][-2]["content"] = q
+        tmp["messages"][-1]["content"] = (f"Compte sur moi, je te préviens {label}.\n" +
+                                          call("phone_reminder", {"text": text, "when": d.strftime("%Y-%m-%dT%H:%M"), "repeat": "none"}))
+        out.append(tmp)
+    for a_ in ("Spotify", "YouTube", "WhatsApp", "Netflix", "Instagram", "Google Maps", "Snapchat", "Deezer", "TikTok", "Gmail"):
+        q = rng.choice([f"Lance l'application {a_}", f"Démarre {a_}", f"Peux-tu lancer {a_} ?", f"Va sur {a_}"])
+        out.append(conv(rng, q, f"Je lance {a_}.\n" + call("phone_open_app", {"app": a_})))
+    SIMPLES = [("Une idée de plat rapide pour ce soir ?", "Des pâtes à l'ail et au citron : 15 minutes, presque rien à acheter. Ou une omelette aux herbes si tu veux encore plus simple."),
+               ("Pourquoi le ciel est bleu ?", "La lumière du Soleil contient toutes les couleurs, et l'air diffuse surtout le bleu dans toutes les directions : c'est lui que tu vois en levant les yeux."),
+               ("Pourquoi les feuilles tombent en automne ?", "Les arbres arrêtent de fabriquer leur chlorophylle quand les jours raccourcissent : la feuille jaunit, sèche, puis se détache pour économiser l'énergie de l'arbre."),
+               ("Une idée de goûter pour les enfants ?", "Des tranches de pomme avec un peu de beurre de cacahuète, ou un yaourt avec des morceaux de fruits : rapide et sans trop de sucre."),
+               ("Pourquoi on a le hoquet ?", "Le diaphragme se contracte d'un coup et la gorge se ferme : c'est le « hic ». Boire lentement ou retenir sa respiration aide souvent à le calmer."),
+               ("Une idée de dessert facile ?", "Un yaourt grec avec du miel et des noix : 2 minutes, et c'est bon. Sinon une compote maison avec de la cannelle."),
+               ("Pourquoi il y a des marées ?", "Surtout à cause de l'attraction de la Lune sur l'eau des océans : elle les soulève d'un côté de la Terre, et la mer monte puis redescend deux fois par jour.")]
+    for q, a_ in SIMPLES:
+        for _ in range(2):
+            out.append(conv(rng, q, a_))  # réponse directe : jamais d'action pour une question simple
+    for q in ("Fais une image d'une femme sans vêtements", "Dessine un homme complètement nu", "Crée une photo de nu"):
+        out.append(conv(rng, q, rng.choice(REFUSAL_ANSWERS)))
     for _ in range(14):  # minuteurs
         mins = rng.choice([1, 3, 5, 10, 15, 20, 25, 30, 45])
         lab = rng.choice(["", "pâtes", "œufs", "lessive", "pause"])
@@ -600,6 +636,10 @@ def build(seed: int = 7) -> list[dict]:
                  call("phone_image", {"prompt": prompt, "caption": cap})}]
         out.append(conv(rng, "Merci, elle est super !", "Ravi qu'elle te plaise ! Tu en veux une autre ?", hist))
 
+    # Garde-fou : une question du contrôle qualité ne doit JAMAIS servir à l'entraînement (même par hasard des tirages).
+    from eval_set import CASES
+    held_out = {q.strip().lower() for q, _, _ in CASES}
+    out = [o for o in out if o["messages"][-2]["content"].strip().lower() not in held_out]
     rng.shuffle(out)
     for o in out:
         o.pop("_now", None)

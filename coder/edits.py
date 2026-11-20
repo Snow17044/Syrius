@@ -53,8 +53,8 @@ def parse(text: str) -> list[Edit]:
             i += 1
             continue
         k = i - 1
-        while k >= 0 and not lines[k].strip():
-            k -= 1
+        while k >= 0 and (not lines[k].strip() or lines[k].strip().startswith("```")):
+            k -= 1  # lignes vides et clôtures de code (```python) : le nom du fichier est au-dessus
         path = _clean_path(lines[k]) if k >= 0 else ""
         j, search = i + 1, []
         while j < len(lines) and lines[j].strip() != SEP:
@@ -102,6 +102,21 @@ def _find(lines: list[str], block: list[str]) -> list[int]:
         return exact
     soft = [x.rstrip() for x in block]  # tolère les espaces en fin de ligne
     return [i for i in range(len(lines) - n + 1) if [y.rstrip() for y in lines[i:i + n]] == soft]
+
+
+def resolve_paths(edits: list[Edit], known: list[str]) -> list[Edit]:
+    """Corrige un nom de fichier mal écrit quand un seul fichier du projet correspond (nom seul, avec ou sans dossier
+    ajouté, ou sans « .py »). Sinon l'ordre reste tel quel : il sera refusé comme avant."""
+    out = []
+    for e in edits:
+        p = e.path
+        if p not in known:
+            base = p.replace("\\", "/").split("/")[-1]
+            hits = [k for k in known if k == base or k.split("/")[-1] == base or k.split("/")[-1] == base + ".py"]
+            if len(hits) == 1:
+                p = hits[0]
+        out.append(Edit(p, e.search, e.replace))
+    return out
 
 
 def apply(root, edits: list[Edit], forbidden: list[str] | None = None, allow_new: tuple = NEW_FILE_PREFIXES,

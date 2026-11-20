@@ -61,7 +61,8 @@ def solve(task: dict, ask) -> tuple[bool, str]:
     try:
         reply = ask(tasks.SYSTEM, prompt)
         with sandbox.project(task["files"]) as d:
-            edits.apply(d, edits.parse(reply), forbidden=[], write=True)
+            blocks = edits.resolve_paths(edits.parse(reply), list(task["files"]))
+            edits.apply(d, blocks, forbidden=[], write=True)
             ok, log, _ = sandbox.run_tests(d)
         return ok, "" if ok else log[-200:]
     except edits.EditError as e:
