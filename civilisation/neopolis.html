@@ -1,0 +1,1118 @@
+<title>Néopolis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Mise en page : une console d'observation. La carte vivante domine, les instruments l'entourent. */
+:root{
+  --bg:#edf1f4; --panel:#ffffff; --ink:#17212b; --muted:#566576; --line:#d4dce4;
+  --accent:#1d6c88; --accent-2:#b9531b; --good:#2b8655; --warn:#a8701a; --bad:#bb3a2c;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e141b; --panel:#16202a; --ink:#e3eaf1; --muted:#93a2b3; --line:#283543;
+  --accent:#5db4d1; --accent-2:#ee8a4c; --good:#5cc58b; --warn:#e2b04c; --bad:#ef6d5c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e141b; --panel:#16202a; --ink:#e3eaf1; --muted:#93a2b3; --line:#283543;
+  --accent:#5db4d1; --accent-2:#ee8a4c; --good:#5cc58b; --warn:#e2b04c; --bad:#ef6d5c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1360px;margin:0 auto;padding-block:18px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+h1,h2{font-family:var(--f-display);margin:0;text-wrap:balance}
+h1{font-size:30px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:15px;font-weight:700}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-content:space-between}
+.brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.era{font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);margin:0}
+.clock{font-family:var(--f-mono);font-size:15px;font-variant-numeric:tabular-nums}
+.ctrls{display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;font-weight:500;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:6px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.lede{margin:0;color:var(--muted);max-width:75ch}
+.grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.mapcard{padding:0;overflow:hidden;gap:0}
+#map{display:block;width:100%;height:auto;cursor:crosshair;background:#3a6f93}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;padding:10px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;border:1px solid var(--muted)}
+.legend b{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:middle}
+.side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tile{background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tile .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font-family:var(--f-mono);font-size:19px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .s{font-size:12px;color:var(--muted)}
+.up{color:var(--good)} .down{color:var(--bad)} .mid{color:var(--warn)}
+.bar{display:flex;height:14px;border-radius:3px;overflow:hidden;background:var(--line)}
+.bar span{display:block;height:100%}
+.joblist{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;font-size:13px}
+.joblist li{display:flex;justify-content:space-between;gap:8px}
+.joblist li span:last-child{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.joblist i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;border:1px solid var(--muted)}
+.charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.chart canvas{width:100%;height:150px;display:block}
+.chart .keys{display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.chart .keys b{display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:5px;border-radius:2px}
+.row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.1fr);gap:16px;align-items:start}
+.party{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid currentColor}
+.p-travail{color:var(--bad)} .p-entreprise{color:var(--accent)} .p-vous{color:var(--accent-2)}
+.slider{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center}
+.slider label{font-size:13px}
+.slider output{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13px}
+.slider input{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.check input{margin-top:3px;accent-color:var(--accent)}
+.acts{display:flex;flex-wrap:wrap;gap:6px}
+.acts button{font-size:13px;padding:6px 10px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.person .name{font-family:var(--f-display);font-size:20px;font-weight:700}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0;font-size:13px}
+.facts dt{color:var(--muted)} .facts dd{margin:0;font-variant-numeric:tabular-nums}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:5px}
+.meter span{display:block;height:100%}
+.bio,.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:13px}
+.bio li,.log li{display:grid;grid-template-columns:62px 1fr;gap:8px}
+.bio time,.log time{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.log{max-height:420px;overflow-y:auto}
+.log .ev-bad{color:var(--bad)} .log .ev-good{color:var(--good)} .log .ev-pol{color:var(--accent)}
+.rel{font:inherit;padding:0;border:0;background:none;color:var(--accent);text-decoration:underline;cursor:pointer}
+@media (max-width:1000px){.grid,.row{grid-template-columns:minmax(0,1fr)}.charts{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:440px){h1{font-size:25px}.tile .v{font-size:17px}.joblist{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1>Néopolis</h1><p class="era" id="era">Village agricole</p></div>
+    <div class="clock" id="date" aria-live="off">An 1 · Printemps</div>
+    <div class="ctrls" role="group" aria-label="Vitesse du temps">
+      <button id="sp0" data-speed="0" aria-pressed="false">Pause</button>
+      <button id="sp1" data-speed="1" aria-pressed="true">1 mois / 5 s</button>
+      <button id="sp2" data-speed="2" aria-pressed="false">1 an / 5 s</button>
+      <button id="sp3" data-speed="3" aria-pressed="false">Très rapide</button>
+      <button id="bNew">Nouveau monde</button>
+    </div>
+  </header>
+  <p class="lede">Chaque point sur la carte est une personne. Elle naît, va à l'école, choisit un métier selon ce qui rapporte, se met en couple, paie ses impôts, vote, vieillit et meurt. Personne ne dirige l'économie : les prix montent quand une chose manque et baissent quand il y en a trop. Touche un point pour suivre une vie.</p>
+
+  <main class="grid">
+    <section class="panel mapcard" aria-label="Carte du monde">
+      <canvas id="map" width="960" height="600"></canvas>
+      <div class="legend" id="legend"></div>
+    </section>
+    <aside class="side">
+      <div class="tiles" id="tiles"></div>
+      <div class="panel">
+        <h2>Qui fait quoi</h2>
+        <div class="bar" id="jobbar"></div>
+        <ul class="joblist" id="joblist"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <section class="charts">
+    <div class="panel chart"><h2>Population</h2><canvas id="c1"></canvas><div class="keys" id="k1"></div></div>
+    <div class="panel chart"><h2>Prix du pain et salaire</h2><canvas id="c2"></canvas><div class="keys" id="k2"></div></div>
+    <div class="panel chart"><h2>Caisses de l'État</h2><canvas id="c3"></canvas><div class="keys" id="k3"></div></div>
+  </section>
+
+  <section class="row">
+    <div class="panel gov">
+      <h2>Gouvernement</h2>
+      <div class="party"><span>Au pouvoir :</span><span class="pill" id="party">—</span><span class="hint" id="nextElec"></span></div>
+      <div class="slider"><label for="pTax">Impôt sur le revenu</label><output id="oTax"></output><input type="range" id="pTax" min="0" max="60" step="1"></div>
+      <div class="slider"><label for="pAid">Allocation chômage (part du salaire moyen)</label><output id="oAid"></output><input type="range" id="pAid" min="0" max="90" step="5"></div>
+      <div class="slider"><label for="pPen">Pension de retraite (part du salaire moyen)</label><output id="oPen"></output><input type="range" id="pPen" min="0" max="100" step="5"></div>
+      <div class="slider"><label for="pRet">Âge de la retraite</label><output id="oRet"></output><input type="range" id="pRet" min="50" max="72" step="1"></div>
+      <label class="check"><input type="checkbox" id="pDemo" checked> <span>Démocratie : élections tous les 4 ans. Les gagnants appliquent leur programme. Décoche pour gouverner seul·e.</span></label>
+      <h2>Intervenir</h2>
+      <div class="acts">
+        <button id="eEpi">Épidémie</button>
+        <button id="eDrought">Sécheresse</button>
+        <button id="eMig">Arrivée de 20 migrants</button>
+        <button id="eGift">Donner 50 pièces à chacun</button>
+      </div>
+      <p class="hint">Essaie : mets l'impôt à 0 %, ou donne de l'argent à tout le monde, et regarde les prix et les écoles.</p>
+    </div>
+    <div class="panel person" id="person"></div>
+    <div class="panel">
+      <h2>Chronique</h2>
+      <ul class="log" id="log"></ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---------- Constantes du monde ----------
+const W = 96, H = 60, YEAR = 360;
+const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver'];
+const SEASON_FOOD = [1.1, 1.35, 1.15, 0.4];
+const EAU = 0, PLAINE = 1, FORET = 2, MONT = 3;
+const ERAS = [[0,'Village agricole'],[1,'Bourg artisan'],[2.5,'Ville marchande'],[4.5,'Cité manufacturière'],[7,'Métropole industrielle'],[11,'Ère moderne']];
+
+const JOBS = {
+  fermier:    {pl:'Agriculture',   m:'Agriculteur', f:'Agricultrice', b:'ferme',    good:'food',  base:2.6, col:'#f3c74f'},
+  bucheron:   {pl:'Bois',          m:'Bûcheron',    f:'Bûcheronne',   b:'scierie',  good:'wood',  base:2.2, col:'#e2784f'},
+  mineur:     {pl:'Mines',         m:'Mineur',      f:'Mineuse',      b:'mine',     good:'ore',   base:1.6, col:'#a493ff'},
+  artisan:    {pl:'Ateliers',      m:'Artisan',     f:'Artisane',     b:'atelier',  good:'tools', base:0.9, col:'#ff6fb0'},
+  commercant: {pl:'Commerce et services', m:'Commerçant', f:'Commerçante', b:'boutique', good:'serv', base:2.0, col:'#86e07f'},
+  macon:      {pl:'Construction',  m:'Maçon',       f:'Maçonne',      b:'chantier', pub:true, edu:0,  col:'#f4f4f4'},
+  enseignant: {pl:'Écoles',        m:'Enseignant',  f:'Enseignante',  b:'ecole',    pub:true, edu:25, col:'#43d3c4'},
+  medecin:    {pl:'Santé',         m:'Médecin',     f:'Médecin',      b:'hopital',  pub:true, edu:35, col:'#ff4b4b'},
+  savant:     {pl:'Recherche',     m:'Savant',      f:'Savante',      b:'academie', pub:true, edu:50, col:'#7fd0ff'},
+  chomeur:    {pl:'Sans emploi',   m:'Sans emploi', f:'Sans emploi',  col:'#2a2a2a'},
+  enfant:     {pl:'Enfants',       m:'Enfant',      f:'Enfant',       col:'#fff3c4'},
+  retraite:   {pl:'Retraités',     m:'Retraité',    f:'Retraitée',    col:'#b9bec4'},
+};
+const JOB_ORDER = ['fermier','bucheron','mineur','artisan','commercant','macon','enseignant','medecin','savant','chomeur','retraite','enfant'];
+const PRIVATE = ['fermier','bucheron','mineur','artisan','commercant'];
+const PUBLIC = ['macon','enseignant','medecin','savant'];
+
+const BUILD = {
+  maison:   {t:PLAINE, min:1, cap:6,  col:'#8a5a3b', lab:'Maison'},
+  ferme:    {t:PLAINE, min:6, cap:8,  col:'#d9b23c', lab:'Ferme'},
+  scierie:  {t:FORET,  min:0, cap:8,  col:'#b4572f', lab:'Scierie'},
+  mine:     {t:MONT,   min:0, cap:8,  col:'#5c4fa8', lab:'Mine'},
+  atelier:  {t:PLAINE, min:2, cap:8,  col:'#c23a7c', lab:'Atelier'},
+  boutique: {t:PLAINE, min:1, cap:10, col:'#3d9a4b', lab:'Boutique'},
+  chantier: {t:PLAINE, min:2, cap:30, col:'#7d7d7d', lab:'Chantier'},
+  ecole:    {t:PLAINE, min:1, cap:12, col:'#1f9e92', lab:'École'},
+  hopital:  {t:PLAINE, min:1, cap:12, col:'#c62828', lab:'Hôpital'},
+  academie: {t:PLAINE, min:1, cap:12, col:'#2a7fbf', lab:'Académie'},
+  mairie:   {t:PLAINE, min:0, cap:0,  col:'#1b2a3a', lab:'Mairie'},
+  marche:   {t:PLAINE, min:0, cap:0,  col:'#e0e0e0', lab:'Marché'},
+};
+
+const PARTIES = {
+  travail:    {name:'Parti du Travail',    cls:'p-travail',    tax:.32, aid:.5, pen:.6,  ret:60},
+  entreprise: {name:"Parti de l'Entreprise", cls:'p-entreprise', tax:.14, aid:.2, pen:.35, ret:65},
+};
+
+const F_NAMES = 'Camille Léa Manon Inès Chloé Jade Louise Alice Emma Rose Anna Zoé Lina Mila Nina Clara Margaux Salomé Elsa Julia Agathe Romane Lou Iris Maëlys Héloïse Juliette Anaïs Lucie Noémie Yasmine Awa Sofia Leïla Mai'.split(' ');
+const M_NAMES = 'Lucas Hugo Louis Gabriel Arthur Jules Adam Raphaël Léo Nathan Paul Tom Noah Théo Sacha Malo Victor Martin Robin Gaspard Élie Basile Oscar Simon Antoine Mathis Yanis Nils Bastien Émile Karim Moussa Diego Ilyes Minh'.split(' ');
+const L_NAMES = 'Martin Bernard Moreau Lefèvre Garnier Rousseau Fontaine Chevalier Girard Lambert Bonnet Mercier Faure Blanc Guérin Muller Henry Roussel Perrin Morel Fournier Dupont Lemoine Marchand Berger Leroy Roux Vidal Picard Renaud Benali Nguyen Diallo Haddad Costa Ferreira Kowalski Traoré'.split(' ');
+
+// ---------- Hasard reproductible ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rnd = Math.random;
+const R = () => rnd();
+const pick = a => a[Math.floor(R()*a.length)];
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const ageY = p => p.age/YEAR;
+
+let S = null;
+const STATE = {state:true};
+
+// ---------- Génération de la carte ----------
+function noise(scale){
+  const gw = Math.ceil(W/scale)+2, gh = Math.ceil(H/scale)+2, g = new Float32Array(gw*gh);
+  for (let i=0;i<g.length;i++) g[i]=R();
+  return (x,y) => {
+    const fx=x/scale, fy=y/scale, ix=Math.floor(fx), iy=Math.floor(fy), tx=fx-ix, ty=fy-iy;
+    const u=tx*tx*(3-2*tx), v=ty*ty*(3-2*ty);
+    const a=g[iy*gw+ix], b=g[iy*gw+ix+1], c=g[(iy+1)*gw+ix], d=g[(iy+1)*gw+ix+1];
+    return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;
+  };
+}
+function genTerrain(){
+  const n1=noise(18), n2=noise(9), n3=noise(4), m1=noise(12), m2=noise(5), sh=noise(3);
+  const t = new Uint8Array(W*H), shade = new Float32Array(W*H);
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+    const dx=(x-W/2)/(W/2), dy=(y-H/2)/(H/2);
+    const edge = Math.max(0, Math.hypot(dx*0.9,dy*0.9)-0.55)*0.9;
+    const e = .55*n1(x,y)+.3*n2(x,y)+.15*n3(x,y) - edge;
+    const m = .65*m1(x,y)+.35*m2(x,y);
+    const i=y*W+x; shade[i]=sh(x,y);
+    t[i] = e<0.34 ? EAU : e>0.66 ? MONT : m>0.56 ? FORET : PLAINE;
+  }
+  return {t, shade};
+}
+function findCenter(t){
+  let best=-1e9, bi=-1;
+  for (let y=6;y<H-6;y++) for (let x=8;x<W-8;x++){
+    const i=y*W+x; if (t[i]!==PLAINE) continue;
+    let pl=0, water=0, forest=0, mont=0;
+    for (let yy=-6;yy<=6;yy++) for (let xx=-6;xx<=6;xx++){
+      const k=t[(y+yy)*W+x+xx];
+      if (k===PLAINE) pl++; else if (k===EAU) water=1; else if (k===FORET) forest=1; else mont=1;
+    }
+    const sc = pl + water*25 + forest*15 + mont*10 - Math.hypot(x-W/2,y-H/2)*0.8;
+    if (sc>best){best=sc;bi=i}
+  }
+  return bi;
+}
+
+// ---------- Monde ----------
+function newWorld(seed){
+  rnd = mulberry32(seed);
+  let terr, c, tries=0;
+  do { terr = genTerrain(); c = findCenter(terr.t); tries++; }
+  while ((c<0 || !terr.t.includes(MONT) || !terr.t.includes(FORET)) && tries<30);
+  const cx=c%W, cy=Math.floor(c/W);
+  const order = [];
+  for (let i=0;i<W*H;i++) order.push(i);
+  const dist = i => Math.hypot(i%W-cx, Math.floor(i/W)-cy);
+  order.sort((a,b)=>dist(a)-dist(b));
+  S = {
+    seed, day:0, terrain:terr.t, shade:terr.shade, cx, cy, order, dist,
+    occ:new Int32Array(W*H).fill(-1), buildings:[], nextB:0,
+    people:[], byId:new Map(), nextId:1,
+    market:{serv:{p:1,s:0,pot:0,potE:6}, food:{p:1,s:0,pot:0,potE:60}, wood:{p:1.2,s:40,pot:0,potE:8}, ore:{p:1.5,s:20,pot:0,potE:6}, tools:{p:6,s:20,pot:0,potE:12}}, nJob:{},
+    treasury:300, refWage:2.2, tech:0, era:0,
+    pol:{tax:.2, aid:.3, pen:.5, ret:62, demo:true}, party:'fondateurs', nextElection:4*YEAR,
+    foodEvent:1, foodUntil:0, epiUntil:0,
+    queue:0, build:{prog:0, wood:0},
+    year:{births:0,deaths:0,ages:[],famine:0,immig:0,emig:0}, lastYear:null,
+    lifeExp:[], hist:[], log:[], selected:null, dirtyB:true, milestones:new Set(),
+  };
+  ['mairie','marche'].forEach(placeBuilding);
+  ['ecole','hopital','chantier','boutique','atelier','ferme','ferme','ferme','scierie','mine'].forEach(placeBuilding);
+  // Familles fondatrices
+  for (let h=0; h<20; h++){
+    const house = placeBuilding('maison');
+    const elder = h>=17;
+    const last = pick(L_NAMES);
+    const a1 = elder ? 58+R()*14 : 20+R()*24;
+    const m = makePerson({sex:'m', last, age:(a1+R()*4-2)*YEAR, home:house.id, edu:5+R()*35, money:25+R()*30});
+    const f = makePerson({sex:'f', last:R()<.5?last:pick(L_NAMES), age:a1*YEAR, home:house.id, edu:5+R()*35, money:25+R()*30});
+    m.partner=f.id; f.partner=m.id;
+    if (!elder){
+      const kids = Math.floor(R()*Math.min(4,(a1-19)/4+1));
+      for (let k=0;k<kids;k++){
+        const kid = makePerson({sex:R()<.5?'m':'f', last, age:R()*Math.min(15,a1-19)*YEAR, home:house.id, edu:R()*15, money:0, parents:[m.id,f.id]});
+        m.kids.push(kid.id); f.kids.push(kid.id);
+      }
+    }
+  }
+  for (let i=0;i<8;i++){
+    const house = i<4 ? placeBuilding('maison') : S.buildings.filter(b=>b.type==='maison')[i];
+    makePerson({sex:R()<.5?'m':'f', last:pick(L_NAMES), age:(18+R()*12)*YEAR, home:house.id, edu:10+R()*35, money:20+R()*20});
+  }
+  // Premiers métiers : une société agricole
+  const adults = S.people.filter(p=>ageY(p)>=16 && ageY(p)<S.pol.ret);
+  adults.forEach((p,i)=>{
+    const r = i/adults.length;
+    setJob(p, r<.5?'fermier':r<.68?'bucheron':r<.8?'mineur':r<.9?'artisan':r<.96?'commercant':'chomeur');
+    p.tool = Math.floor(R()*150);
+  });
+  // stocks de départ : de quoi tenir trois semaines
+  { const pop=S.people.length, mk=S.market; mk.food.s=pop*0.9*40; mk.food.potE=pop*0.85; }
+  S.people.forEach(p=>{ if (ageY(p)<16) p.job='enfant'; else if (ageY(p)>=S.pol.ret) p.job='retraite'; p.bio=[]; bio(p, ageY(p)>=16?`Fait partie des familles fondatrices`:`Grandit chez ses parents`); });
+  log(`Les ${S.people.length} premiers habitants s'installent au bord de ${terrNear(cx,cy)}.`, 'good');
+  S.selected = pick(S.people.filter(p=>p.job!=='enfant')).id;
+  syncPolicyUI();
+}
+function terrNear(x,y){
+  let w=0,f=0; for(let yy=-6;yy<=6;yy++)for(let xx=-6;xx<=6;xx++){const k=S.terrain[(y+yy)*W+x+xx]; if(k===EAU)w++; if(k===FORET)f++;}
+  return w>8 ? "l'eau" : f>8 ? 'la forêt' : 'la plaine';
+}
+function placeBuilding(type){
+  const B = BUILD[type];
+  for (const i of S.order){
+    if (S.occ[i]!==-1) continue;
+    const t = S.terrain[i];
+    const want = B.t;
+    if (t!==want && !(type==='mine' && t===MONT)) continue;
+    if (S.dist(i) < B.min) continue;
+    if (type==='maison' || B.t===PLAINE){
+      // garder une rue libre : pas de colonnes pleines
+      const x=i%W, y=Math.floor(i/W);
+      if (type!=='maison' && type!=='ferme' && (x+y)%2) continue;
+      if (type==='maison' && (x%3===0 || y%3===0) && S.dist(i)<14) continue;
+    }
+    const b = {id:S.nextB++, type, x:i%W, y:Math.floor(i/W), n:0};
+    S.occ[i]=b.id; S.buildings.push(b); S.dirtyB=true;
+    return b;
+  }
+  // faute de terrain idéal, on prend n'importe quelle terre libre
+  for (const i of S.order){
+    if (S.occ[i]!==-1 || S.terrain[i]===EAU) continue;
+    const b = {id:S.nextB++, type, x:i%W, y:Math.floor(i/W), n:0};
+    S.occ[i]=b.id; S.buildings.push(b); S.dirtyB=true; return b;
+  }
+  return S.buildings[0];
+}
+function bAt(id){ return S.buildings[id]; }
+
+function makePerson(o){
+  const p = {
+    id:S.nextId++, sex:o.sex, first:pick(o.sex==='f'?F_NAMES:M_NAMES), last:o.last,
+    age:Math.floor(o.age), health:85+R()*15, happy:60, money:o.money||0, edu:o.edu||0,
+    skill:0.75+R()*0.5, job:'enfant', work:-1, home:o.home, partner:null, kids:[], parents:o.parents||[],
+    tool:0, earn:0, pantry:0, hungry:0, cold:0, lux:0, born:S.day-Math.floor(o.age), x:0, y:0, bio:[],
+  };
+  const h = o.home!=null ? bAt(o.home) : bAt(0);
+  p.x = h.x+.5; p.y = h.y+.5;
+  S.people.push(p); S.byId.set(p.id,p);
+  return p;
+}
+function fullName(p){ return `${p.first} ${p.last}`; }
+function jobName(p){ const J=JOBS[p.job]; return p.sex==='f'?J.f:J.m; }
+function dateStr(d){ return `An ${Math.floor(d/YEAR)+1}`; }
+function bio(p, text){ p.bio.push([S.day, text]); if (p.bio.length>40) p.bio.splice(1,1); }
+function log(text, kind=''){ S.log.unshift([S.day, text, kind]); if (S.log.length>120) S.log.pop(); dirtyLog=true; }
+
+function setJob(p, job){
+  if (p.work>=0){ const b=bAt(p.work); if (b) b.n--; p.work=-1; }
+  const old = p.job; p.job = job;
+  if (S.nJob){ S.nJob[old]=(S.nJob[old]||1)-1; S.nJob[job]=(S.nJob[job]||0)+1; }
+  const bt = JOBS[job].b;
+  if (bt){
+    let b = S.buildings.find(b=>b.type===bt && b.n<BUILD[bt].cap);
+    if (!b) b = placeBuilding(bt);
+    b.n++; p.work=b.id;
+  }
+  if (old!==job && old!=='enfant' && PRIVATE.includes(job)) p.skill = 0.7+(p.skill-0.7)*0.5;
+}
+
+// ---------- Économie ----------
+// Les acheteurs paient le prix affiché. L'argent va aux producteurs du secteur, au prorata de ce qu'ils ont produit.
+const GOODS = ['food','wood','ore','tools','serv'];
+const BASE_P = {food:1, wood:1.2, ore:1.5, tools:6, serv:1};
+function buy(payer, gk, q){
+  const g = S.market[gk];
+  q = Math.min(q, g.s);
+  if (q<=0.0001) return 0;
+  let cost = q*g.p;
+  if (payer!==STATE && cost>payer.money){ q = Math.max(0,payer.money)/g.p; cost = q*g.p; }
+  if (q<=0.0001) return 0;
+  g.s -= q; g.pot += cost;
+  if (payer===STATE) S.treasury -= cost; else payer.money -= cost;
+  return q;
+}
+function techMult(){ return 1+S.tech*0.35; }
+// ce que rapporte, en moyenne, une journée dans ce secteur
+function sectorPay(job){
+  const J=JOBS[job], g=S.market[J.good], n=S.nJob[job]||0, Mk=S.market;
+  const prod = J.base*1.25*techMult();
+  let w = g.potE*(1-S.pol.tax)/Math.max(1,n);
+  if (job==='artisan') w -= prod*(Mk.wood.p+Mk.ore.p);
+  if (g.s < g.t*0.5){ // pénurie : tout ce qu'on produit se vend
+    const v = prod*g.p*(1-S.pol.tax) - (job==='artisan'?prod*(Mk.wood.p+Mk.ore.p):0);
+    w = Math.max(w, v);
+  }
+  return w;
+}
+function counts(){
+  const c={}; for (const j of JOB_ORDER) c[j]=0;
+  for (const p of S.people) c[p.job]++;
+  return c;
+}
+
+// ---------- Un jour qui passe ----------
+function step(){
+  const s=S, Mk=s.market; s.day++;
+  const doy = s.day%YEAR, season = Math.floor(doy/90);
+  const pop = s.people.length;
+  if (!pop) return;
+  const c = counts(); s.nJob = {...c};
+  const cov = Math.min(1, c.medecin*70/pop);
+  const tm = techMult();
+  const tax = s.pol.tax;
+  if (s.day>s.foodUntil) s.foodEvent=1;
+  const epi = s.day<s.epiUntil;
+
+  // résidents par maison
+  const res = new Map();
+  for (const p of s.people){ if (p.home!=null){ let a=res.get(p.home); if(!a){a=[];res.set(p.home,a)} a.push(p);} }
+
+  // cibles des stocks du marché
+  const foodNeed = c.enfant*0.6 + (pop-c.enfant);
+  Mk.food.t = foodNeed*45; Mk.wood.t = 25+pop*0.5+c.artisan*20; Mk.ore.t = 15+c.artisan*20; Mk.tools.t = 10+pop*0.3; Mk.serv.t = 5+pop*1.5;
+  for (const k of ['food','wood','ore','tools']) Mk[k].cap = Mk[k].t*2.5;
+
+  // 1. Production : chacun produit selon son métier, ses outils, son savoir et sa santé
+  const out = {food:0, wood:0, ore:0, tools:0, serv:0};
+  for (const p of s.people){
+    const J = JOBS[p.job];
+    p.out = 0;
+    if (!J.good) continue;
+    if (p.tool>0) p.tool--;
+    if (p.health<15) continue;
+    const sk = p.skill*(1+p.edu/200)*(p.tool>0?1.4:1)*tm*(0.5+p.health/200);
+    let q = J.base*sk;
+    if (p.job==='fermier'){
+      q *= SEASON_FOOD[season]*s.foodEvent;
+      // on garde d'abord de quoi nourrir sa famille
+      const fam = 1 + p.kids.reduce((a,k)=>{const kid=s.byId.get(k); return a+(kid&&kid.job==='enfant'&&kid.home===p.home?0.6:0)},0);
+      const keep = Math.min(q, Math.max(0, fam*3 - p.pantry));
+      p.pantry += keep; q -= keep;
+    }
+    if (p.job==='artisan'){
+      const pin = Mk.wood.p+Mk.ore.p;
+      const qq = Math.min(q, Mk.wood.s, Mk.ore.s, Math.max(0,p.money)/pin);
+      if (qq>0.01){ p.inCost = qq*pin; buy(p,'wood',qq); buy(p,'ore',qq); q = qq; } else q = 0;
+    }
+    Mk[J.good].s += q; p.out = q; out[J.good] += q;
+    if (p.skill<1.6) p.skill += 0.0004;
+  }
+  for (const k of GOODS) if (Mk[k].s>Mk[k].cap) Mk[k].s = Mk[k].cap; // surplus invendable, perdu
+
+  // 2. Dépenses publiques : salaires, pensions, aides
+  const debtLimit = 60*pop*s.refWage;
+  const f = s.treasury < -debtLimit ? 0.5 : 1;
+  for (const p of s.people){
+    let pay = 0;
+    if (JOBS[p.job].pub) pay = Math.max(s.refWage, 1.6*Mk.food.p)*1.15*f;
+    else if (p.job==='retraite') pay = Math.max(s.refWage, 2*Mk.food.p)*s.pol.pen*f;
+    else if (p.job==='chomeur') pay = Math.max(s.refWage, 2*Mk.food.p)*s.pol.aid*f;
+    if (pay){ p.money += pay; s.treasury -= pay; if (JOBS[p.job].pub) p.earn = p.earn*0.95+pay*0.05; }
+  }
+
+  // 3. Se nourrir, se chauffer, s'équiper
+  Mk.food.s *= 0.998; Mk.serv.s *= 0.85; // un service non rendu ne se stocke pas
+  for (const p of s.people){
+    const child = p.job==='enfant';
+    const need = child ? 0.6 : 1;
+    let got = Math.min(need, p.pantry); p.pantry -= got;
+    if (child){
+      for (const pid of p.parents){ const par=s.byId.get(pid); if (par && got<need*0.99 && par.pantry>0){ const x=Math.min(par.pantry,need-got); par.pantry-=x; got+=x; } }
+      for (const pid of p.parents){ const par=s.byId.get(pid); if (par && got<need*0.99) got += buy(par,'food',need-got); }
+      if (got<need*0.99) got += buy(STATE,'food',need-got);
+    } else {
+      if (got<need*0.99) got += buy(p,'food',need-got);
+      const q = p.partner && s.byId.get(p.partner);
+      if (got<need*0.99 && q) got += buy(q,'food',need-got); // le couple partage
+    }
+    const fed = got/need;
+    p.fed = fed;
+    if (fed<0.7){ p.hungry++; p.health -= 3.5*(1-fed); } else p.hungry = Math.max(0,p.hungry-1);
+    p.malnut = (p.malnut||0)*0.98 + (fed<0.7?0.02:0);
+    // objets et confort : on dépense une part de ce qui dépasse sa réserve
+    if (!child){
+      const buffer = 25*Mk.food.p + 4*Mk.tools.p;
+      if (p.money > buffer){
+        const spend = (p.money-buffer)*0.02;
+        const a = buy(p,'serv', spend*0.6/Mk.serv.p), b = buy(p,'tools', spend*0.4/Mk.tools.p);
+        if (a+b>0.01) p.lux = Math.min(60, p.lux + a*2 + b*30);
+      }
+      // aide alimentaire pour qui n'a plus rien
+      if (p.fed<0.7 && s.pol.aid>0 && p.money<3*Mk.food.p){ const x = buy(STATE,'food',need-got); got += x; p.fed = got/need; if (p.fed>=0.7) p.hungry = Math.max(0,p.hungry-1); }
+    }
+    if (p.lux>0) p.lux = Math.max(0, p.lux-1);
+    // outils de travail
+    if (JOBS[p.job].good && p.job!=='artisan' && p.tool<=0 && p.money>Mk.tools.p*1.5){ if (buy(p,'tools',1)>0.9) p.tool=150; }
+  }
+  if (season===3){
+    for (const [hid, ppl] of res){
+      let payer = null;
+      for (const p of ppl) if (p.job!=='enfant' && (!payer || p.money>payer.money)) payer=p;
+      const got = payer ? buy(payer,'wood',0.25) : buy(STATE,'wood',0.25);
+      const cold = got<0.2;
+      for (const p of ppl){ p.cold = cold; if (cold) p.health -= 0.6; }
+    }
+  } else for (const p of s.people) p.cold=false;
+
+  // 4. Les recettes du jour reviennent aux producteurs, au prorata de leur production
+  let wSum=0, wN=0;
+  for (const p of s.people){
+    const J = JOBS[p.job];
+    if (!J.good) continue;
+    const g = Mk[J.good];
+    const share = out[J.good]>0 ? g.pot*p.out/out[J.good] : 0;
+    const t = share*tax; s.treasury += t; p.money += share-t;
+    p.earn = p.earn*0.95 + (share-t-(p.inCost||0))*0.05; p.inCost = 0;
+    wSum += Math.max(0,p.earn); wN++;
+  }
+  for (const k of GOODS){
+    const g = Mk[k];
+    g.potE = g.potE*0.97 + g.pot*0.03;
+    if (out[k]>0) g.pot = 0; // sinon, la recette attend les prochains producteurs
+    // 5. Prix : ce qui manque devient cher, ce qui abonde devient bon marché
+    const pt = BASE_P[k]*clamp(Math.pow((g.t+5)/(g.s+5), 0.7), 0.2, 8);
+    g.p += (pt-g.p)*0.03;
+  }
+  if (wN) s.refWage = Math.max(0.3, s.refWage*0.97 + (wSum/wN)*0.03);
+
+  // 5. Santé, bonheur, mort
+  const dead = [];
+  for (const p of s.people){
+    const a = ageY(p);
+    const maxH = 100 - Math.max(0,a-45)*1.1;
+    if (p.fed>=0.7) p.health = Math.min(maxH, p.health + 0.6 + 1.2*cov);
+    if (R()<0.0008) p.health -= 15+R()*25;
+    if (epi && R()<0.012*(1-0.6*cov)) p.health -= (25+R()*35)*(1+a/80);
+    let q = 0.00015*Math.exp(0.095*a)*(1-0.45*cov);
+    if (p.health<50) q *= 1+(50-p.health)/12;
+    if (a<1) q += 0.05*(1-0.8*cov);
+    if (p.health<=0 || R() < q/YEAR) dead.push(p);
+    // bonheur
+    let h = 55;
+    h += p.fed>=0.7 ? 10 : -35;
+    if (p.home==null) h -= 25;
+    h += (p.health-70)*0.3;
+    if (p.job==='chomeur') h -= 15;
+    if (p.job!=='enfant') h += clamp((p.earn/s.refWage-1)*12, -15, 15);
+    if (p.cold) h -= 10;
+    if (epi) h -= 5;
+    if (p.lux>0) h += 8;
+    if (p.partner) h += 4;
+    p.happy += (clamp(h,0,100)-p.happy)*0.04;
+  }
+  for (const p of dead) die(p);
+
+  // 6. Familles
+  for (const p of s.people){
+    p.age++;
+    const a = p.age;
+    if (a === 16*YEAR && p.job==='enfant'){ setJob(p,'chomeur'); bio(p,'Termine l\'école'); p.money += 5; }
+    if (p.job!=='retraite' && p.job!=='enfant' && a >= s.pol.ret*YEAR){ setJob(p,'retraite'); bio(p,'Prend sa retraite'); }
+    if (p.job==='enfant'){
+      const ay = a/YEAR;
+      if (ay>=6){
+        const kids = Math.max(1, c.enfant*0.7);
+        const cv = Math.min(1, c.enseignant*20/kids);
+        p.edu = Math.min(100, p.edu + 0.004 + 0.035*cv);
+      }
+    }
+  }
+  // naissances
+  const babies=[];
+  for (const p of s.people){
+    if (p.sex!=='f' || !p.partner) continue;
+    const a = ageY(p); if (a<18 || a>44) continue;
+    const m = s.byId.get(p.partner); if (!m || m.sex!=='m') continue;
+    if (p.fed<0.7) continue;
+    const same = m.home===p.home && p.home!=null;
+    const crowd = (res.get(p.home)||[]).length>=6;
+    let annual = 0.30 * Math.pow(0.72,p.kids.length) * (same?1:0.25) * clamp(p.happy/60,0.3,1.3) / (1+s.tech*0.18) * (crowd?0.6:1);
+    if (R() < annual/YEAR) babies.push([p,m]);
+  }
+  for (const [mo,fa] of babies){
+    const kid = makePerson({sex:R()<.5?'m':'f', last:R()<.7?fa.last:mo.last, age:0, home:mo.home, money:0, parents:[mo.id,fa.id]});
+    kid.health = 70; kid.bio=[]; bio(kid, `Naît chez ${mo.first} et ${fa.first}`);
+    mo.kids.push(kid.id); fa.kids.push(kid.id);
+    bio(mo, `Naissance de ${kid.first}`); bio(fa, `Naissance de ${kid.first}`);
+    s.year.births++;
+  }
+  // rencontres
+  if (s.day%3===0){
+    const singles = s.people.filter(p=>!p.partner && ageY(p)>=18 && ageY(p)<55);
+    for (const p of singles){
+      if (p.partner || R()>0.006) continue;
+      const wantSex = R()<0.92 ? (p.sex==='f'?'m':'f') : p.sex;
+      const cands = singles.filter(q=>!q.partner && q!==p && q.sex===wantSex && Math.abs(q.age-p.age)<8*YEAR && !p.parents.some(x=>q.parents.includes(x)));
+      if (!cands.length) continue;
+      const q = pick(cands);
+      p.partner=q.id; q.partner=p.id;
+      bio(p, `Se met en couple avec ${fullName(q)}`); bio(q, `Se met en couple avec ${fullName(p)}`);
+    }
+  }
+  // 7. Logement (chaque semaine)
+  if (s.day%7===0) housing(res);
+  // 8. Emplois
+  employment(c);
+  // 9. Chantiers publics
+  if (s.queue>0){
+    if (s.build.wood<30) s.build.wood += buy(STATE,'wood',Math.min(4,30-s.build.wood));
+    s.build.prog += c.macon*(s.build.wood>=30?1:0.25)*tm;
+    if (s.build.prog>=18 && s.build.wood>=30){ placeBuilding('maison'); s.queue--; s.build={prog:0,wood:0}; s.built=(s.built||0)+1; }
+  }
+  // 10. Savoir et techniques
+  let eduSum=0; for (const p of s.people) if (p.job!=='enfant' && p.job!=='retraite') eduSum+=p.edu;
+  let res2 = 0; for (const p of s.people) if (p.job==='savant') res2 += p.edu/100;
+  s.tech += (eduSum*0.00000007 + res2*0.00025) / (1+s.tech*0.12);
+  let era=0; for (let i=0;i<ERAS.length;i++) if (s.tech>=ERAS[i][0]) era=i;
+  if (era>s.era){ s.era=era; log(`Nouvelle époque : ${ERAS[era][1]}. Les outils et le savoir rendent chacun plus productif.`, 'good'); }
+
+  // 11. Mois et années
+  if (s.day%30===0) monthly();
+  if (doy===0) yearly();
+  if (s.day>=s.nextElection){ s.nextElection += 4*YEAR; election(); }
+}
+
+function die(p){
+  const s=S;
+  const a = ageY(p);
+  const cause = (p.hungry>5 || (p.malnut||0)>0.15) ? 'de faim' : a<1 ? 'en bas âge' : p.health<=0 ? 'de maladie' : a>65 ? 'de vieillesse' : 'de maladie';
+  if (p.hungry>5 || (p.malnut||0)>0.15) s.year.famine++;
+  s.year.deaths++; s.year.ages.push(a);
+  if (p.work>=0){ const b=bAt(p.work); if(b) b.n--; }
+  const idx = s.people.indexOf(p); if (idx>=0) s.people.splice(idx,1);
+  s.byId.delete(p.id);
+  p.dead = {day:s.day, cause};
+  s.graveyard = s.graveyard || new Map(); s.graveyard.set(p.id, p);
+  // héritage
+  let heirs = [];
+  const partner = p.partner && s.byId.get(p.partner);
+  if (partner){ partner.partner=null; heirs=[partner]; bio(partner, `Perd ${p.first}, mort${p.sex==='f'?'e':''} ${cause}`); }
+  else heirs = p.kids.map(k=>s.byId.get(k)).filter(Boolean);
+  if (p.money>0){
+    if (heirs.length) heirs.forEach(h=>h.money += p.money/heirs.length);
+    else s.treasury += p.money;
+  }
+  for (const k of p.kids){ const kid=s.byId.get(k); if (kid && kid!==partner) bio(kid, `Perd ${p.sex==='f'?'sa mère':'son père'}, ${p.first}`); }
+  bio(p, `Meurt ${cause} à ${Math.floor(a)} ans`);
+  if (s.selected===p.id) dirtyPerson=true;
+}
+
+function housing(res){
+  const s=S;
+  const free = s.buildings.filter(b=>b.type==='maison' && !res.has(b.id));
+  let demand = 0;
+  const movers = [];
+  for (const p of s.people){
+    if (p.job==='enfant') continue;
+    if (p.home==null){ demand++; movers.push(p); continue; }
+    const withParents = (res.get(p.home)||[]).some(o=>p.parents.includes(o.id));
+    if (withParents && (p.partner || ageY(p)>=22)){ demand += p.partner?0.5:0.5; movers.push(p); }
+    else if (p.partner){ const q=s.byId.get(p.partner); if (q && q.home!==p.home){ demand+=0.5; movers.push(p);} }
+  }
+  for (const p of movers){
+    if (!s.byId.has(p.id)) continue;
+    const q = p.partner && s.byId.get(p.partner);
+    // rejoindre le logement indépendant du partenaire
+    if (q && q.home!=null && q.home!==p.home){
+      const qWithParents = (res.get(q.home)||[]).some(o=>q.parents.includes(o.id));
+      if (!qWithParents && (res.get(q.home)||[]).length<6){ moveFamily(p, q.home, res); bio(p,`Emménage chez ${q.first}`); continue; }
+    }
+    if (!free.length){
+      if (p.home==null){ const any=s.buildings.find(b=>b.type==='maison' && (res.get(b.id)||[]).length<6); if (any) moveFamily(p, any.id, res); }
+      continue;
+    }
+    if (R()<0.5 || p.home==null){
+      const h = free.shift();
+      moveFamily(p, h.id, res);
+      if (q) moveFamily(q, h.id, res);
+      bio(p, q?`S'installe dans une maison avec ${q.first}`:'Prend son propre logement');
+    }
+  }
+  if (free.length < demand && s.queue < 2+Math.floor(s.people.length/150)) s.queue++;
+}
+function moveFamily(p, hid, res){
+  const old = p.home;
+  const group = [p, ...p.kids.map(k=>S.byId.get(k)).filter(k=>k && k.job==='enfant' && k.home===old)];
+  for (const g of group){
+    if (g.home!=null){ const a=res.get(g.home); if (a){ const i=a.indexOf(g); if(i>=0)a.splice(i,1); if(!a.length)res.delete(g.home);} }
+    g.home = hid;
+    let a=res.get(hid); if(!a){a=[];res.set(hid,a)} a.push(g);
+  }
+}
+
+function employment(c){
+  const s=S;
+  // métiers privés : on change si un autre rapporte nettement plus
+  // métiers privés : on glisse peu à peu vers les secteurs qui paient mieux
+  for (const p of s.people){
+    if (p.job==='enfant' || p.job==='retraite' || JOBS[p.job].pub) continue;
+    if (p.job==='chomeur'){
+      if ((s.day+p.id)%5) continue;
+      let best=null, bv=-1e9;
+      for (const j of PRIVATE){ const v=sectorPay(j)*(0.8+0.4*R()); if (v>bv){bv=v;best=j} }
+      if (bv > 0.15*s.refWage){ setJob(p,best); bio(p, `Devient ${jobName(p).toLowerCase()}`); }
+    } else if (p.hungry>3 && p.job!=='fermier' && R()<0.15){
+      setJob(p,'fermier'); bio(p,'A faim : se met à cultiver la terre');
+    } else if ((s.day+p.id)%30===0){
+      const cur = sectorPay(p.job);
+      const k = pick(PRIVATE.filter(j=>j!==p.job)), v = sectorPay(k);
+      if (v > cur*1.2+0.05 && R()<0.35){ setJob(p,k); bio(p, `Change de métier : ${jobName(p).toLowerCase()}`); }
+      else if (cur < 0.05*s.refWage && R()<0.3){ setJob(p,'chomeur'); bio(p,'Perd son revenu : plus personne n\'achète'); }
+    }
+  }
+  if (s.day%7) return;
+  // embauches et départs dans le public
+  const pop = s.people.length;
+  const k = s.rich ? 1.6 : 1;
+  const target = {
+    enseignant: Math.ceil(c.enfant*0.7/20*k),
+    medecin: pop>20 ? Math.max(1, Math.round(pop/70*k)) : 0,
+    macon: s.queue>0 ? Math.min(8, 2+s.queue*2) : 0,
+    savant: s.era>=1 ? Math.floor(pop/80*k)+1 : 0,
+  };
+  const broke = s.treasury < -60*pop*s.refWage;
+  for (const j of PUBLIC){
+    if (c[j] < target[j] && !broke){
+      const req = JOBS[j].edu;
+      let cand = s.people.filter(p=>p.job==='chomeur' && p.edu>=req);
+      if (!cand.length) cand = s.people.filter(p=>PRIVATE.includes(p.job) && p.edu>=req && p.earn < s.refWage*1.1);
+      if (cand.length){
+        cand.sort((a,b)=>b.edu-a.edu);
+        const p = cand[0]; setJob(p,j); c[j]++; bio(p, `Est embauché${p.sex==='f'?'e':''} par la ville : ${jobName(p).toLowerCase()}`);
+      }
+    } else if (c[j] > target[j]+ (j==='macon'?0:1)){
+      const p = s.people.find(p=>p.job===j);
+      if (p){ setJob(p,'chomeur'); c[j]--; bio(p, j==='macon'?'Fin du chantier':'Son poste public est supprimé'); }
+    }
+  }
+}
+
+function monthly(){
+  const s=S, pop=s.people.length;
+  const adults = s.people.filter(p=>p.job!=='enfant');
+  // banque centrale : quand l'argent manque pour faire tourner l'économie, elle en crée
+  if (adults.length){
+    const avg = adults.reduce((a,p)=>a+Math.max(0,p.money),0)/adults.length;
+    const target = 45*techMult();
+    if (avg < target*0.85){
+      const x = (target-avg)*0.15, total = x*adults.length;
+      for (const p of adults) p.money += x;
+      // l'État puise d'abord dans ses excédents, la banque centrale crée le reste
+      const surplus = Math.max(0, s.treasury - 20*pop*s.refWage);
+      const fromState = Math.min(surplus, total);
+      s.treasury -= fromState;
+      if (total-fromState > 0.01){
+        s.minted = (s.minted||0) + total-fromState;
+        if (!s.lastMint || s.day - s.lastMint > 10*YEAR){ s.lastMint = s.day; log(`La banque centrale crée de la monnaie : l'argent manquait pour acheter tout ce qui est produit.`, 'pol'); }
+      }
+    }
+  }
+  // un État riche investit : chantiers et services publics
+  s.rich = s.treasury > 20*pop*s.refWage;
+  if (s.rich && s.queue<2){
+    const used = new Set(s.people.map(p=>p.home));
+    const free = s.buildings.filter(b=>b.type==='maison' && !used.has(b.id)).length;
+    if (free < 2+pop*0.03) s.queue++;
+  }
+  if (s.rich){
+    const extra = (s.treasury - 20*pop*s.refWage)*0.08, ad = adults.filter(p=>p.job!=='enfant');
+    if (ad.length){ for (const p of ad) p.money += extra/ad.length; s.treasury -= extra; }
+  }
+  const c = counts();
+  const active = pop - c.enfant - c.retraite;
+  s.hist.push({
+    d:s.day, pop, kids:c.enfant, old:c.retraite,
+    food:s.market.food.p, wage:s.refWage, treasury:s.treasury,
+    gini:gini(adults.map(p=>Math.max(0,p.money))), unemp: active? c.chomeur/active:0,
+  });
+  if (s.hist.length>600) s.hist.shift();
+  for (const m of [100,250,500,1000,2000]) if (pop>=m && !s.milestones.has(m)){ s.milestones.add(m); log(`La population dépasse ${m} habitants.`, 'good'); }
+  dirtyCharts = true;
+}
+function yearly(){
+  const s=S, y=s.year, pop=s.people.length;
+  const yr = Math.floor(s.day/YEAR);
+  s.lifeExp.push(...y.ages); if (s.lifeExp.length>300) s.lifeExp.splice(0, s.lifeExp.length-300);
+  // migrations
+  const avgH = s.people.reduce((a,p)=>a+p.happy,0)/Math.max(1,pop);
+  const freeH = s.buildings.filter(b=>b.type==='maison').length - new Set(s.people.map(p=>p.home)).size;
+  if (avgH>58 && freeH>0){ const n = 1+Math.floor(R()*4); migrants(n,false); y.immig+=n; }
+  if (avgH<32){
+    const leave = s.people.filter(p=>p.job==='chomeur' && !p.partner && R()<0.3);
+    for (const p of leave){ p.health=-1; die(p); s.year.deaths--; s.year.ages.pop(); y.emig++; }
+  }
+  const parts = [`Bilan de l'an ${yr} : ${y.births} naissance${y.births>1?'s':''}, ${y.deaths} décès`];
+  if (y.famine) parts.push(`dont ${y.famine} de faim`);
+  if (y.immig) parts.push(`${y.immig} arrivée${y.immig>1?'s':''}`);
+  if (y.emig) parts.push(`${y.emig} départ${y.emig>1?'s':''} faute d'avenir`);
+  log(parts.join(', ')+'.', y.famine?'bad':'');
+  s.lastYear = y;
+  s.year = {births:0,deaths:0,ages:[],famine:0,immig:0,emig:0};
+  // aléas
+  if (R()<0.11){ s.foodEvent=0.45; s.foodUntil=s.day+120; log('Sécheresse : les récoltes s\'effondrent cette année.', 'bad'); }
+  else if (R()<0.1){ s.foodEvent=1.3; s.foodUntil=s.day+90; log('Récolte exceptionnelle : les greniers débordent.', 'good'); }
+  if (R()<0.06){ s.epiUntil=s.day+60; log('Une épidémie se déclare.', 'bad'); }
+}
+function gini(xs){
+  const n=xs.length; if (n<2) return 0;
+  xs.sort((a,b)=>a-b); let sum=0, cum=0;
+  for (let i=0;i<n;i++){ cum += xs[i]*(i+1); sum += xs[i]; }
+  return sum ? (2*cum)/(n*sum) - (n+1)/n : 0;
+}
+function migrants(n, announce=true){
+  const s=S;
+  const houses = s.buildings.filter(b=>b.type==='maison');
+  const used = new Set(s.people.map(p=>p.home));
+  for (let i=0;i<n;i++){
+    const free = houses.find(h=>!used.has(h.id));
+    const p = makePerson({sex:R()<.5?'m':'f', last:pick(L_NAMES), age:(18+R()*22)*YEAR, home:free?free.id:null, edu:R()*45, money:5+R()*15});
+    if (free) used.add(free.id);
+    if (p.home==null){ const b=bAt(0); p.x=b.x+.5; p.y=b.y+.5; }
+    setJob(p,'chomeur'); p.bio=[]; bio(p, free?'Arrive à Néopolis et trouve un logement':'Arrive à Néopolis sans logement');
+  }
+  if (announce) log(`${n} personnes arrivent de l'extérieur pour tenter leur chance.`, 'pol');
+}
+function election(){
+  const s=S;
+  if (!s.pol.demo){ return; }
+  const voters = s.people.filter(p=>p.job!=='enfant');
+  if (!voters.length) return;
+  const sorted = [...voters].sort((a,b)=>a.money-b.money);
+  const rank = new Map(sorted.map((p,i)=>[p.id, i/Math.max(1,sorted.length-1)]));
+  const inc = s.party;
+  let t=0, e=0;
+  for (const p of voters){
+    if (R()<0.25) continue; // abstention
+    let pref = (0.5-rank.get(p.id))*1.2 + (p.job==='chomeur'?0.25:0) + (p.job==='retraite'?0.1:0) + (R()-0.5)*0.7;
+    if (p.happy<45 && PARTIES[inc]) pref += inc==='travail' ? -0.35 : 0.35;
+    if (pref>0) t++; else e++;
+  }
+  const win = t>=e ? 'travail' : 'entreprise';
+  const tot = Math.max(1,t+e);
+  const P = PARTIES[win];
+  s.party = win;
+  Object.assign(s.pol, {tax:P.tax, aid:P.aid, pen:P.pen, ret:P.ret});
+  log(`Élections : ${P.name} l'emporte avec ${Math.round(100*Math.max(t,e)/tot)} % des voix (participation ${Math.round(100*tot/voters.length)} %). Impôt à ${Math.round(P.tax*100)} %, retraite à ${P.ret} ans.`, 'pol');
+  syncPolicyUI();
+}
+
+// ---------- Rendu de la carte ----------
+const cv = document.getElementById('map');
+const ctx = cv.getContext('2d');
+let terrainImg = null, buildImg = null, ts = 10;
+function sizeMap(){
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  const w = cv.clientWidth || 900;
+  ts = Math.max(3, Math.floor(w*dpr/W));
+  cv.width = ts*W; cv.height = ts*H;
+  terrainImg = null; S.dirtyB = true;
+}
+const TCOL = {[EAU]:[58,112,148],[PLAINE]:[166,190,120],[FORET]:[72,116,64],[MONT]:[134,126,114]};
+function drawTerrain(){
+  const c = document.createElement('canvas'); c.width=W*ts; c.height=H*ts;
+  const g = c.getContext('2d');
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+    const i=y*W+x, t=S.terrain[i], k=0.88+S.shade[i]*0.24, col=TCOL[t];
+    g.fillStyle = `rgb(${col[0]*k|0},${col[1]*k|0},${col[2]*k|0})`;
+    g.fillRect(x*ts,y*ts,ts,ts);
+    if (t===FORET && ts>=6){ g.fillStyle='rgba(20,50,20,.45)'; g.beginPath(); g.arc(x*ts+ts*.5,y*ts+ts*.45,ts*.28,0,7); g.fill(); }
+    if (t===MONT && ts>=6){ g.fillStyle='rgba(255,255,255,.35)'; g.beginPath(); g.moveTo(x*ts+ts*.5,y*ts+ts*.18); g.lineTo(x*ts+ts*.8,y*ts+ts*.75); g.lineTo(x*ts+ts*.2,y*ts+ts*.75); g.fill(); }
+  }
+  terrainImg = c;
+}
+function drawBuildings(){
+  const c = document.createElement('canvas'); c.width=W*ts; c.height=H*ts;
+  const g = c.getContext('2d');
+  // routes vers le centre
+  g.strokeStyle='rgba(120,98,70,.55)'; g.lineWidth=Math.max(1,ts*.18);
+  for (const b of S.buildings){ if (b.type==='maison') continue; g.beginPath(); g.moveTo((S.cx+.5)*ts,(S.cy+.5)*ts); g.lineTo((b.x+.5)*ts,(S.cy+.5)*ts); g.lineTo((b.x+.5)*ts,(b.y+.5)*ts); g.stroke(); }
+  for (const b of S.buildings){
+    const B = BUILD[b.type], x=b.x*ts, y=b.y*ts;
+    if (b.type==='maison'){
+      g.fillStyle='#e9dcc6'; g.fillRect(x+ts*.18,y+ts*.42,ts*.64,ts*.46);
+      g.fillStyle=B.col; g.beginPath(); g.moveTo(x+ts*.1,y+ts*.46); g.lineTo(x+ts*.5,y+ts*.1); g.lineTo(x+ts*.9,y+ts*.46); g.fill();
+    } else {
+      g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(x+ts*.08,y+ts*.12,ts*.9,ts*.9);
+      g.fillStyle=B.col; g.fillRect(x+ts*.04,y+ts*.04,ts*.9,ts*.9);
+      if (ts>=9){ g.fillStyle = b.type==='marche'?'#222':'#fff'; g.font=`700 ${Math.floor(ts*.6)}px ${getComputedStyle(document.body).fontFamily}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(B.lab[0], x+ts*.49, y+ts*.52); }
+    }
+  }
+  buildImg = c; S.dirtyB=false;
+}
+function targetOf(p, phase){
+  if (p.home==null){ const m=bAt(1); return [m.x+.5, m.y+.5]; }
+  const h = bAt(p.home);
+  if (phase===1){
+    if (p.work>=0){ const b=bAt(p.work); return [b.x+.5, b.y+.5]; }
+    if (p.job==='enfant' && ageY(p)>=6){ const e=S.buildings.find(b=>b.type==='ecole'); return [e.x+.5,e.y+.5]; }
+    if (p.job==='retraite' || p.job==='chomeur'){ const m=bAt(1); return [m.x+.5,m.y+.5]; }
+  }
+  return [h.x+.5, h.y+.5];
+}
+function render(){
+  if (!terrainImg) drawTerrain();
+  if (S.dirtyB || !buildImg) drawBuildings();
+  ctx.drawImage(terrainImg,0,0); ctx.drawImage(buildImg,0,0);
+  const phase = Math.floor(S.day/2)%2;
+  const r = Math.max(1.6, ts*.22);
+  for (const p of S.people){
+    if (p.tx===undefined || p.phase!==phase){ const t=targetOf(p,phase); p.phase=phase; const j=((p.id*7919)%100)/100-.5, k=((p.id*104729)%100)/100-.5; p.tx=t[0]+j*.8; p.ty=t[1]+k*.8; }
+    p.x += (p.tx-p.x)*0.12; p.y += (p.ty-p.y)*0.12;
+    ctx.fillStyle = JOBS[p.job].col;
+    ctx.beginPath(); ctx.arc(p.x*ts, p.y*ts, r, 0, 7); ctx.fill();
+    ctx.lineWidth = Math.max(.8, ts*.06); ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.stroke();
+  }
+  const sel = S.byId.get(S.selected);
+  if (sel){ ctx.lineWidth=Math.max(2,ts*.18); ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.arc(sel.x*ts, sel.y*ts, r*2.6, 0, 7); ctx.stroke(); ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(sel.x*ts, sel.y*ts, r*3.3, 0, 7); ctx.stroke(); }
+  if (S.foodEvent<1){ ctx.fillStyle='rgba(200,140,40,.12)'; ctx.fillRect(0,0,cv.width,cv.height); }
+  if (S.day<S.epiUntil){ ctx.fillStyle='rgba(120,200,80,.10)'; ctx.fillRect(0,0,cv.width,cv.height); }
+}
+cv.addEventListener('click', e => {
+  const rect = cv.getBoundingClientRect();
+  const x = (e.clientX-rect.left)/rect.width*W, y=(e.clientY-rect.top)/rect.height*H;
+  let best=null, bd=2.2;
+  for (const p of S.people){ const d=Math.hypot(p.x-x,p.y-y); if (d<bd){bd=d;best=p} }
+  if (best){ S.selected=best.id; dirtyPerson=true; }
+});
+
+// ---------- Interface ----------
+const $ = id => document.getElementById(id);
+let dirtyLog=true, dirtyCharts=true, dirtyPerson=true;
+function fmt(n, d=0){ return n.toLocaleString('fr-FR',{minimumFractionDigits:d, maximumFractionDigits:d}); }
+function money(n){ const a=Math.abs(n); return (n<0?'−':'')+(a>=10000?fmt(a/1000,1)+' k':fmt(a,a<10?1:0)); }
+function legend(){
+  const jobs = ['fermier','bucheron','mineur','artisan','macon','enseignant','medecin','savant','chomeur','enfant','retraite'];
+  $('legend').innerHTML = jobs.map(j=>`<span><i style="background:${JOBS[j].col}"></i>${JOBS[j].pl}</span>`).join('') +
+    ['ferme','scierie','mine','atelier','boutique','ecole','hopital'].map(b=>`<span><b style="background:${BUILD[b].col}"></b>${BUILD[b].lab}</span>`).join('');
+}
+function trendCls(v, good, bad){ return v>=good?'up':v<=bad?'down':'mid'; }
+function updateTiles(){
+  const s=S, pop=s.people.length, c=counts();
+  const active = pop-c.enfant-c.retraite;
+  const unemp = active ? c.chomeur/active : 0;
+  const le = s.lifeExp.length ? s.lifeExp.reduce((a,b)=>a+b,0)/s.lifeExp.length : 0;
+  const happy = pop ? s.people.reduce((a,p)=>a+p.happy,0)/pop : 0;
+  const g = s.hist.length ? s.hist[s.hist.length-1].gini : 0;
+  const ly = s.lastYear;
+  const tiles = [
+    ['Habitants', fmt(pop), ly?`${ly.births} naissances, ${ly.deaths} décès l'an passé`:'première année'],
+    ['Espérance de vie', le?`${fmt(le)} ans`:'—', 'âge moyen au décès'],
+    ['Chômage', `${fmt(unemp*100)} %`, `${c.chomeur} sans emploi`, trendCls(-unemp,-.06,-.15)],
+    ['Bonheur', `${fmt(happy)} / 100`, happy>58?'les gens viennent s\'installer':happy<32?'des gens partent':'ni fuite ni afflux', trendCls(happy,58,35)],
+    ['Prix du pain', `${fmt(s.market.food.p,2)} p.`, `stock ${fmt(s.market.food.s/Math.max(1,c.enfant*.6+pop-c.enfant))} jours`],
+    ['Salaire moyen', `${fmt(s.refWage,2)} p./j`, `${fmt(s.refWage/s.market.food.p,1)} pains par jour`, trendCls(s.refWage/s.market.food.p,2,1.2)],
+    ['Trésor public', `${money(s.treasury)} p.`, s.treasury<0?'l\'État est endetté':'réserves', s.treasury<0?'down':'up'],
+    ['Inégalités', fmt(g,2), 'indice de Gini, 0 = égalité'],
+    ['Techniques', fmt(s.tech,2), `production ×${fmt(techMult(),2)}`],
+    ['Maisons', fmt(s.buildings.filter(b=>b.type==='maison').length), s.queue?`${s.queue} en construction`:'aucun chantier'],
+  ];
+  $('tiles').innerHTML = tiles.map(([k,v,sub,cls])=>`<div class="tile"><span class="k">${k}</span><span class="v ${cls||''}">${v}</span><span class="s">${sub}</span></div>`).join('');
+  // métiers
+  $('jobbar').innerHTML = JOB_ORDER.filter(j=>c[j]).map(j=>`<span style="width:${100*c[j]/pop}%;background:${JOBS[j].col}" title="${JOBS[j].pl} : ${c[j]}"></span>`).join('');
+  $('joblist').innerHTML = JOB_ORDER.map(j=>`<li><span><i style="background:${JOBS[j].col}"></i>${JOBS[j].pl}</span><span>${c[j]}</span></li>`).join('');
+  const d=s.day, doy=d%YEAR;
+  $('date').textContent = `${dateStr(d)} · ${SEASONS[Math.floor(doy/90)]} · jour ${doy%90+1}`;
+  $('era').textContent = ERAS[s.era][1];
+  const P = PARTIES[s.party];
+  $('party').textContent = P ? P.name : s.party==='fondateurs' ? 'Conseil des fondateurs' : 'Vous (gouvernement direct)';
+  $('party').className = 'pill '+(P?P.cls:'p-vous');
+  $('nextElec').textContent = s.pol.demo ? `prochaines élections en l'an ${Math.floor(s.nextElection/YEAR)+1}` : 'pas d\'élections';
+}
+function syncPolicyUI(){
+  const p=S.pol;
+  $('pTax').value=Math.round(p.tax*100); $('oTax').textContent=`${Math.round(p.tax*100)} %`;
+  $('pAid').value=Math.round(p.aid*100); $('oAid').textContent=`${Math.round(p.aid*100)} %`;
+  $('pPen').value=Math.round(p.pen*100); $('oPen').textContent=`${Math.round(p.pen*100)} %`;
+  $('pRet').value=p.ret; $('oRet').textContent=`${p.ret} ans`;
+  $('pDemo').checked=p.demo;
+}
+function onPolicy(){
+  const p=S.pol;
+  p.tax=$('pTax').value/100; p.aid=$('pAid').value/100; p.pen=$('pPen').value/100; p.ret=+$('pRet').value;
+  if (!p.demo) S.party='vous';
+  syncPolicyUI();
+}
+['pTax','pAid','pPen','pRet'].forEach(id=>$(id).addEventListener('input', onPolicy));
+['pTax','pAid','pPen','pRet'].forEach(id=>$(id).addEventListener('change', ()=>log(`Décision du gouvernement : impôt ${Math.round(S.pol.tax*100)} %, chômage ${Math.round(S.pol.aid*100)} %, pension ${Math.round(S.pol.pen*100)} %, retraite à ${S.pol.ret} ans.`, 'pol')));
+$('pDemo').addEventListener('change', e=>{
+  S.pol.demo = e.target.checked;
+  if (!S.pol.demo){ S.party='vous'; log('La démocratie est suspendue : vous gouvernez seul·e.', 'pol'); }
+  else { S.nextElection = S.day + YEAR; log('Retour de la démocratie : élections dans un an.', 'pol'); }
+});
+$('eEpi').onclick = ()=>{ S.epiUntil=S.day+60; log('Une épidémie se déclare.', 'bad'); };
+$('eDrought').onclick = ()=>{ S.foodEvent=0.45; S.foodUntil=S.day+120; log('Sécheresse : les récoltes s\'effondrent.', 'bad'); };
+$('eMig').onclick = ()=>migrants(20);
+$('eGift').onclick = ()=>{ for (const p of S.people) if (p.job!=='enfant') { p.money+=50; } S.treasury -= 50*S.people.filter(p=>p.job!=='enfant').length; log('L\'État distribue 50 pièces à chaque adulte, à crédit.', 'pol'); };
+
+function personLink(id){
+  const p = S.byId.get(id) || (S.graveyard && S.graveyard.get(id));
+  if (!p) return '';
+  return `<button class="rel" data-id="${id}">${fullName(p)}</button>${p.dead?' †':''}`;
+}
+function updatePerson(){
+  const p = S.byId.get(S.selected) || (S.graveyard && S.graveyard.get(S.selected));
+  const el = $('person');
+  if (!p){ el.innerHTML = `<h2>Habitant</h2><p class="hint">Touche un point sur la carte.</p>`; return; }
+  const a = Math.floor((p.dead? p.dead.day - p.born : p.age)/YEAR);
+  const status = p.dead ? `Mort${p.sex==='f'?'e':''} ${p.dead.cause} à ${a} ans` : `${jobName(p)}, ${a} an${a>1?'s':''}`;
+  const kids = p.kids.map(personLink).filter(Boolean).join(', ') || 'aucun';
+  const parents = p.parents.map(personLink).filter(Boolean).join(' et ') || 'fondateurs ou venus d\'ailleurs';
+  const meter = (v,col)=>`<div class="meter"><span style="width:${clamp(v,0,100)}%;background:${col}"></span></div>`;
+  el.innerHTML = `
+    <h2>Habitant</h2>
+    <div><div class="name">${fullName(p)}</div><div class="hint">${status}</div></div>
+    <dl class="facts">
+      <dt>Argent</dt><dd>${money(p.money)} pièces</dd>
+      <dt>Revenu</dt><dd>${fmt(Math.max(0,p.earn),2)} p./jour</dd>
+      <dt>Instruction</dt><dd>${fmt(p.edu)} / 100</dd>
+      <dt>Couple</dt><dd>${p.partner?personLink(p.partner):'célibataire'}</dd>
+      <dt>Parents</dt><dd>${parents}</dd>
+      <dt>Enfants</dt><dd>${kids}</dd>
+      <dt>Logement</dt><dd>${p.home==null?'sans abri':'a un toit'}</dd>
+    </dl>
+    <div><span class="hint">Santé ${fmt(Math.max(0,p.health))}</span>${meter(p.health,'var(--good)')}</div>
+    <div><span class="hint">Bonheur ${fmt(p.happy)}</span>${meter(p.happy,'var(--accent)')}</div>
+    <h2>Sa vie</h2>
+    <ul class="bio">${[...p.bio].reverse().slice(0,10).map(([d,t])=>`<li><time>${dateStr(d)}</time><span>${t}</span></li>`).join('')}</ul>
+    <div class="acts"><button id="rndP">Suivre quelqu'un d'autre</button></div>`;
+  $('rndP').onclick = ()=>{ S.selected = pick(S.people).id; dirtyPerson=true; };
+}
+$('person').addEventListener('click', e=>{ const b=e.target.closest('.rel'); if (b){ S.selected=+b.dataset.id; dirtyPerson=true; } });
+function updateLog(){
+  $('log').innerHTML = S.log.map(([d,t,k])=>`<li><time>${dateStr(d)}</time><span class="${k?'ev-'+k:''}">${t}</span></li>`).join('');
+  dirtyLog=false;
+}
+
+// ---------- Graphiques ----------
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function lineChart(canvas, keysEl, series, opts={}){
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w) return;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const g = canvas.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  const H_ = S.hist;
+  const padL=44, padR=8, padT=8, padB=20;
+  if (H_.length<2){ g.fillStyle=css('--muted'); g.font=`12px ${css('--f-body')}`; g.fillText('Les courbes apparaissent après deux mois.', 8, h/2); keysEl.innerHTML=''; return; }
+  let lo=Infinity, hi=-Infinity;
+  for (const s of series) for (const r of H_){ const v=s.f(r); if(v<lo)lo=v; if(v>hi)hi=v; }
+  if (opts.zero) lo = Math.min(0, lo);
+  if (hi===lo){ hi+=1; }
+  const span=hi-lo; hi+=span*0.08; if (!opts.zero || lo<0) lo-=span*0.05;
+  const X = i => padL + (w-padL-padR)*i/(H_.length-1);
+  const Y = v => padT + (h-padT-padB)*(1-(v-lo)/(hi-lo));
+  g.strokeStyle=css('--line'); g.fillStyle=css('--muted'); g.lineWidth=1;
+  g.font=`11px ${css('--f-mono')}`; g.textAlign='right'; g.textBaseline='middle';
+  for (let k=0;k<=3;k++){ const v=lo+(hi-lo)*k/3, y=Y(v); g.beginPath(); g.moveTo(padL,y); g.lineTo(w-padR,y); g.stroke(); g.fillText(opts.fmt?opts.fmt(v):fmt(v), padL-6, y); }
+  if (lo<0 && hi>0){ g.strokeStyle=css('--muted'); g.beginPath(); g.moveTo(padL,Y(0)); g.lineTo(w-padR,Y(0)); g.stroke(); }
+  g.textAlign='center'; g.textBaseline='alphabetic';
+  const y0=Math.floor(H_[0].d/YEAR)+1, y1=Math.floor(H_[H_.length-1].d/YEAR)+1;
+  g.fillText(`an ${y0}`, padL+14, h-4); g.fillText(`an ${y1}`, w-padR-16, h-4);
+  for (const s of series){
+    const col = css(s.c);
+    if (s.fill){ g.beginPath(); g.moveTo(X(0),Y(Math.max(lo,0))); H_.forEach((r,i)=>g.lineTo(X(i),Y(s.f(r)))); g.lineTo(X(H_.length-1),Y(Math.max(lo,0))); g.closePath(); g.globalAlpha=.14; g.fillStyle=col; g.fill(); g.globalAlpha=1; }
+    g.beginPath(); H_.forEach((r,i)=>{ const x=X(i), y=Y(s.f(r)); i?g.lineTo(x,y):g.moveTo(x,y); });
+    g.strokeStyle=col; g.lineWidth=2; g.stroke();
+    const last=H_[H_.length-1]; g.fillStyle=col; g.beginPath(); g.arc(X(H_.length-1),Y(s.f(last)),3,0,7); g.fill();
+  }
+  keysEl.innerHTML = series.map(s=>`<span><b style="background:var(${s.c})"></b>${s.n} : ${opts.fmt?opts.fmt(s.f(H_[H_.length-1])):fmt(s.f(H_[H_.length-1]))}</span>`).join('');
+}
+function updateCharts(){
+  lineChart($('c1'),$('k1'),[{n:'Habitants',f:r=>r.pop,c:'--accent',fill:true},{n:'Enfants',f:r=>r.kids,c:'--accent-2'},{n:'Retraités',f:r=>r.old,c:'--muted'}],{zero:true});
+  lineChart($('c2'),$('k2'),[{n:'Pain (pièces)',f:r=>r.food,c:'--accent-2'},{n:'Salaire / jour',f:r=>r.wage,c:'--good'}],{zero:true,fmt:v=>fmt(v,v<10?1:0)});
+  lineChart($('c3'),$('k3'),[{n:'Trésor',f:r=>r.treasury,c:'--accent',fill:true}],{fmt:v=>money(v)});
+  dirtyCharts=false;
+}
+
+// ---------- Boucle ----------
+const SPEEDS = [0, 6, 72, 360]; // jours par seconde
+let speed = 1, acc = 0, last = performance.now(), uiT = 0;
+document.querySelectorAll('[data-speed]').forEach(b=>b.addEventListener('click',()=>{
+  speed=+b.dataset.speed;
+  document.querySelectorAll('[data-speed]').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+}));
+$('bNew').onclick = ()=>{ start(Math.floor(Math.random()*1e9)); };
+function frame(now){
+  const dt = Math.min(0.25, (now-last)/1000); last = now;
+  acc += dt*SPEEDS[speed];
+  let n = 0;
+  while (acc>=1 && n<60){ step(); acc--; n++; }
+  if (n>=60) acc=0;
+  render();
+  uiT += dt;
+  if (uiT>0.25){ uiT=0; updateTiles(); if (dirtyPerson || n) updatePerson(); dirtyPerson=false; }
+  if (dirtyLog) updateLog();
+  if (dirtyCharts) updateCharts();
+  requestAnimationFrame(frame);
+}
+function start(seed){
+  newWorld(seed);
+  sizeMap(); legend(); updateTiles(); updatePerson(); updateLog(); updateCharts();
+}
+window.addEventListener('resize', ()=>{ sizeMap(); dirtyCharts=true; });
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', ()=>{ dirtyCharts=true; });
+new MutationObserver(()=>{ dirtyCharts=true; }).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+start(20261120);
+// Accès pour les essais automatiques
+window.__neo = { step, get S(){ return S; }, counts, sectorPay };
+requestAnimationFrame(frame);
+})();
+</script>
