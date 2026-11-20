@@ -246,3 +246,27 @@ def test_publication_ignore_les_fichiers_vides():
     from pathlib import Path
     wf = (Path(__file__).resolve().parents[1] / ".github/workflows/coder-data.yml").read_text()
     assert '[ -s "$f" ]' in wf and "|| echo" not in wf
+
+
+def test_lecture_tolerante_des_reponses_de_la_grande_ia():
+    """Défauts réels du 2e passage : « ```python » entre le nom du fichier et le bloc, chemin recopié avec un dossier."""
+    fenced = "J'ajoute.\n\nseqs.py\n```python\n<<<<<<< SEARCH\na = 1\n=======\na = 2\n>>>>>>> REPLACE\n```"
+    [e] = edits.parse(fenced)
+    assert e.path == "seqs.py" and e.search == "a = 1" and e.replace == "a = 2"
+    wrong = [edits.Edit("projet/seqs.py", "x", "y"), edits.Edit("seqs", "x", "y"), edits.Edit("inconnu.py", "x", "y"),
+             edits.Edit("python", "x", "y")]
+    r = edits.resolve_paths(wrong, ["seqs.py", "test_seqs.py"])
+    assert [e.path for e in r] == ["seqs.py", "seqs.py", "inconnu.py", "python"]  # ce qui est ambigu ou inconnu reste refusé
+    assert edits.resolve_paths([edits.Edit("m.py", "x", "y")], ["a/m.py", "b/m.py"])[0].path == "m.py"  # deux candidats : pas de devinette
+
+
+def test_exemple_appris_propre_meme_si_la_reponse_du_professeur_ne_l_est_pas():
+    files = tasks.SEEDS["texte"]
+    sale = ("Voilà !\n\ndossier/textutil.py\n```python\n<<<<<<< SEARCH\ndef count_words(s):\n    return len(s.split())\n=======\n"
+            "def count_words(s):\n    return len(s.split())\n\n\ndef shout(s):\n    return s.upper()\n>>>>>>> REPLACE\n```\n\n"
+            "test_textutil.py\n```python\n<<<<<<< SEARCH\ndef test_count_words():\n=======\ndef test_shout():\n    from textutil import shout\n"
+            "    assert shout('a') == 'A'\n\n\ndef test_count_words():\n>>>>>>> REPLACE\n```")
+    ex = make_data.feature_example(lambda s, p: sale, files, "Ajoute.")
+    assert ex is not None
+    reply = ex["messages"][2]["content"]
+    assert "```" not in reply and "dossier/" not in reply and reply.startswith("Voilà !") and "textutil.py\n<<<<<<< SEARCH" in reply

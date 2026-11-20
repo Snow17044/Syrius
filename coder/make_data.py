@@ -104,7 +104,7 @@ def feature_example(ask, files: dict, instruction: str):
     prompt = tasks.make_prompt(files, instruction + " Ajoute aussi un test dans le fichier de tests.")
     reply = ask(tasks.SYSTEM, prompt)
     try:
-        blocks = edits.parse(reply)
+        blocks = edits.resolve_paths(edits.parse(reply), list(files))
         with sandbox.project(files) as p:
             edits.apply(p, blocks, forbidden=[])
             ok, _, after = sandbox.run_tests(p)
@@ -112,7 +112,11 @@ def feature_example(ask, files: dict, instruction: str):
         return None
     if not ok or after <= before:
         return None
-    return tasks.messages(prompt, reply.strip())
+    # on apprend TOUJOURS le format propre (chemins corrigés, sans clôtures) : jamais les petits défauts du professeur
+    intro = " ".join(reply.split("<<<<<<< SEARCH")[0].split("\n")[0].split())[:160]
+    if not intro or intro.startswith(("```", "#")) or intro.endswith((".py", ".py`")):
+        intro = "Voici la modification."
+    return tasks.messages(prompt, tasks.answer(intro, [(b.path, b.search, b.replace) for b in blocks]))
 
 
 FEATURES = ["Ajoute une petite fonction utile qui complète le module, avec une docstring d'une ligne.",
