@@ -656,7 +656,31 @@ function addReportButton(view) {
 
 function renderText(view, role) {
   if (role === "user") view.body.textContent = view.text;
-  else window.SyriusMarkdown.render(view.body, view.text);
+  else {
+    window.SyriusMarkdown.render(view.body, view.text);
+    view.body.querySelectorAll("pre").forEach(addCopyButton);
+  }
+}
+
+// Bouton « Copier » sur chaque bloc de code ou de commandes (copie le code seul, sans le bouton).
+function addCopyButton(pre) {
+  const code = pre.querySelector("code") || pre;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "code-copy";
+  b.setAttribute("aria-label", "Copier le code");
+  Icons.set(b, "copy", "Copier");
+  b.addEventListener("click", async () => {
+    try {
+      await copyText(code.textContent);
+      Icons.set(b, "check", "Copié");
+    } catch (err) { Icons.set(b, "alert", "Impossible"); alert(err.message); }
+    setTimeout(() => Icons.set(b, "copy", "Copier"), 1800);
+  });
+  const wrap = document.createElement("div");  // le bouton reste en place quand on fait défiler un long code
+  wrap.className = "code-wrap";
+  pre.replaceWith(wrap);
+  wrap.append(pre, b);
 }
 
 function setTools(view, labels) {
