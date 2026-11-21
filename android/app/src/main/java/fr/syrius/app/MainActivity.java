@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private ImageGen imageGen;
     private SyriusAI syrius;
     private boolean pendingBriefing;
+    private boolean pendingJournal;
     private boolean voiceMode;
     private static final int REQ_PHOTO = 47;
     private ValueCallback<Uri[]> photoCallback;
@@ -176,6 +177,11 @@ public class MainActivity extends Activity {
                     view.postDelayed(() -> view.evaluateJavascript(
                             "window.syriusBriefing && window.syriusBriefing()", null), 1500);
                 }
+                if (pendingJournal) {  // ouverte depuis la notification du journal du soir
+                    pendingJournal = false;
+                    view.postDelayed(() -> view.evaluateJavascript(
+                            "window.syriusJournal && window.syriusJournal()", null), 1500);
+                }
             }
 
             @Override
@@ -198,6 +204,7 @@ public class MainActivity extends Activity {
             try { WakeService.setEnabled(this, true); } catch (Exception ignored) { }
         }
         pendingBriefing = getIntent() != null && getIntent().getBooleanExtra(Reminders.EXTRA_BRIEFING, false);
+        pendingJournal = getIntent() != null && getIntent().getBooleanExtra(Reminders.EXTRA_JOURNAL, false);
         web.addJavascriptInterface(new Bridge(), "SyriusAndroid");
 
         initTts();
@@ -704,7 +711,7 @@ public class MainActivity extends Activity {
         /** Fonctions disponibles dans cette version de l'application. */
         @JavascriptInterface
         public String features() {
-            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"speakend\",\"wake\",\"music\",\"vision\",\"imagegen\",\"voicepick\",\"warmup\"]";
+            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"journal\",\"speakend\",\"wake\",\"music\",\"vision\",\"imagegen\",\"voicepick\",\"warmup\"]";
         }
 
         @JavascriptInterface
@@ -718,6 +725,24 @@ public class MainActivity extends Activity {
             if (!trusted()) return "Refusé";
             try {
                 Reminders.setBriefing(MainActivity.this, on, hour, minute);
+            } catch (Exception e) {
+                return "Heure invalide";
+            }
+            if (on) runOnUiThread(() -> DeviceActions.askNotifications(MainActivity.this));
+            return "ok";
+        }
+
+        @JavascriptInterface
+        public String getJournal() {
+            if (!trusted()) return "{}";
+            return Reminders.journalJson(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String setJournal(boolean on, int hour, int minute) {
+            if (!trusted()) return "Refusé";
+            try {
+                Reminders.setJournal(MainActivity.this, on, hour, minute);
             } catch (Exception e) {
                 return "Heure invalide";
             }
@@ -1044,6 +1069,9 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         if (intent != null && intent.getBooleanExtra(Reminders.EXTRA_BRIEFING, false)) {
             sendJs("window.syriusBriefing && window.syriusBriefing()");
+        }
+        if (intent != null && intent.getBooleanExtra(Reminders.EXTRA_JOURNAL, false)) {
+            sendJs("window.syriusJournal && window.syriusJournal()");
         }
         String link = sharedLink(intent);
         if (link != null && baseUrl != null && sameHost(link, baseUrl)) web.loadUrl(link);

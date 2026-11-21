@@ -9,12 +9,13 @@ import android.content.Intent;
 
 import org.json.JSONObject;
 
-/** Déclenchement d'un rappel ou du briefing : affiche la notification. */
+/** Déclenchement d'un rappel, du briefing ou du journal du soir : affiche la notification. */
 public class AlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent intent) {
         Reminders.ensureChannel(c);
         boolean briefing = intent.getBooleanExtra(Reminders.EXTRA_BRIEFING, false);
+        boolean journal = intent.getBooleanExtra(Reminders.EXTRA_JOURNAL, false);
         String title, text;
         int notifId;
         Intent open = new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -24,6 +25,12 @@ public class AlarmReceiver extends BroadcastReceiver {
             notifId = 777_000;
             open.putExtra(Reminders.EXTRA_BRIEFING, true);
             Reminders.scheduleBriefing(c);  // demain, même heure
+        } else if (journal) {
+            title = "🌙 Ton journal du soir";
+            text = "Raconte-moi ta journée en quelques mots : touche pour commencer.";
+            notifId = Reminders.JOURNAL_CODE;
+            open.putExtra(Reminders.EXTRA_JOURNAL, true);
+            Reminders.scheduleJournal(c);  // demain, même heure
         } else {
             String id = intent.getStringExtra(Reminders.EXTRA_ID);
             if (id == null) return;

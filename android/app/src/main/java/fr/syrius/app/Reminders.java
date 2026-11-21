@@ -15,16 +15,18 @@ import org.json.JSONObject;
 import java.util.Calendar;
 
 /**
- * Rappels et briefing du matin : programmés sur le téléphone avec AlarmManager,
+ * Rappels, briefing du matin et journal du soir : programmés sur le téléphone avec AlarmManager,
  * conservés dans les préférences de l'app et reprogrammés après un redémarrage.
  */
 final class Reminders {
     static final String CHANNEL = "syrius_rappels";
     static final String EXTRA_ID = "syrius_reminder_id";
     static final String EXTRA_BRIEFING = "syrius_briefing";
+    static final String EXTRA_JOURNAL = "syrius_journal";
     private static final String PREFS = "syrius_reminders";
     private static final int MAX = 100;
     private static final int BRIEFING_CODE = 777_000;
+    static final int JOURNAL_CODE = 777_001;
 
     private Reminders() {
     }
@@ -141,6 +143,7 @@ final class Reminders {
             else schedule(c, r.optString("id"), r.optLong("at"));
         }
         scheduleBriefing(c);
+        scheduleJournal(c);
     }
 
     // ------------------------------------------------------------------ briefing du matin
@@ -167,6 +170,36 @@ final class Reminders {
         Calendar cal = Calendar.getInstance();
         cal.set(Calendar.HOUR_OF_DAY, p.getInt("bh", 7));
         cal.set(Calendar.MINUTE, p.getInt("bm", 30));
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_YEAR, 1);
+        exact(c, cal.getTimeInMillis(), pi);
+    }
+
+    // ------------------------------------------------------------------ journal du soir
+    static void setJournal(Context c, boolean on, int hour, int minute) {
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) throw new IllegalArgumentException();
+        prefs(c).edit().putBoolean("journal", on).putInt("jh", hour).putInt("jm", minute).apply();
+        scheduleJournal(c);
+    }
+
+    static String journalJson(Context c) {
+        SharedPreferences p = prefs(c);
+        return "{\"on\":" + p.getBoolean("journal", false) + ",\"hour\":" + p.getInt("jh", 21)
+                + ",\"minute\":" + p.getInt("jm", 30) + "}";
+    }
+
+    static void scheduleJournal(Context c) {
+        SharedPreferences p = prefs(c);
+        Intent i = new Intent(c, AlarmReceiver.class).setAction("fr.syrius.app.JOURNAL").putExtra(EXTRA_JOURNAL, true);
+        PendingIntent pi = PendingIntent.getBroadcast(c, JOURNAL_CODE, i,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        AlarmManager am = c.getSystemService(AlarmManager.class);
+        am.cancel(pi);
+        if (!p.getBoolean("journal", false)) return;
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.HOUR_OF_DAY, p.getInt("jh", 21));
+        cal.set(Calendar.MINUTE, p.getInt("jm", 30));
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
         if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_YEAR, 1);

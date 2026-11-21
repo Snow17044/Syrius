@@ -13,8 +13,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, autogen, coderask, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import transcribe, vision
+from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
+from . import journal, transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -33,7 +33,7 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
-    "legal.css": "text/css", "code.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
+    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -106,6 +106,12 @@ class MessageBody(BaseModel):
     location: dict | None = None  # position approximative envoyée par l'app (jamais enregistrée)
     voice: bool = False  # mode conversation : la réponse sera lue à voix haute
     image: str | None = Field(default=None, max_length=3_400_000)  # photo (data URL), jamais enregistrée
+
+
+class DebateBody(BaseModel):
+    topic: str = Field(min_length=3, max_length=300)
+    turns: list[dict] = Field(default_factory=list, max_length=200)
+    speaker: str = Field(default="", pattern=r"^(|nova|aurora|verdict)$")  # vide = au tour de l'IA suivante
 
 
 class ImageBody(BaseModel):
@@ -1124,6 +1130,43 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             db.set_action_status(aid, "failed", expected="sending")
             raise HTTPException(502, "Envoi impossible.") from None
         db.set_action_status(aid, "done", expected="sending")
+        return {"ok": True}
+
+    # ------------------------------------------------------------------ débat entre IA
+    @app.post("/api/debate/turn", dependencies=[Depends(require_auth)])
+    async def debate_turn(body: DebateBody, request: Request):
+        """Réplique suivante d'un débat Nova contre Aurora (l'application garde le débat, pas le serveur)."""
+        try:
+            turns = debate.clean_turns(body.turns)
+        except debate.DebateError as e:
+            raise HTTPException(400, str(e)) from None
+        topic = " ".join(body.topic.split())
+        if safety.blocked(topic, [t["text"] for t in turns if t["who"] == "user"]):
+            raise HTTPException(400, "Sujet refusé : pas de débat sur un contenu sexuel ou violent.")
+        speaker = body.speaker or debate.next_speaker(turns)
+        name = db.get_settings().get("user_name", "")
+        uid = request.state.uid
+
+        async def stream():
+            try:
+                async for event in debate.stream_turn(agent.llm, topic, turns, speaker, name, db.base, uid):
+                    yield sse(event)
+            except Exception:
+                logging.getLogger("syrius").exception("Erreur pendant le débat")
+                yield sse({"type": "error", "message": "Erreur interne."})
+
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"})
+
+    # ------------------------------------------------------------------ journal intime
+    @app.get("/api/journal", dependencies=[Depends(require_auth)])
+    async def journal_list():
+        return {"entries": journal.entries(db), "today": journal.today()}
+
+    @app.delete("/api/journal/{day}", dependencies=[Depends(require_auth)])
+    async def journal_delete(day: str):
+        if not journal.delete(db, day):
+            raise HTTPException(404)
         return {"ok": True}
 
     @app.post("/api/actions/{aid}/cancel", dependencies=[Depends(require_auth), Depends(require_owner)])
