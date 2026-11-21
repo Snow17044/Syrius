@@ -1,0 +1,32 @@
+# Tri des emails jour et nuit : environ toutes les heures, demande à ton Syrius de trier les nouveaux emails.
+# Le tri se fait sur ton Syrius (boîte en lecture seule) ; GitHub ne voit jamais tes emails, seulement « n triés ».
+name: Tri des emails
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: mail-sort
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  trier:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write  # identité officielle GitHub pour parler à ton Syrius (aucun secret à configurer)
+    env:
+      SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Trier les nouveaux emails
+        run: python3 training/mail_sort_ping.py

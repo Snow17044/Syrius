@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import Config
-from .. import atelier, family, journal, memory, selfcode, sitecode, sitescan, skills
+from .. import atelier, family, journal, mailsort, memory, selfcode, sitecode, sitescan, skills
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
@@ -154,6 +154,7 @@ TOOL_LABELS = {
     "run_code_project": "Je lance le projet dans mon atelier",
     "check_code_project": "Je regarde l'atelier",
     "save_journal": "Je range ta journée dans ton journal",
+    "mail_digest": "Je regarde le tri de tes emails",
     "read_journal": "Je relis ton journal",
     "get_weather": "Je regarde la météo",
     "show_diagram": "Je dessine le schéma 3D",
@@ -201,6 +202,13 @@ PROPOSE_CODE_TOOL = _tool(
     "`demande-de-code`. Refusé après la lecture d'un email ou d'une page web.",
     {"request": {"type": "string", "description": "La demande, en français, 10 à 1400 caractères"},
      "app": {"type": "string", "description": "syrius ou syrius-code"}}, ["request", "app"])
+
+MAIL_DIGEST_TOOL = _tool(
+    "mail_digest",
+    "Le point sur les emails du propriétaire, triés automatiquement par Aurora (urgents, à répondre, pour info, pubs, "
+    "indésirables) sur les dernières heures, avec un résumé d'une phrase des importants. Lecture seule : pour lire, "
+    "répondre ou chercher un email, c'est Aurora dans Syrius Code.",
+    {"hours": {"type": "integer", "description": "Période en heures (1 à 72, 24 par défaut)."}}, [])
 
 RUN_PROJECT_TOOL = _tool(
     "run_code_project",
@@ -268,6 +276,7 @@ _CODECHANGE_RX = re.compile(r"modifi|ajout|corrig|am[ée]lior|chang|fonctionnali
 _DASH_RX = re.compile(r"tableau de bord|dashboard|graphique|courbe|histogramme|camembert|\bkpi\b|statistique|chiffre|donn[ée]es|\bcsv\b|"
                       r"ventes|recettes|d[ée]penses|[ée]volution|\d+[ ;,]+\d+", re.I)
 
+_MAILPOINT_RX = re.compile(r"mail|courriel|bo[iî]te|message|r[ée]veil|briefing|urgent", re.I)
 _JOURNAL_RX = re.compile(r"journal|journ[ée]e|hier|semaine derni|r[ée]veil|briefing|bonjour|matin|ressenti|humeur|"
                          r"qu'est-ce que j'ai fait|souviens", re.I)
 
@@ -290,6 +299,8 @@ def select_tools(tools: list[dict], text: str, keep_all: bool = False) -> list[d
         drop.add("show_dashboard")
     if not _CODECHANGE_RX.search(text):
         drop |= {"propose_code_change", "list_code_changes"}
+    if not _MAILPOINT_RX.search(text):
+        drop.add("mail_digest")
     if not _JOURNAL_RX.search(text):
         drop.add("read_journal")  # save_journal reste toujours là : le journal se termine souvent par « c'est tout »
     return [t for t in tools if t["function"]["name"] not in drop]
@@ -311,6 +322,8 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
             tools += [SCAN_SITE_TOOL, LIST_SITE_FILES_TOOL, READ_SITE_FILE_TOOL]
         return tools
     tools = list(BASE_TOOLS) + DEVICE_TOOLS  # Syrius : plus d'emails (ils sont chez Aurora, dans Syrius Code)
+    if family.email_allowed(cfg):  # propriétaire seulement : le point du tri automatique (lecture seule)
+        tools.append(MAIL_DIGEST_TOOL)
     if settings.get("internet", True):
         tools += [WEB_SEARCH_TOOL, WEB_READ_TOOL, PLACES_TOOL, WEATHER_TOOL]
     return tools
@@ -450,6 +463,17 @@ class ToolExecutor:
             elif name == "phone_reminder_cancel" and not reminders.remove(self.db, event["params"]["id"]):
                 return "Aucun rappel avec cet identifiant (utilise list_reminders).", True, None
             return done, False, event
+
+        if name == "mail_digest":
+            if not family.email_allowed(self.cfg):
+                return "Le point des emails est réservé au propriétaire.", True, None
+            a = _check(args, {"hours": int}, [])
+            d = mailsort.digest(getattr(self.db, "base", self.db), max(1, min(a.get("hours", 24), 72)))
+            if not d["last_run"]:
+                return "Le tri automatique n'a encore jamais tourné.", False, None
+            counts = ", ".join(f"{mailsort.CATS[c]} : {n}" for c, n in d["counts"].items() if n) or "aucun nouvel email"
+            lines = [f"- [{mailsort.CATS[i['cat']]}] {i['sujet']} (de {i['de']}) : {i['resume']}" for i in d["important"]]
+            return web.wrap_untrusted(f"Tri d'Aurora ({counts}).\n" + "\n".join(lines)), False, None
 
         if name == "save_journal":
             if ctx.get("profile") == "aurore":

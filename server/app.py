@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import atelier, group, journal, transcribe, vision
+from . import atelier, group, journal, mailsort, transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -22,7 +22,7 @@ from .store_redis import RedisDatabase, RedisError, UpstashREST
 from .tools import dashboard as dashboard_tool
 from .tools import gmail, imagegen, real3d, tiles
 from .tools.places import round_location
-from .tools.email_tool import EmailError, outlook_poll, outlook_start
+from .tools.email_tool import EmailClient, EmailError, outlook_poll, outlook_start
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 STATIC_FILES = {
@@ -126,6 +126,10 @@ class Model3DSearch(BaseModel):
 class Model3DCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=300)
     key: str = Field(default="", max_length=80)  # mots-clés de l'objet : maquette déjà créée réutilisée
+
+
+class ToggleBody(BaseModel):
+    enabled: bool
 
 
 class MembersBody(BaseModel):
@@ -782,6 +786,36 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             return selfcode.retry(db.base, iid[:20], body.text)
         except selfcode.SelfCodeError as e:
             raise HTTPException(400, str(e)) from None
+
+    # ------------------------------------------------------------------ tri automatique des emails (H24)
+    def _mailbox():
+        """La boîte du propriétaire (lecture seule), comme pour les outils emails d'Aurora."""
+        return gmail.GmailClient(cfg, db.base) if cfg.email_mode == "google" else EmailClient(cfg, db.base)
+
+    async def _mail_sort_now() -> dict:
+        if not family.email_allowed(cfg):
+            return {"new": 0, "error": "Boîte mail non configurée (Syrius Code → Emails)."}
+        return await asyncio.to_thread(mailsort.run, db.base, _mailbox(), agent.llm.ordered())
+
+    @app.post("/api/training/worker/mail-sort", dependencies=[Depends(require_trainer)])
+    async def mail_sort_worker():
+        """Appelé par GitHub environ toutes les heures : trie les nouveaux emails."""
+        return await _mail_sort_now()
+
+    @app.get("/api/code/mailsort", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def mail_sort_state():
+        st = mailsort.state(db.base)
+        return {"enabled": st["enabled"], "last_run": st["last_run"], "last_error": st["last_error"],
+                "cats": mailsort.CATS, "items": st["items"][::-1][:100], "digest": mailsort.digest(db.base)}
+
+    @app.put("/api/code/mailsort", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def mail_sort_toggle(body: ToggleBody):
+        mailsort.set_enabled(db.base, body.enabled)
+        return {"enabled": body.enabled}
+
+    @app.post("/api/code/mailsort/run", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def mail_sort_run():
+        return await _mail_sort_now()
 
     # ------------------------------------------------------------------ atelier d'Aurora (code lancé et testé)
     @app.post("/api/training/worker/atelier-next", dependencies=[Depends(require_trainer)])

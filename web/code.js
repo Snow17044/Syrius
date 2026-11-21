@@ -437,7 +437,52 @@
     card.append(bar, status);
     return card;
   }
+  // ------------------------------------------------------------------ tri automatique des emails
+  const MS_ICONS = { urgent: "alert", repondre: "mail", info: "bulb", pub: "news", indesirable: "shield" };
+  async function renderMailSort() {
+    let d;
+    try { d = await api("/api/code/mailsort"); } catch (_) { return; }
+    $("#c-ms-on").checked = d.enabled;
+    $("#c-ms-status").textContent = d.last_error ? "⚠ " + d.last_error
+      : `Dernier tri : ${d.last_run ? ago(d.last_run) : "jamais"}.` + (d.enabled ? "" : " (tri automatique en pause)");
+    const box = $("#c-ms-list");
+    box.replaceChildren();
+    if (!d.items.length) { box.appendChild(el("p", "small muted", "Aucun email trié pour l'instant.")); return; }
+    for (const [cat, label] of Object.entries(d.cats)) {
+      const items = d.items.filter((i) => i.cat === cat);
+      if (!items.length) continue;
+      const sec = el("details", "c-ms-cat " + cat);
+      sec.open = cat === "urgent" || cat === "repondre";
+      const sum = el("summary");
+      Icons.set(sum, MS_ICONS[cat], `${label} (${items.length})`);
+      sec.appendChild(sum);
+      for (const i of items.slice(0, 40)) {
+        const row = el("div", "c-ms-item");
+        row.append(el("strong", "", i.sujet || "(sans sujet)"), el("span", "small muted", i.de), el("p", "small", i.resume));
+        sec.appendChild(row);
+      }
+      box.appendChild(sec);
+    }
+  }
+  $("#c-ms-on").addEventListener("change", async () => {
+    try { await api("/api/code/mailsort", { method: "PUT", body: JSON.stringify({ enabled: $("#c-ms-on").checked }) }); }
+    catch (err) { alert(err.message); }
+    renderMailSort();
+  });
+  $("#c-ms-run").addEventListener("click", async () => {
+    const b = $("#c-ms-run");
+    b.disabled = true;
+    $("#c-ms-status").textContent = "Aurora trie tes nouveaux emails…";
+    try {
+      const r = await api("/api/code/mailsort/run", { method: "POST" });
+      if (r.error) $("#c-ms-status").textContent = "⚠ " + r.error;
+    } catch (err) { $("#c-ms-status").textContent = "⚠ " + err.message; }
+    b.disabled = false;
+    renderMailSort();
+  });
+
   async function renderEmailTab() {
+    renderMailSort();
     let s;
     try { s = await api("/api/code/email"); } catch (_) { return; }
     $("#c-mail-status").textContent = s.enabled

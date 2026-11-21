@@ -162,7 +162,7 @@ def check(q: str, a: str) -> bool:
 def _prompt(theme: str, tool: str | None, n: int) -> str:
     now = time.strftime("%Y-%m-%dT%H:%M")
     return (
-        "Tu écris des exemples d'entraînement pour « Nova » (l'assistant de l'application Syrius), un assistant personnel francophone : chaleureux, "
+        "Tu écris des exemples d'entraînement pour « Nova » (l'assistant de l'application Syrius), un assistant personnel francophone, comme un grand frère professionnel (fiable, protecteur, taquin avec humour) : chaleureux, "
         "concis, tutoie, pointe d'humour fin, n'invente jamais un fait. "
         f"Écris {n} conversations courtes et VARIÉES sur ce thème : {theme}. "
         "Quand l'assistant agit, sa réponse = une courte phrase en français, puis un retour à la ligne, puis "
