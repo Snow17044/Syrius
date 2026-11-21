@@ -1,0 +1,52 @@
+# L'Atelier d'Aurora : elle écrit un programme, le LANCE, lit les erreurs et corrige jusqu'à ce que les tests passent.
+# Le code de l'IA tourne dans un conteneur jetable : aucun secret ni variable de GitHub n'y entre, et les adresses
+# internes du serveur sont bloquées. Le résultat (fichiers vérifiés, sortie des tests) revient dans Syrius Code.
+name: Atelier d'Aurora
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: atelier
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  atelier:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      id-token: write  # identité officielle GitHub pour parler à ton Syrius (aucun secret à configurer)
+    env:
+      SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Un projet en attente ?
+        id: next
+        run: python3 selfcode/atelier.py next || { echo "Ton Syrius ne répond pas (identité refusée ?)"; echo "go=false" >> "$GITHUB_OUTPUT"; }
+
+      - name: Préparer l'ordinateur d'Aurora (conteneurs isolés)
+        if: steps.next.outputs.go == 'true'
+        run: |
+          # le code de l'IA ne peut pas joindre les adresses internes du serveur de GitHub
+          sudo iptables -I DOCKER-USER -d 169.254.169.254 -j DROP
+          sudo iptables -I DOCKER-USER -d 168.63.129.16 -j DROP
+          docker pull -q python:3.13-slim
+          docker pull -q node:22-slim
+
+      - name: Aurora travaille (écrire, lancer, corriger)
+        if: steps.next.outputs.go == 'true'
+        run: python3 selfcode/atelier.py work
+
+      - name: Signaler un arrêt brutal
+        if: (failure() || cancelled()) && steps.next.outputs.go == 'true'
+        run: python3 selfcode/atelier.py fail

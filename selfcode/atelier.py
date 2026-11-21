@@ -1,0 +1,219 @@
+"""L'Atelier d'Aurora, côté serveur de GitHub : écrire → lancer → lire les erreurs → corriger, jusqu'à ce que ça marche.
+
+  python selfcode/atelier.py next    → prend le projet suivant sur ton Syrius (sinon s'arrête)
+  python selfcode/atelier.py work    → boucle de travail (5 essais au plus), avancement envoyé après chaque essai
+  python selfcode/atelier.py fail    → signale un arrêt brutal (panne, délai dépassé)
+
+Le code écrit par l'IA tourne dans un conteneur Docker jetable : aucun secret ni variable d'environnement du
+serveur de GitHub n'y entre, seul le dossier du projet y est monté, avec des limites de mémoire, de processus et
+de temps. Internet y est ouvert (pip, npm), sauf l'adresse interne du serveur (bloquée par le workflow).
+L'IA est interrogée via ton Syrius (/api/training/worker/coder-ask : budget quotidien, aucune clé ici).
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import syrius_auth  # noqa: E402
+
+WORK = Path(os.environ.get("RUNNER_TEMP", "/tmp")) / "atelier"
+PROJ = WORK / "projet"
+MAX_ATTEMPTS = 5
+RUN_TIMEOUT = 420  # secondes pour installer + tester
+IMAGES = {"python": "python:3.13-slim", "node": "node:22-slim"}
+SKIP_DIRS = {"node_modules", "__pycache__", ".pytest_cache", ".venv", "venv", ".git", ".npm", ".cache"}
+
+SYSTEM = """Tu es Aurora, une développeuse experte. Tu travailles sur un vrai ordinateur Linux : ce que tu écris est
+enregistré dans un dossier, puis ta commande d'installation et ta commande de test sont VRAIMENT exécutées.
+Tu reçois la sortie et tu corriges jusqu'à ce que les tests passent.
+
+Réponds EXACTEMENT dans ce format, sans rien d'autre :
+RÉSUMÉ: 1 à 3 phrases en français (ce que fait le programme, ou ce que tu as corrigé)
+ENVIRONNEMENT: python ou node
+INSTALLATION: une commande shell (ex. pip install requests  /  npm install express) ou « aucune »
+TEST: une commande shell qui vérifie que tout marche et se TERMINE (code de sortie 0 = réussi)
+### FICHIER: chemin/relatif.ext
+```
+contenu COMPLET du fichier
+```
+(un bloc par fichier ; à chaque essai, renvoie le contenu complet de chaque fichier que tu modifies ou crées)
+
+Règles :
+- Python : tests avec pytest (installe-le dans INSTALLATION : pip install pytest ...), TEST: python -m pytest -q
+- Node.js : un package.json, tests avec node --test (intégré, rien à installer), TEST: node --test
+- Un serveur (Express, Flask…) ne doit jamais tourner sans fin dans TEST : écris un test qui le démarre, fait
+  une vraie requête, vérifie la réponse puis l'arrête (ex. app.listen(0) puis close()).
+- Pas d'interface graphique, pas de saisie clavier pendant les tests, pas de clé d'API ni de mot de passe.
+- Le programme doit aussi marcher sur Termux (Android) : pas de dépendance exotique ni de binaire spécial.
+- Ne triche jamais : un test qui ne vérifie rien, ou un test modifié pour passer sans corriger le code, est interdit."""
+
+
+def api(path: str, body: dict) -> dict:
+    url = os.environ["SYRIUS_URL"].rstrip("/") + path
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers={
+        "Authorization": f"Bearer {syrius_auth.token()}", "Content-Type": "application/json",
+        "X-Syrius": "1", "User-Agent": "SyriusAtelier/1.0"})
+    with urllib.request.urlopen(req, timeout=150) as r:  # nosec B310 (adresse de ton Syrius)
+        return json.loads(r.read(3_000_000) or b"{}")
+
+
+def ask(prompt: str) -> str:
+    return str(api("/api/training/worker/coder-ask", {"system": SYSTEM, "prompt": prompt[-29000:],
+                                                       "max_tokens": 6000}).get("text", ""))
+
+
+# ------------------------------------------------------------------ lecture de la réponse de l'IA
+_FIELD = re.compile(r"^\s*\**(RÉSUMÉ|RESUME|RÉSUME|ENVIRONNEMENT|INSTALLATION|TEST)\**\s*:\s*\**\s*(.*)$", re.I | re.M)
+_FILE = re.compile(r"^#{2,4}\s*FICHIER\s*:\s*`?([^\n`]+?)`?\s*\n+```[^\n]*\n(.*?)\n```", re.S | re.M)
+_SAFE_PATH = re.compile(r"^(?!/)(?!.*\.\.)[\w.\-/ ]{1,120}$")
+
+
+def parse(reply: str) -> dict:
+    fields = {}
+    for key, value in _FIELD.findall(reply):
+        k = key.upper().replace("É", "E")
+        fields.setdefault("RESUME" if k.startswith("RESUM") else k, value.strip().strip("`"))
+    files = {}
+    for path, content in _FILE.findall(reply):
+        path = path.strip()
+        while path.startswith("./"):  # « ./a.py » → « a.py » ; « ../ » reste refusé
+            path = path[2:]
+        if _SAFE_PATH.match(path) and not any(part in SKIP_DIRS for part in path.split("/")):
+            files[path] = content + "\n"
+    env = fields.get("ENVIRONNEMENT", "").lower()
+    env = "node" if "node" in env or "javascript" in env else "python"
+    setup = fields.get("INSTALLATION", "")
+    if setup.lower().strip(" .«»\"'") in ("", "aucune", "aucun", "rien", "none", "-"):
+        setup = ""
+    return {"summary": fields.get("RESUME", "")[:600], "env": env, "setup": setup[:300], "test": fields.get("TEST", "")[:300],
+            "files": files}
+
+
+# ------------------------------------------------------------------ exécution isolée
+def write_files(files: dict[str, str]) -> None:
+    for path, content in files.items():
+        dest = (PROJ / path).resolve()
+        if PROJ.resolve() not in dest.parents:
+            continue  # jamais en dehors du dossier du projet
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+
+
+def project_files() -> dict[str, str]:
+    out = {}
+    for p in sorted(PROJ.rglob("*")):
+        rel = p.relative_to(PROJ)
+        if p.is_file() and not any(part in SKIP_DIRS for part in rel.parts) and p.stat().st_size <= 60_000 \
+                and rel.name not in ("package-lock.json",):
+            try:
+                out[str(rel)] = p.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+    return dict(list(out.items())[:40])
+
+
+def run(env: str, setup: str, test: str) -> tuple[bool, str]:
+    """Installation puis test dans un conteneur jetable : ni secret, ni variable d'environnement de GitHub."""
+    script = (f"set -e\n{setup}\necho '=== TESTS ==='\n{test}\n") if setup else f"set -e\necho '=== TESTS ==='\n{test}\n"
+    (WORK / "run.sh").write_text(script, encoding="utf-8")
+    cmd = ["docker", "run", "--rm", "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
+           "-v", f"{PROJ}:/projet", "-v", f"{WORK / 'run.sh'}:/run.sh:ro", "-w", "/projet",
+           "-e", "HOME=/tmp", "-e", "CI=1", "-e", "PIP_ROOT_USER_ACTION=ignore", "-e", "npm_config_update_notifier=false",
+           IMAGES[env], "timeout", "-k", "10", str(RUN_TIMEOUT), "sh", "/run.sh"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=RUN_TIMEOUT + 60)
+    except subprocess.TimeoutExpired:
+        return False, f"TROP LONG : arrêté après {RUN_TIMEOUT} s (un programme ou un serveur ne s'arrête pas ?)"
+    out = (p.stdout + "\n" + p.stderr).strip()
+    if p.returncode == 124:
+        out += f"\nTROP LONG : arrêté après {RUN_TIMEOUT} s (un serveur ou une boucle ne s'arrête pas ?)"
+    return p.returncode == 0, out[-6000:]
+
+
+# ------------------------------------------------------------------ étapes
+def cmd_next() -> None:
+    WORK.mkdir(parents=True, exist_ok=True)
+    item = api("/api/training/worker/atelier-next", {}).get("project")
+    out = os.environ.get("GITHUB_OUTPUT")
+    if not item:
+        print("Aucun projet en attente.")
+        if out:
+            Path(out).open("a").write("go=false\n")
+        return
+    (WORK / "project.json").write_text(json.dumps(item, ensure_ascii=False), encoding="utf-8")
+    print(f"Projet {item['id']} : {item['text'][:200]}")
+    if out:
+        Path(out).open("a").write(f"go=true\nid={item['id']}\n")
+
+
+def report(pid: str, status: str, attempt: int, plan: dict, summary: str, log: str) -> None:
+    try:
+        api("/api/training/worker/atelier-report", {
+            "id": pid, "status": status, "attempt": attempt, "summary": summary, "log": log, "env": plan.get("env", ""),
+            "setup": plan.get("setup", ""), "test": plan.get("test", ""), "files": project_files()})
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print(f"Avancement non envoyé : {e}")
+
+
+def cmd_work() -> None:
+    item = json.loads((WORK / "project.json").read_text(encoding="utf-8"))
+    pid = item["id"]
+    shutil.rmtree(PROJ, ignore_errors=True)
+    PROJ.mkdir(parents=True)
+    plan: dict = {}
+    prompt = f"Projet demandé :\n{item['text']}\n\nÉcris le projet complet avec ses tests."
+    log, summary = "", ""
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        report(pid, "running", attempt, plan, f"Essai {attempt}/{MAX_ATTEMPTS} : Aurora écrit le code…", log)
+        try:
+            reply = ask(prompt)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            report(pid, "failed", attempt, plan, f"La grande IA ne répond pas ({str(e)[:120]}).", log)
+            return
+        new = parse(reply)
+        if not new["files"] and not plan:
+            prompt = (f"Projet demandé :\n{item['text']}\n\nTa réponse précédente ne respectait pas le format (aucun "
+                      "bloc « ### FICHIER: »). Recommence en respectant EXACTEMENT le format.")
+            log = "Réponse illisible (aucun fichier)."
+            continue
+        plan = {"env": new["env"] if new["files"] or not plan else plan["env"],
+                "setup": new["setup"] if new["test"] else plan.get("setup", ""),
+                "test": new["test"] or plan.get("test", "")}
+        summary = new["summary"] or summary
+        write_files(new["files"])
+        if not plan["test"]:
+            prompt = "Il manque la ligne TEST: (commande qui vérifie que tout marche). Renvoie la réponse complète."
+            continue
+        report(pid, "running", attempt, plan, f"Essai {attempt}/{MAX_ATTEMPTS} : installation et tests en cours…", log)
+        ok, log = run(plan["env"], plan["setup"], plan["test"])
+        print(f"--- essai {attempt} : {'RÉUSSI' if ok else 'échec'} ---\n{log[-3000:]}")
+        if ok:
+            report(pid, "done", attempt, plan, summary or "Le programme marche : tous les tests passent.", log)
+            return
+        files_now = "\n\n".join(f"### FICHIER: {p}\n```\n{c[:8000]}\n```" for p, c in project_files().items())
+        prompt = (f"Projet demandé :\n{item['text']}\n\nFichiers actuels :\n{files_now}\n\nINSTALLATION: {plan['setup'] or 'aucune'}\n"
+                  f"TEST: {plan['test']}\n\nLes tests ÉCHOUENT. Sortie réelle (fin) :\n```\n{log[-3500:]}\n```\n\n"
+                  "Trouve la cause et corrige le CODE (pas les tests, sauf s'ils sont réellement faux). Renvoie le "
+                  "format complet avec les fichiers modifiés.")
+    report(pid, "failed", MAX_ATTEMPTS, plan,
+           (summary + " — " if summary else "") + f"Les tests échouent encore après {MAX_ATTEMPTS} essais.", log)
+
+
+def cmd_fail() -> None:
+    """Le travail s'est arrêté net (panne, délai dépassé) : on le dit au lieu de laisser « en cours »."""
+    f = WORK / "project.json"
+    if f.exists():
+        report(json.loads(f.read_text(encoding="utf-8"))["id"], "failed", 0, {},
+               "L'atelier s'est arrêté avant la fin (panne ou délai dépassé sur le serveur de GitHub).", "")
+
+
+if __name__ == "__main__":
+    {"next": cmd_next, "work": cmd_work, "fail": cmd_fail}[sys.argv[1]]()

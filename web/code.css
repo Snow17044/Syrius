@@ -158,3 +158,22 @@
 .c-skill-body { white-space: pre-wrap; font-size: .82rem; background: var(--surface-2); padding: 10px 12px; border-radius: 12px; margin: 6px 0 0; }
 
 @media (min-width: 820px) { .c-app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }
+
+/* ---------- Atelier d'Aurora ---------- */
+.c-atelier { margin-top: 10px; }
+.c-atelier-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.c-atelier-state { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; font-weight: 600; padding: 3px 10px;
+  border-radius: 99px; background: var(--surface-2); color: var(--text-2); }
+.c-atelier-state .ic { width: 14px; height: 14px; }
+.c-atelier-state.running .ic { animation: c-spin 1.4s linear infinite; }
+.c-atelier-state.done { color: var(--mint); }
+.c-atelier-state.failed { color: var(--danger); }
+@keyframes c-spin { to { transform: rotate(360deg); } }
+.c-atelier-summary { margin: 8px 0 4px; color: var(--text-2); font-size: .9rem; }
+.c-atelier-label { margin: 10px 0 4px; font-size: .74rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.c-atelier-file { margin-top: 8px; }
+.c-atelier-file > summary { cursor: pointer; font: 600 .84rem/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--accent); }
+.c-atelier-pre { position: relative; max-height: 420px; overflow: auto; background: var(--surface-2); border: 1px solid var(--line-2);
+  padding: 12px; border-radius: 12px; margin: 6px 0 0; font-size: .8rem; }
+.c-atelier-pre { padding-top: 40px; }
+.c-atelier-pre > .c-copy { position: absolute; top: 6px; right: 6px; float: none; margin: 0; }

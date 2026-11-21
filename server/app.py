@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import group, journal, transcribe, vision
+from . import atelier, group, journal, transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -61,8 +61,9 @@ class MemoryBody(BaseModel):
 
 
 class CoderAskBody(BaseModel):
-    system: str = Field("", max_length=1200)
-    prompt: str = Field(..., min_length=10, max_length=14000)
+    system: str = Field("", max_length=4000)
+    prompt: str = Field(..., min_length=10, max_length=30000)
+    max_tokens: int = Field(2500, ge=500, le=6000)
 
 
 class ModelManifestBody(BaseModel):
@@ -703,7 +704,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def training_worker_coder_ask(body: CoderAskBody):
         """Une grande IA gratuite écrit du code pour fabriquer les exemples de l'IA programmeuse (budget quotidien)."""
         try:
-            return await asyncio.to_thread(coderask.ask, db.base, agent.llm.ordered(), body.system, body.prompt)
+            return await asyncio.to_thread(coderask.ask, db.base, agent.llm.ordered(), body.system, body.prompt,
+                                           body.max_tokens)
         except coderask.CoderAskError as e:
             raise HTTPException(429 if "budget" in str(e) else 503, str(e)) from None
 
@@ -780,6 +782,31 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             return selfcode.retry(db.base, iid[:20], body.text)
         except selfcode.SelfCodeError as e:
             raise HTTPException(400, str(e)) from None
+
+    # ------------------------------------------------------------------ atelier d'Aurora (code lancé et testé)
+    @app.post("/api/training/worker/atelier-next", dependencies=[Depends(require_trainer)])
+    async def atelier_next():
+        return {"project": atelier.take_next(db.base)}
+
+    @app.post("/api/training/worker/atelier-report", dependencies=[Depends(require_trainer)])
+    async def atelier_report(body: dict):
+        try:
+            atelier.report(db.base, body)
+        except atelier.AtelierError as e:
+            raise HTTPException(400, str(e)) from None
+        return {"ok": True}
+
+    @app.get("/api/code/atelier", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_list():
+        return [{k: v for k, v in d.items() if k != "files"} | {"nfiles": len(d.get("files") or {})}
+                for d in atelier.items(db.base)]
+
+    @app.get("/api/code/atelier/{pid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_get(pid: str):
+        item = atelier.get(db.base, pid[:20])
+        if not item:
+            raise HTTPException(404, "Projet introuvable")
+        return item
 
     @app.post("/api/training/worker/code-next", dependencies=[Depends(require_trainer)])
     async def selfcode_next():

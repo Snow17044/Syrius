@@ -243,7 +243,72 @@
       view.bubble.appendChild(renderDiagram(ev));
     } else if (ev.type === "action") {
       view.bubble.appendChild(renderMailDraft(ev));
+    } else if (ev.type === "atelier" && /^[0-9a-f]{8}$/.test(ev.id || "")) {
+      if (!view.bubble.querySelector(`.c-atelier[data-id="${ev.id}"]`)) view.bubble.appendChild(renderAtelier(ev.id));
     }
+  }
+
+  // ------------------------------------------------------------------ atelier d'Aurora : avancement en direct
+  const ATELIER_STATES = { pending: ["clock", "En attente de l'atelier"], running: ["refresh", "Aurora travaille"],
+    done: ["ok", "Ça marche : tests réussis"], failed: ["alert", "Pas réussi"] };
+  function codeBlock(text, label) {
+    const pre = el("pre", "c-atelier-pre");
+    pre.appendChild(el("code", "", text));
+    const b = btn("Copier", "copy", async () => {
+      try { await copyText(text); b.lastChild.textContent = "Copié"; } catch (_) { b.lastChild.textContent = "Impossible"; }
+      setTimeout(() => { b.lastChild.textContent = "Copier"; }, 1500);
+    }, "c-copy");
+    b.setAttribute("aria-label", "Copier " + (label || "le code"));
+    pre.appendChild(b);
+    return pre;
+  }
+  function renderAtelier(id) {
+    const card = el("div", "c-card c-atelier");
+    card.dataset.id = id;
+    const head = el("div", "c-atelier-head");
+    const badge = el("span", "c-atelier-state");
+    head.append(el("strong", "", "Atelier d'Aurora"), badge);
+    const summary = el("p", "c-atelier-summary", "Chargement…");
+    const details = el("div", "c-atelier-details");
+    card.append(head, summary, details);
+    let timer = null, shown = "";
+    async function refresh() {
+      if (!card.isConnected && timer) { clearInterval(timer); return; }
+      let p;
+      try { p = await api(`/api/code/atelier/${id}`); } catch (err) {
+        summary.textContent = err.status === 404 ? "Projet introuvable (trop ancien ?)." : "⚠ " + err.message;
+        if (err.status === 404 && timer) clearInterval(timer);
+        return;
+      }
+      const [icon, label] = ATELIER_STATES[p.status] || ATELIER_STATES.pending;
+      Icons.set(badge, icon, p.status === "running" && p.attempt ? `${label} · essai ${p.attempt}/5` : label);
+      badge.className = "c-atelier-state " + p.status;
+      summary.textContent = p.summary || (p.status === "pending" ? "Le projet attend qu'un serveur de GitHub le prenne (quelques minutes)." : "");
+      const key = JSON.stringify([p.status, p.updated, Object.keys(p.files || {}).length]);
+      if (key !== shown) {
+        shown = key;
+        details.replaceChildren();
+        const files = Object.entries(p.files || {});
+        if (p.setup || p.test) {
+          const run = [p.env === "node" ? "pkg install nodejs" : "pkg install python", p.setup, p.test].filter(Boolean).join("\n");
+          details.append(el("div", "c-atelier-label", "Commandes (Termux)"), codeBlock(run, "les commandes"));
+        }
+        for (const [path, content] of files) {
+          const d = el("details", "c-atelier-file");
+          d.open = files.length <= 2 && p.status === "done";
+          d.append(el("summary", "", path), codeBlock(content, path));
+          details.appendChild(d);
+        }
+        if (p.log) {
+          const d = el("details", "c-atelier-file");
+          d.append(el("summary", "", p.status === "done" ? "Sortie des tests (réussis)" : "Sortie des tests"), codeBlock(p.log.slice(-4000), "la sortie"));
+          details.appendChild(d);
+        }
+      }
+      if ((p.status === "done" || p.status === "failed") && timer) { clearInterval(timer); timer = null; }
+    }
+    refresh().then(() => { if (!timer && !/(done|failed)/.test(badge.className)) timer = setInterval(refresh, 6000); });
+    return card;
   }
 
   $("#c-form").addEventListener("submit", async (e) => {
@@ -284,7 +349,7 @@
           if (ev.type === "text") { view.text += ev.text; renderText(view); }
           else if (ev.type === "text_replace") { view.text = String(ev.text || ""); renderText(view); }
           else if (ev.type === "tool") { tools.push(ev.label); setTools(view, tools); }
-          else if (ev.type === "dashboard" || ev.type === "diagram" || ev.type === "action") addCard(view, ev);
+          else if (ev.type === "dashboard" || ev.type === "diagram" || ev.type === "action" || ev.type === "atelier") addCard(view, ev);
           else if (ev.type === "title") { const c = state.convs.find((x) => x.id === state.convId); if (c) c.title = ev.title; }
           else if (ev.type === "error") { gotError = true; view.bubble.appendChild(el("div", "c-error", "⚠ " + ev.message)); }
           scrollDown();
