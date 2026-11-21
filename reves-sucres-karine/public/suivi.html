@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suivre ma commande — Les rêves sucrés de Karine</title>
+  <meta name="theme-color" content="#4e3428">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Great+Vibes&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/order.css">
+</head>
+<body class="subpage">
+
+  <header class="site-header scrolled">
+    <nav class="nav">
+      <a href="/" class="nav-brand" aria-label="Accueil">
+        <img src="/images/favicon.png" alt="" width="40" height="40">
+        <span>Les rêves sucrés <em>de Karine</em></span>
+      </a>
+      <button class="nav-toggle" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="menu">
+        <span></span><span></span><span></span>
+      </button>
+      <ul class="nav-links" id="menu">
+        <li><a href="/#apropos">L'atelier</a></li>
+        <li><a href="/#creations">Créations</a></li>
+        <li><a href="/suivi" aria-current="page">Suivre ma commande</a></li>
+        <li><a href="/commander" class="nav-cta">Commander</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <p class="eyebrow">Où en est ma commande ?</p>
+      <h1>Suivre ma <span class="script">commande</span></h1>
+      <p class="section-sub">Indiquez votre numéro de commande et le téléphone donné lors de la commande.</p>
+    </section>
+
+    <div class="container track-wrap">
+      <form class="panel track-form" id="track-form" novalidate>
+        <div class="field-row">
+          <div class="field">
+            <label for="t-code">Numéro de commande</label>
+            <input id="t-code" name="code" placeholder="KB-XXXXXX" autocomplete="off" autocapitalize="characters" required>
+          </div>
+          <div class="field">
+            <label for="t-tel">Téléphone</label>
+            <input id="t-tel" name="tel" type="tel" autocomplete="tel" required>
+          </div>
+        </div>
+        <button class="btn btn-primary" type="submit">Voir ma commande</button>
+        <p class="form-status" id="t-status" role="status" aria-live="polite"></p>
+      </form>
+
+      <section class="panel track-result" id="track-result" hidden></section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <img src="/images/favicon.png" alt="" width="56" height="56">
+    <p class="footer-name">Les rêves sucrés <span class="script">de Karine</span></p>
+    <p class="footer-small">Pâtisserie artisanale faite maison</p>
+    <a href="/" class="back-top">Retour à l'accueil</a>
+  </footer>
+
+  <script>
+  (function () {
+    const $ = (s) => document.querySelector(s);
+    const euro = (c) => (c / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    const frDate = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const header = $('.site-header');
+    $('.nav-toggle').addEventListener('click', () => header.classList.toggle('open'));
+
+    const STEPS = [
+      ['nouvelle', 'Reçue', 'Karine a bien reçu votre commande.'],
+      ['confirmee', 'Confirmée', 'Votre commande est validée.'],
+      ['en_preparation', 'En préparation', 'Vos douceurs sont en cours de réalisation.'],
+      ['prete', 'Prête', 'Votre commande vous attend !'],
+      ['terminee', 'Remise', 'Bonne dégustation !'],
+    ];
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('code')) $('#t-code').value = params.get('code');
+
+    $('#track-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const st = $('#t-status');
+      st.textContent = 'Recherche…'; st.className = 'form-status';
+      $('#track-result').hidden = true;
+      try {
+        const qs = new URLSearchParams({ code: $('#t-code').value, tel: $('#t-tel').value });
+        const r = await fetch('/api/suivi?' + qs);
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'Une erreur est survenue.');
+        st.textContent = '';
+        render(d);
+      } catch (err) {
+        st.textContent = err.message; st.className = 'form-status err';
+      }
+    });
+
+    function render(o) {
+      const idx = STEPS.findIndex((s) => s[0] === o.status);
+      const steps = o.status === 'annulee'
+        ? '<p class="cancelled">Cette commande a été annulée. Pour toute question, contactez Karine.</p>'
+        : `<ol class="timeline">${STEPS.map((s, i) => `
+            <li class="${i < idx ? 'done' : i === idx ? 'current' : ''}">
+              <span class="dot"></span><div><strong>${s[1]}</strong>${i === idx ? `<p>${s[2]}</p>` : ''}</div>
+            </li>`).join('')}</ol>`;
+      const el = $('#track-result');
+      el.innerHTML = `
+        <h2>Bonjour ${esc(o.first_name)} !</h2>
+        <p class="muted">Commande <strong>${esc(o.code)}</strong> · ${o.mode === 'livraison' ? 'Livraison' : 'Retrait'} le ${frDate(o.pickup_date)}${o.pickup_slot ? ' · ' + esc(o.pickup_slot) : ''}</p>
+        ${steps}
+        <ul class="cart-lines recap">${o.items.map((i) => `<li><span class="q">${i.qty}×</span><span class="n">${esc(i.name)}${i.unit ? ` <small>${esc(i.unit)}</small>` : ''}</span><span class="p">${euro(i.qty * i.price_cents)}</span></li>`).join('')}</ul>
+        <div class="cart-total"><span>Total</span><strong>${euro(o.total_cents)}</strong></div>`;
+      el.hidden = false;
+    }
+    if (params.get('code') && params.get('tel')) { $('#t-tel').value = params.get('tel'); $('#track-form').requestSubmit(); }
+  })();
+  </script>
+</body>
+</html>

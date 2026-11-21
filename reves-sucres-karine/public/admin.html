@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Espace Karine — Gestion</title>
+  <meta name="theme-color" content="#4e3428">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Great+Vibes&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body class="admin">
+
+  <!-- ===== Connexion ===== -->
+  <section class="login" id="login" hidden>
+    <form class="login-card" id="login-form">
+      <img src="/images/logo.webp" alt="Les rêves sucrés de Karine" width="160" height="160">
+      <h1>Espace <span class="script">Karine</span></h1>
+      <p class="muted">Gestion des commandes et de la carte</p>
+      <div class="field">
+        <label for="l-pw">Mot de passe</label>
+        <input id="l-pw" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary" type="submit">Se connecter</button>
+      <p class="form-status err" id="l-status" role="alert"></p>
+      <a href="/" class="small-link">← Retour au site</a>
+    </form>
+  </section>
+
+  <!-- ===== Application ===== -->
+  <div class="app" id="app" hidden>
+    <header class="topbar">
+      <a class="brand" href="/" target="_blank" rel="noopener" title="Voir le site">
+        <img src="/images/favicon.png" alt="" width="36" height="36">
+        <span>Espace <em>Karine</em></span>
+      </a>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="orders" aria-selected="true">Commandes <span class="badge" id="new-badge" hidden></span></button>
+        <button role="tab" data-tab="products" aria-selected="false">Produits</button>
+        <button role="tab" data-tab="settings" aria-selected="false">Réglages</button>
+      </nav>
+      <button class="link-btn" id="logout">Déconnexion</button>
+    </header>
+
+    <main class="wrap">
+      <!-- Commandes -->
+      <section class="tab-panel" id="tab-orders">
+        <div class="stats" id="stats"></div>
+        <div class="toolbar">
+          <div class="chips" id="filters">
+            <button data-f="active" class="on">En cours</button>
+            <button data-f="nouvelle">Nouvelles</button>
+            <button data-f="terminee">Remises</button>
+            <button data-f="annulee">Annulées</button>
+            <button data-f="all">Toutes</button>
+          </div>
+          <input type="search" id="search" placeholder="Rechercher (nom, n°, téléphone…)" aria-label="Rechercher une commande">
+          <button class="btn btn-primary btn-sm" id="new-order">+ Nouvelle commande</button>
+        </div>
+        <div id="orders"><p class="muted center-text">Chargement…</p></div>
+      </section>
+
+      <!-- Produits -->
+      <section class="tab-panel" id="tab-products" hidden>
+        <div class="toolbar">
+          <p class="muted grow">Les produits « disponibles » apparaissent sur la page Commander, dans l'ordre choisi.</p>
+          <button class="btn btn-primary btn-sm" id="new-product">+ Ajouter un produit</button>
+        </div>
+        <div id="products"></div>
+      </section>
+
+      <!-- Réglages -->
+      <section class="tab-panel" id="tab-settings" hidden>
+        <form class="card settings" id="settings-form">
+          <h2>Commandes en ligne</h2>
+          <label class="switch"><input type="checkbox" name="orders_open"><span></span> Accepter les commandes sur le site</label>
+          <label class="switch"><input type="checkbox" name="delivery"><span></span> Proposer la livraison</label>
+          <div class="field">
+            <label for="s-lead">Délai minimum avant la date de retrait (jours)</label>
+            <input id="s-lead" name="lead_days" type="number" min="0" max="60" required>
+          </div>
+          <div class="field">
+            <label for="s-slots">Créneaux proposés (un par ligne)</label>
+            <textarea id="s-slots" name="slots" rows="3"></textarea>
+          </div>
+          <div class="field">
+            <label for="s-notice">Message d'information (affiché sur la page Commander)</label>
+            <textarea id="s-notice" name="notice" rows="2" maxlength="500"></textarea>
+          </div>
+          <div class="field">
+            <label for="s-closed">Message quand les commandes sont fermées</label>
+            <textarea id="s-closed" name="closed_message" rows="2" maxlength="500"></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Enregistrer</button>
+        </form>
+
+        <form class="card settings" id="password-form">
+          <h2>Mot de passe</h2>
+          <div class="field">
+            <label for="p-cur">Mot de passe actuel</label>
+            <input id="p-cur" type="password" autocomplete="current-password" required>
+          </div>
+          <div class="field">
+            <label for="p-new">Nouveau mot de passe (10 caractères minimum)</label>
+            <input id="p-new" type="password" autocomplete="new-password" minlength="10" required>
+          </div>
+          <button class="btn btn-primary" type="submit">Changer le mot de passe</button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== Fenêtre produit ===== -->
+  <dialog id="product-dialog">
+    <form method="dialog" id="product-form" class="dialog-body">
+      <h2 id="product-title">Produit</h2>
+      <div class="field"><label for="pr-name">Nom *</label><input id="pr-name" name="name" required maxlength="120"></div>
+      <div class="field-row">
+        <div class="field"><label for="pr-cat">Catégorie</label><input id="pr-cat" name="category" list="cat-list" maxlength="60"></div>
+        <div class="field"><label for="pr-unit">Format</label><input id="pr-unit" name="unit" placeholder="6 parts, 12 pièces…" maxlength="60"></div>
+      </div>
+      <datalist id="cat-list"></datalist>
+      <div class="field"><label for="pr-desc">Description</label><textarea id="pr-desc" name="description" rows="3" maxlength="500"></textarea></div>
+      <div class="field-row">
+        <div class="field"><label for="pr-price">Prix (€) *</label><input id="pr-price" name="price" type="number" min="0" step="0.01" required></div>
+        <div class="field"><label for="pr-pos">Ordre d'affichage</label><input id="pr-pos" name="position" type="number" min="0" step="1"></div>
+      </div>
+      <label class="switch"><input type="checkbox" name="available" checked><span></span> Disponible à la commande</label>
+      <p class="form-status err" id="pr-status"></p>
+      <div class="dialog-actions">
+        <button type="button" class="link-btn danger" id="pr-delete">Supprimer</button>
+        <span class="grow"></span>
+        <button type="button" class="btn btn-ghost btn-sm" data-close>Annuler</button>
+        <button type="submit" class="btn btn-primary btn-sm">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== Fenêtre nouvelle commande ===== -->
+  <dialog id="order-dialog">
+    <form method="dialog" id="order-form" class="dialog-body">
+      <h2>Nouvelle commande</h2>
+      <p class="muted small">Pour une commande reçue par téléphone, message ou en direct.</p>
+      <div class="field-row">
+        <div class="field"><label for="o-name">Client *</label><input id="o-name" name="name" required maxlength="100"></div>
+        <div class="field"><label for="o-phone">Téléphone</label><input id="o-phone" name="phone" type="tel" maxlength="30"></div>
+      </div>
+      <div class="field"><label for="o-email">E-mail</label><input id="o-email" name="email" type="email" maxlength="150"></div>
+      <div class="field-row">
+        <div class="field"><label for="o-date">Date *</label><input id="o-date" name="date" type="date" required></div>
+        <div class="field"><label for="o-slot">Créneau / heure</label><input id="o-slot" name="slot" list="slot-list" maxlength="60"></div>
+      </div>
+      <datalist id="slot-list"></datalist>
+      <div class="field-row">
+        <div class="field">
+          <label for="o-mode">Remise</label>
+          <select id="o-mode" name="mode"><option value="retrait">Retrait</option><option value="livraison">Livraison</option></select>
+        </div>
+        <div class="field">
+          <label for="o-status">Statut</label>
+          <select id="o-status" name="status"></select>
+        </div>
+      </div>
+      <div class="field" id="o-address-field" hidden><label for="o-address">Adresse</label><input id="o-address" name="address" maxlength="300"></div>
+
+      <h3>Articles</h3>
+      <div id="o-lines"></div>
+      <div class="line-add">
+        <button type="button" class="link-btn" id="o-add-product">+ Article de la carte</button>
+        <button type="button" class="link-btn" id="o-add-custom">+ Article personnalisé</button>
+      </div>
+      <p class="o-total">Total : <strong id="o-total">0,00 €</strong></p>
+
+      <div class="field"><label for="o-message">Message / personnalisation</label><textarea id="o-message" name="message" rows="3" maxlength="1500"></textarea></div>
+      <p class="form-status err" id="o-status-msg"></p>
+      <div class="dialog-actions">
+        <span class="grow"></span>
+        <button type="button" class="btn btn-ghost btn-sm" data-close>Annuler</button>
+        <button type="submit" class="btn btn-primary btn-sm">Créer la commande</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

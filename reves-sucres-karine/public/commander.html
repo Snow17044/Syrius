@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Commander — Les rêves sucrés de Karine</title>
+  <meta name="description" content="Commandez vos pâtisseries en ligne chez Les rêves sucrés de Karine : gâteaux de fête, entremets, macarons et gourmandises faits maison.">
+  <meta name="theme-color" content="#4e3428">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Great+Vibes&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/order.css">
+</head>
+<body class="subpage">
+
+  <header class="site-header scrolled">
+    <nav class="nav">
+      <a href="/" class="nav-brand" aria-label="Accueil">
+        <img src="/images/favicon.png" alt="" width="40" height="40">
+        <span>Les rêves sucrés <em>de Karine</em></span>
+      </a>
+      <button class="nav-toggle" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="menu">
+        <span></span><span></span><span></span>
+      </button>
+      <ul class="nav-links" id="menu">
+        <li><a href="/#apropos">L'atelier</a></li>
+        <li><a href="/#creations">Créations</a></li>
+        <li><a href="/suivi">Suivre ma commande</a></li>
+        <li><a href="/commander" class="nav-cta" aria-current="page">Commander</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <p class="eyebrow">Commande en ligne</p>
+      <h1>Composez votre <span class="script">commande</span></h1>
+      <p class="section-sub">Choisissez vos douceurs, indiquez la date souhaitée, et Karine vous recontacte pour confirmer.</p>
+    </section>
+
+    <div class="container order-layout" id="order-layout">
+      <div class="order-catalog" id="catalog" aria-live="polite">
+        <p class="loading">Chargement de la carte…</p>
+      </div>
+
+      <aside class="order-cart panel" aria-labelledby="cart-title">
+        <h2 id="cart-title">Votre panier</h2>
+        <ul class="cart-lines" id="cart-lines"></ul>
+        <p class="cart-empty" id="cart-empty">Votre panier est vide pour l'instant.</p>
+        <div class="cart-total"><span>Total</span><strong id="cart-total">0,00 €</strong></div>
+        <a href="#order-form" class="btn btn-primary cart-go" id="cart-go">Finaliser ma commande</a>
+      </aside>
+
+      <form class="order-form panel" id="order-form" novalidate>
+        <h2>Vos informations</h2>
+        <p class="notice" id="shop-notice" hidden></p>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-name">Nom et prénom *</label>
+            <input id="f-name" name="name" autocomplete="name" required maxlength="100">
+          </div>
+          <div class="field">
+            <label for="f-phone">Téléphone *</label>
+            <input id="f-phone" name="phone" type="tel" autocomplete="tel" required maxlength="30">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-email">E-mail <span class="opt">(facultatif)</span></label>
+          <input id="f-email" name="email" type="email" autocomplete="email" maxlength="150">
+        </div>
+
+        <fieldset class="field mode-field" id="mode-field" hidden>
+          <legend>Mode de remise</legend>
+          <label class="radio"><input type="radio" name="mode" value="retrait" checked> Retrait à l'atelier</label>
+          <label class="radio"><input type="radio" name="mode" value="livraison"> Livraison</label>
+        </fieldset>
+        <div class="field" id="address-field" hidden>
+          <label for="f-address">Adresse de livraison *</label>
+          <input id="f-address" name="address" autocomplete="street-address" maxlength="300">
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-date">Date souhaitée *</label>
+            <input id="f-date" name="date" type="date" required>
+            <small class="hint" id="date-hint"></small>
+          </div>
+          <div class="field" id="slot-field">
+            <label for="f-slot">Créneau *</label>
+            <select id="f-slot" name="slot"></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="f-message">Personnalisation, allergies, précisions</label>
+          <textarea id="f-message" name="message" rows="4" maxlength="1500" placeholder="Inscription sur le gâteau, thème, couleurs, parfums, allergies…"></textarea>
+        </div>
+
+        <!-- champ piège anti-robots, invisible pour les humains -->
+        <div class="hp" aria-hidden="true">
+          <label for="f-website">Site web</label>
+          <input id="f-website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <label class="check">
+          <input type="checkbox" id="f-consent" required>
+          <span>J'accepte que mes informations soient utilisées uniquement pour traiter ma commande.</span>
+        </label>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">Envoyer ma commande</button>
+        <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+
+    <section class="container confirmation panel" id="confirmation" hidden tabindex="-1">
+      <div class="confirm-icon" aria-hidden="true">✓</div>
+      <h2>Merci, votre commande est enregistrée !</h2>
+      <p>Votre numéro de commande :</p>
+      <p class="order-code" id="confirm-code"></p>
+      <div id="confirm-recap"></div>
+      <p class="section-sub">Karine vous recontacte rapidement pour confirmer. Gardez ce numéro : il vous permet de suivre votre commande.</p>
+      <div class="hero-actions center">
+        <a class="btn btn-primary" id="confirm-track" href="/suivi">Suivre ma commande</a>
+        <a class="btn btn-ghost" href="/">Retour à l'accueil</a>
+      </div>
+    </section>
+  </main>
+
+  <div class="cart-bar" id="cart-bar" hidden>
+    <span><strong id="bar-count">0</strong> article(s) · <strong id="bar-total">0,00 €</strong></span>
+    <a href="#order-form" class="btn btn-primary">Finaliser</a>
+  </div>
+
+  <footer class="site-footer">
+    <img src="/images/favicon.png" alt="" width="56" height="56">
+    <p class="footer-name">Les rêves sucrés <span class="script">de Karine</span></p>
+    <p class="footer-small">Pâtisserie artisanale faite maison</p>
+    <a href="/" class="back-top">Retour à l'accueil</a>
+  </footer>
+
+  <script src="/commander.js"></script>
+</body>
+</html>

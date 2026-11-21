@@ -298,3 +298,9 @@ textarea { resize: vertical; }
   .petals { display: none; }
   .reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* ---------- Liens vers la commande en ligne ---------- */
+.center-actions { justify-content: center; margin-top: 40px; }
+.note { margin-top: 28px; }
+.footer-links { margin: 0 0 10px; font-size: .9rem; }
+.footer-links a { color: var(--powder); }
