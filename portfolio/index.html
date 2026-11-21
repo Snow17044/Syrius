@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atelier Syrius</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Sites web clairs et rapides pour artisans, commerçants et associations. Prix fixe, mentions légales incluses.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: une colonne éditoriale large, bandes pleine largeur, étoile (Sirius) comme seul motif */
+:root{
+  --bg:#f6f8fc; --surface:#ffffff; --ink:#0c1530; --muted:#4f5a78; --line:#dbe2f0;
+  --accent:#1d5cff; --accent-ink:#ffffff; --glow:#8fd3ff; --band:#0c1530; --band-ink:#e9f0ff;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Inter", system-ui, -apple-system, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#070c1d; --surface:#0f1730; --ink:#eaf0ff; --muted:#9aa6c6; --line:#1f2a4a;
+  --accent:#6f9bff; --accent-ink:#06102a; --glow:#8fd3ff; --band:#111b38; --band-ink:#e9f0ff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#070c1d; --surface:#0f1730; --ink:#eaf0ff; --muted:#9aa6c6; --line:#1f2a4a;
+  --accent:#6f9bff; --accent-ink:#06102a; --glow:#8fd3ff; --band:#111b38; --band-ink:#e9f0ff; color-scheme:dark}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1rem/1.6 var(--body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);line-height:1.08;text-wrap:balance;margin:0}
+h2{font-size:clamp(1.8rem,4vw,2.6rem);font-weight:800;letter-spacing:-.02em}
+h3{font-size:1.25rem;font-weight:700}
+p{margin:0}
+a{color:var(--accent)}
+:focus-visible{outline:3px solid var(--glow);outline-offset:3px;border-radius:6px}
+.label{font:500 .75rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+section{padding-block:4.5rem}
+
+/* Nav */
+nav .wrap{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-block:1.25rem}
+.brand{display:flex;align-items:center;gap:.55rem;font:800 1.2rem var(--display);color:var(--ink);text-decoration:none}
+.brand svg{width:22px;height:22px}
+.navlinks{display:flex;gap:1.25rem;flex-wrap:wrap}
+.navlinks a{color:var(--muted);text-decoration:none;font-weight:500;font-size:.95rem}
+.navlinks a:hover{color:var(--ink)}
+
+/* Hero */
+.hero{padding-block:3.5rem 4.5rem}
+.hero .wrap{display:grid;grid-template-columns:1.25fr .75fr;gap:3rem;align-items:center}
+.hero h1{font-size:clamp(2.4rem,6.4vw,4.6rem);font-weight:800;letter-spacing:-.035em}
+.hero h1 em{font-style:normal;color:var(--accent);position:relative;white-space:nowrap}
+.hero p.lede{font-size:1.15rem;color:var(--muted);max-width:34rem;margin-top:1.25rem}
+.ctas{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:2rem}
+.btn{display:inline-flex;align-items:center;gap:.5rem;padding:.85rem 1.3rem;border-radius:999px;font-weight:600;text-decoration:none;border:1.5px solid transparent;cursor:pointer;font-size:1rem;font-family:var(--body)}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{border-color:var(--line);color:var(--ink);background:transparent}
+.btn:hover{transform:translateY(-1px)}
+.facts{display:flex;gap:2rem;flex-wrap:wrap;margin-top:2.5rem}
+.facts div{display:grid;gap:.2rem}
+.facts b{font:700 1.5rem var(--display);font-variant-numeric:tabular-nums}
+.facts span{font-size:.85rem;color:var(--muted)}
+
+/* Star sky */
+.sky{position:relative;aspect-ratio:1;max-width:100%;border-radius:28px;background:radial-gradient(circle at 50% 45%,#1b2b62 0%,#0a1230 62%,#060a1c 100%);overflow:hidden}
+.sky canvas{position:absolute;inset:0;width:100%;height:100%}
+.sky .tag{position:absolute;left:1rem;bottom:1rem;right:1rem;color:#cfe0ff;font:500 .78rem/1.4 var(--mono)}
+
+/* Offres */
+.offres-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin-top:2.5rem}
+.offre{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:1.75rem;display:flex;flex-direction:column;gap:1rem}
+.offre.star{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.offre .price{font:800 2.4rem/1 var(--display);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.offre .price small{font:500 .9rem var(--body);color:var(--muted);letter-spacing:0}
+.offre ul{margin:0;padding:0;list-style:none;display:grid;gap:.55rem;font-size:.95rem}
+.offre li{display:flex;gap:.55rem}
+.offre li::before{content:"✦";color:var(--accent);flex:none}
+.offre .for{color:var(--muted);font-size:.95rem}
+.note{margin-top:1.5rem;color:var(--muted);font-size:.9rem;max-width:46rem}
+
+/* Méthode */
+.band{background:var(--band);color:var(--band-ink)}
+.band .label{color:#8fa3d6}
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:1.25rem;margin-top:2.5rem;counter-reset:s}
+.step{display:grid;gap:.5rem;align-content:start;border-top:1px solid #2a3866;padding-top:1rem}
+.step .n{font:500 .8rem var(--mono);color:var(--glow)}
+.step p{color:#b6c3e6;font-size:.93rem}
+
+/* Exemples */
+.ex-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin-top:2.5rem}
+.ex{display:grid;gap:.85rem}
+.mock{aspect-ratio:4/3;max-width:100%;border-radius:14px;border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column;background:var(--surface)}
+.mock .bar{height:22px;display:flex;gap:5px;align-items:center;padding:0 9px;border-bottom:1px solid var(--line)}
+.mock .bar i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.mock .scr{flex:1;padding:14px;display:flex;flex-direction:column;gap:8px}
+.mock .t{font:800 1.05rem var(--display)}
+.mock .r{height:7px;border-radius:4px;opacity:.35}
+.mock .pill{align-self:flex-start;padding:5px 10px;border-radius:999px;font:600 .7rem var(--body)}
+.m1 .scr{background:#f4e6d4;color:#4a2a12}.m1 .r{background:#4a2a12}.m1 .pill{background:#b5541c;color:#fff}
+.m2 .scr{background:#e8f1f7;color:#0f3b5c}.m2 .r{background:#0f3b5c}.m2 .pill{background:#f2b705;color:#1a1a1a}
+.m3 .scr{background:#103d2a;color:#e6f5ea}.m3 .r{background:#e6f5ea}.m3 .pill{background:#e6f5ea;color:#103d2a}
+.ex .cap{display:flex;justify-content:space-between;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+.ex .cap span{font-size:.8rem;color:var(--muted);font-family:var(--mono)}
+.ex p{color:var(--muted);font-size:.93rem}
+
+/* FAQ */
+.faq{display:grid;gap:.75rem;margin-top:2rem;max-width:48rem}
+details{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem 1.25rem}
+summary{cursor:pointer;font-weight:600}
+details p{margin-top:.6rem;color:var(--muted)}
+
+/* Contact */
+.contact .wrap{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:1.75rem;display:grid;gap:1rem}
+.copyrow{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.copyrow code{font:500 1rem var(--mono);background:var(--bg);border:1px solid var(--line);padding:.6rem .8rem;border-radius:10px;user-select:all;overflow-wrap:anywhere;min-width:0}
+.card ol{margin:0;padding-left:1.2rem;color:var(--muted);display:grid;gap:.35rem}
+
+footer{border-top:1px solid var(--line);padding-block:2rem;color:var(--muted);font-size:.85rem}
+footer .wrap{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+
+@media (max-width:860px){
+  .hero .wrap,.contact .wrap{grid-template-columns:1fr}
+  .sky{max-width:420px}
+  .offres-grid,.ex-grid{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr 1fr}
+  .navlinks{display:none}
+}
+@media (max-width:480px){.steps{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.btn:hover{transform:none}}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1l2.2 8.8L23 12l-8.8 2.2L12 23l-2.2-8.8L1 12l8.8-2.2z"/></svg>Atelier Syrius</a>
+  <div class="navlinks"><a href="#offres">Offres</a><a href="#methode">Méthode</a><a href="#exemples">Exemples</a><a href="#contact">Contact</a></div>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <div>
+    <p class="label">Création de sites web · Prix fixe</p>
+    <h1 style="margin-top:1rem">Votre activité mérite un site qu'on <em>trouve</em>.</h1>
+    <p class="lede">Je crée des sites vitrines simples, rapides et lisibles sur téléphone pour les artisans, commerçants, indépendants et associations. Un prix annoncé à l'avance, et un site à vous.</p>
+    <div class="ctas">
+      <a class="btn primary" href="#contact">Demander un devis gratuit</a>
+      <a class="btn ghost" href="#offres">Voir les prix</a>
+    </div>
+    <div class="facts">
+      <div><b>dès 250 €</b><span>site une page</span></div>
+      <div><b>7 à 15 j</b><span>avant la mise en ligne</span></div>
+      <div><b>RGPD</b><span>mentions légales incluses</span></div>
+    </div>
+  </div>
+  <div class="sky" aria-hidden="true"><canvas id="sky"></canvas><div class="tag">α CMa · Sirius · magnitude −1,46<br>l'étoile la plus brillante du ciel nocturne</div></div>
+</div></header>
+
+<section id="offres"><div class="wrap">
+  <p class="label">Offres</p>
+  <h2 style="margin-top:.75rem">Trois formules, aucune surprise.</h2>
+  <div class="offres-grid">
+    <article class="offre">
+      <p class="label">Essentiel</p>
+      <div class="price">250 € <small>prix fixe</small></div>
+      <p class="for">Pour être présent en ligne vite : artisan, coach, association.</p>
+      <ul>
+        <li>1 page complète (accueil, services, horaires, contact)</li>
+        <li>Adapté au téléphone</li>
+        <li>Mentions légales et page RGPD</li>
+        <li>1 série de retouches</li>
+      </ul>
+    </article>
+    <article class="offre star">
+      <p class="label">Vitrine · le plus demandé</p>
+      <div class="price">650 € <small>prix fixe</small></div>
+      <p class="for">Pour présenter son activité en détail et recevoir des demandes.</p>
+      <ul>
+        <li>Jusqu'à 5 pages</li>
+        <li>Formulaire de contact et carte d'accès</li>
+        <li>Référencement de base sur Google (titres, fiche Google Business)</li>
+        <li>Mentions légales, RGPD, bandeau cookies si besoin</li>
+        <li>2 séries de retouches</li>
+      </ul>
+    </article>
+    <article class="offre">
+      <p class="label">Suivi</p>
+      <div class="price">25 € <small>/ mois</small></div>
+      <p class="for">Pour ne plus s'occuper de rien après la mise en ligne.</p>
+      <ul>
+        <li>Petites modifications (horaires, prix, photos)</li>
+        <li>Vérification mensuelle que tout fonctionne</li>
+        <li>Sauvegardes</li>
+        <li>Sans engagement</li>
+      </ul>
+    </article>
+  </div>
+  <p class="note">Hors nom de domaine et hébergement (environ 10 à 60 € par an selon l'offre choisie), payés directement par vous : le site vous appartient. Les entreprises peuvent parfois faire financer une partie de leur site par les aides régionales au numérique.</p>
+</div></section>
+
+<section class="band" id="methode"><div class="wrap">
+  <p class="label">Méthode</p>
+  <h2 style="margin-top:.75rem">De la première question à la mise en ligne.</h2>
+  <div class="steps">
+    <div class="step"><span class="n">ÉTAPE 1</span><h3>On discute</h3><p>15 minutes au téléphone ou par message pour comprendre votre activité.</p></div>
+    <div class="step"><span class="n">ÉTAPE 2</span><h3>Devis</h3><p>Pages, fonctions et délai écrits noir sur blanc. Acompte de 30 % à la signature.</p></div>
+    <div class="step"><span class="n">ÉTAPE 3</span><h3>Maquette</h3><p>Vous voyez votre site en ligne en avant-première, sur ordinateur et téléphone.</p></div>
+    <div class="step"><span class="n">ÉTAPE 4</span><h3>Retouches</h3><p>Vous demandez les changements, je les fais.</p></div>
+    <div class="step"><span class="n">ÉTAPE 5</span><h3>En ligne</h3><p>Mise en ligne sur votre nom de domaine, solde réglé à la livraison.</p></div>
+  </div>
+</div></section>
+
+<section id="exemples"><div class="wrap">
+  <p class="label">Exemples</p>
+  <h2 style="margin-top:.75rem">À quoi peut ressembler le vôtre.</h2>
+  <div class="ex-grid">
+    <div class="ex">
+      <div class="mock m1"><div class="bar"><i></i><i></i><i></i></div><div class="scr"><span class="t">Boulangerie du Marché</span><div class="r" style="width:80%"></div><div class="r" style="width:60%"></div><span class="pill">Horaires &amp; commandes</span></div></div>
+      <div class="cap"><h3>Commerce de quartier</h3><span>MAQUETTE</span></div>
+      <p>Horaires, produits du jour, commande de gâteaux par formulaire.</p>
+    </div>
+    <div class="ex">
+      <div class="mock m2"><div class="bar"><i></i><i></i><i></i></div><div class="scr"><span class="t">Plomberie Rapide</span><div class="r" style="width:70%"></div><div class="r" style="width:50%"></div><span class="pill">Appeler · urgence 7j/7</span></div></div>
+      <div class="cap"><h3>Artisan</h3><span>MAQUETTE</span></div>
+      <p>Bouton d'appel en haut de l'écran, zone d'intervention, avis Google.</p>
+    </div>
+    <div class="ex">
+      <div class="mock m3"><div class="bar"><i></i><i></i><i></i></div><div class="scr"><span class="t">FC des Collines</span><div class="r" style="width:75%"></div><div class="r" style="width:55%"></div><span class="pill">Inscriptions saison</span></div></div>
+      <div class="cap"><h3>Association sportive</h3><span>MAQUETTE</span></div>
+      <p>Calendrier des matchs, inscriptions, partenaires du club.</p>
+    </div>
+  </div>
+  <p class="note">Ces maquettes sont des exemples de démonstration, pas des clients réels.</p>
+</div></section>
+
+<section id="faq" style="padding-top:0"><div class="wrap">
+  <p class="label">Questions fréquentes</p>
+  <div class="faq">
+    <details><summary>Est-ce que le site m'appartient ?</summary><p>Oui. Le nom de domaine et l'hébergement sont à votre nom, et je vous remets tout le code.</p></details>
+    <details><summary>Je n'ai ni textes ni photos, c'est grave ?</summary><p>Non. Je rédige les textes à partir de notre échange et j'utilise des photos libres de droits en attendant les vôtres.</p></details>
+    <details><summary>Je pourrai modifier mon site moi-même ?</summary><p>Pour les petites choses, je vous montre comment faire. Sinon, la formule Suivi s'en charge.</p></details>
+    <details><summary>Comment se passe le paiement ?</summary><p>30 % à la signature du devis, le reste à la mise en ligne. Facture fournie.</p></details>
+  </div>
+</div></section>
+
+<section class="contact" id="contact" style="padding-top:0"><div class="wrap">
+  <div>
+    <p class="label">Contact</p>
+    <h2 style="margin-top:.75rem">Parlons de votre projet.</h2>
+    <p style="color:var(--muted);margin-top:1rem;max-width:30rem">Réponse sous 24 h. Le devis est gratuit et ne vous engage à rien.</p>
+  </div>
+  <div class="card">
+    <p class="label">Écrivez-moi</p>
+    <div class="copyrow"><code id="mail">[ton-email@exemple.fr]</code><button class="btn ghost" id="copy" type="button">Copier</button></div>
+    <p>Dans votre message, indiquez :</p>
+    <ol><li>votre activité et votre ville</li><li>ce que le site doit permettre (appeler, réserver, commander…)</li><li>votre budget approximatif</li></ol>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>© 2026 Atelier Syrius · [Prénom Nom], entrepreneur individuel · SIRET [à compléter]</span>
+  <span>TVA non applicable, art. 293 B du CGI</span>
+</div></footer>
+
+<script>
+(function(){
+  var b=document.getElementById('copy'),m=document.getElementById('mail');
+  b.addEventListener('click',function(){
+    var t=m.textContent;
+    function sel(){var r=document.createRange();r.selectNodeContents(m);var s=getSelection();s.removeAllRanges();s.addRange(r);}
+    if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){b.textContent='Copié';setTimeout(function(){b.textContent='Copier'},1600)},sel)}else sel();
+  });
+  var c=document.getElementById('sky'),x=c.getContext('2d'),stars=[],w,h,dpr;
+  var still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function size(){dpr=Math.min(2,devicePixelRatio||1);w=c.clientWidth;h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;x.setTransform(dpr,0,0,dpr,0,0);}
+  var seed=7;function rnd(){seed=(seed*16807)%2147483647;return seed/2147483647}
+  for(var i=0;i<140;i++)stars.push({x:rnd(),y:rnd(),r:rnd()*1.2+.2,p:rnd()*6.28});
+  function draw(t){
+    x.clearRect(0,0,w,h);
+    stars.forEach(function(s){var a=.35+.4*Math.sin(t/900+s.p);x.globalAlpha=Math.max(.1,a);x.fillStyle='#dbe8ff';x.beginPath();x.arc(s.x*w,s.y*h,s.r,0,6.28);x.fill();});
+    x.globalAlpha=1;var cx=w*.5,cy=h*.42,R=Math.min(w,h)*.2,g=x.createRadialGradient(cx,cy,0,cx,cy,R);
+    g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.12,'rgba(200,230,255,.9)');g.addColorStop(.4,'rgba(143,211,255,.25)');g.addColorStop(1,'rgba(143,211,255,0)');
+    x.fillStyle=g;x.beginPath();x.arc(cx,cy,R,0,6.28);x.fill();
+    var L=R*1.6+Math.sin(t/1200)*R*.08;x.strokeStyle='rgba(220,240,255,.55)';x.lineWidth=1;
+    x.beginPath();x.moveTo(cx-L,cy);x.lineTo(cx+L,cy);x.moveTo(cx,cy-L);x.lineTo(cx,cy+L);x.stroke();
+    if(!still)requestAnimationFrame(draw);
+  }
+  size();addEventListener('resize',size);draw(0);
+})();
+</script>
+</body>
+</html>
