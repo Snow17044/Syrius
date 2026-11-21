@@ -14,7 +14,9 @@ from __future__ import annotations
 import json
 import re
 import secrets
+import logging
 import time
+import urllib.error
 import urllib.request
 
 from . import safety
@@ -181,10 +183,25 @@ WORKFLOW = "selfcode.yml"
 _REPO = re.compile(r"[\w.-]+/[\w.-]+")
 
 
+DISPATCH_HELP = {
+    401: "la clé GITHUB_DISPATCH_TOKEN est invalide ou expirée",
+    403: "la clé n'a pas la permission « Actions : Read and write »",
+    404: "la clé n'a pas accès au dépôt Syrius (choisis-le dans « Only select repositories »)",
+    422: "GitHub ne trouve pas l'automatisation sur la branche principale",
+}
+last_dispatch_error = ""  # raison du dernier refus (affichée à l'utilisateur, jamais la clé)
+
+
 def dispatch(token: str, repo: str, workflow: str = WORKFLOW) -> bool:
     """Démarre tout de suite « Améliorer Syrius » (sinon GitHub ne le lance qu'environ une fois par heure).
     Jamais d'erreur : sans jeton ou en cas d'échec, la demande reste simplement en attente."""
-    if not token or not _REPO.fullmatch(repo or ""):
+    global last_dispatch_error
+    last_dispatch_error = ""
+    if not token:
+        last_dispatch_error = "la clé GITHUB_DISPATCH_TOKEN n'est pas configurée dans Vercel"
+        return False
+    if not _REPO.fullmatch(repo or ""):
+        last_dispatch_error = "dépôt GitHub invalide (SYRIUS_GITHUB_REPO)"
         return False
     req = urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/workflows/{workflow}/dispatches",
                                  data=json.dumps({"ref": "main"}).encode(), method="POST", headers={
@@ -194,5 +211,10 @@ def dispatch(token: str, repo: str, workflow: str = WORKFLOW) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=10) as r:  # nosec B310 (adresse officielle de GitHub)
             return 200 <= r.status < 300
+    except urllib.error.HTTPError as e:
+        last_dispatch_error = f"GitHub a refusé (code {e.code}) : " + DISPATCH_HELP.get(e.code, "erreur inattendue")
+        logging.getLogger("syrius").warning("Démarrage immédiat refusé par GitHub : code %s", e.code)
+        return False
     except (OSError, ValueError):
+        last_dispatch_error = "GitHub ne répond pas"
         return False
