@@ -87,6 +87,16 @@ def add(base, text: str) -> dict:
     return item
 
 
+def note(base, pid: str, text: str) -> None:
+    """Message affiché sur la carte d'un projet en attente (ex. pourquoi il n'a pas démarré tout de suite)."""
+    data = _load(base)
+    for d in data:
+        if d.get("id") == pid and d.get("status") == "pending":
+            d["summary"] = _CTRL.sub("", str(text))[:600]
+            _save(base, data)
+            return
+
+
 def take_next(base) -> dict | None:
     """Pour le serveur de GitHub : le plus ancien projet en attente (marqué « en cours »)."""
     data = _load(base)

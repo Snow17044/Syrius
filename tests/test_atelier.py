@@ -246,3 +246,28 @@ def test_l_ia_peut_choisir_un_site():
     assert worker.parse("ENVIRONNEMENT: web\nTEST: node --test")["env"] == "web"
     assert worker.parse("ENVIRONNEMENT: site HTML\nTEST: x")["env"] == "web"
     assert "playwright@1.49.1" in worker.SYSTEM and worker.IMAGES["web"].endswith(f"v{worker.PLAYWRIGHT}-noble")
+
+
+def test_raison_d_un_demarrage_refuse(monkeypatch):
+    """Vu en vrai : la clé était là mais GitHub n'a rien lancé. La carte doit dire pourquoi."""
+    import io
+    import urllib.error
+    from server import selfcode
+
+    def refuse(req, timeout=0):
+        raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, io.BytesIO(b"{}"))
+    monkeypatch.setattr(selfcode.urllib.request, "urlopen", refuse)
+    assert not selfcode.dispatch("github_pat_x", "Snow17044/Syrius", atelier.WORKFLOW)
+    assert "403" in selfcode.last_dispatch_error and "Actions" in selfcode.last_dispatch_error
+    assert not selfcode.dispatch("", "Snow17044/Syrius") and "pas configurée" in selfcode.last_dispatch_error
+
+
+def test_la_carte_explique_le_retard(make_client, monkeypatch):
+    from server import selfcode
+    monkeypatch.setattr(selfcode, "dispatch", lambda *a: (setattr(selfcode, "last_dispatch_error", "GitHub a refusé (code 404) : x") or False))
+    c = make_client([reply("", [("run_code_project", {"request": "Un petit site vitrine pour un café, testé."})]), reply("Lancé.")])
+    login(c)
+    cid = c.post("/api/code/conversations", headers=H).json()["id"]
+    events_of(c.post(f"/api/code/conversations/{cid}/messages", json={"text": "Fais un site"}, headers=H).text)
+    p = c.get("/api/code/atelier").json()[0]
+    assert p["status"] == "pending" and "code 404" in p["summary"] and "passage automatique" in p["summary"]

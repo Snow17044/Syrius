@@ -565,8 +565,12 @@ class ToolExecutor:
                 return str(e), True, None
             started = await asyncio.to_thread(selfcode.dispatch, self.cfg.github_dispatch_token, self.cfg.github_repo,
                                               atelier.WORKFLOW)
+            if not started:  # la raison s'affiche sur la carte : on sait tout de suite quoi corriger
+                atelier.note(base, item["id"], "Démarrage immédiat impossible (" + (selfcode.last_dispatch_error or "raison inconnue")
+                             + "). L'atelier le prendra à son prochain passage automatique (jusqu'à 1 h).")
             when = ("L'atelier démarre maintenant (2 à 6 minutes)." if started else
-                    "L'atelier le prend dans les 15 minutes (GitHub est parfois en retard).")
+                    "Démarrage immédiat impossible (" + (selfcode.last_dispatch_error or "raison inconnue") +
+                    ") : l'atelier le prendra à son prochain passage automatique, jusqu'à 1 h.")
             return (f"Projet {item['id']} lancé dans l'atelier. {when} Son avancement s'affiche en direct dans la "
                     "discussion. Dis-le simplement à l'utilisateur, sans écrire le code toi-même ; quand il te "
                     "demandera le résultat, utilise check_code_project."), False, {"type": "atelier", "id": item["id"]}
