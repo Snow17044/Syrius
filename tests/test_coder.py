@@ -237,6 +237,53 @@ def test_workflows_coder_autorises_et_valides():
     assert "steps.bench.outputs.better == 'true'" in t and "real.jsonl" in t
 
 
+def test_aurora_s_entraine_chaque_nuit_et_doit_etre_confirmee():
+    import yaml
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    wf = yaml.safe_load((root / ".github/workflows/train-coder.yml").read_text())
+    assert wf[True]["schedule"][0]["cron"] == "17 3 * * *"  # chaque nuit, après les exemples (0 h 47)
+    steps = {s.get("name", ""): s for s in wf["jobs"]["train"]["steps"]}
+    bench_step = steps["Banc d'essai (bugs réels, tests exécutés)"]["run"]
+    # bug corrigé : la comparaison était collée sur la même ligne que le banc d'essai (jamais évaluée)
+    assert bench_step.count("\n") > 5 and 'echo "better=$better"' in bench_step
+    for name, st in steps.items():  # une décision ne passe jamais par « | tee » (échec masqué sans pipefail)
+        for line in str(st.get("run", "")).splitlines():
+            if "coder.compare" in line or "coder.confirm verdict" in line:
+                assert "| tee" not in line, name
+    keep = steps["Garder le modèle SEULEMENT s'il est meilleur ET confirmé"]
+    assert keep["if"] == "steps.confirm.outputs.ok == 'true'"
+    assert "coder.confirm make confirm.json" in (root / ".github/workflows/coder-data.yml").read_text()
+
+
+def test_epreuve_de_confirmation_inedite():
+    from coder import confirm
+    bon = json.dumps({"name": "Maths", "module": "def double(x):\n    return x * 2\n\n\ndef triple(x):\n    return x * 3\n\n\n"
+                      "def moitie(x):\n    if x < 0:\n        raise ValueError('négatif')\n    return x / 2\n",
+                      "tests": "import pytest\nfrom maths import double, triple, moitie\n\n\ndef test_a():\n    assert double(2) == 4\n\n\n"
+                               "def test_b():\n    assert triple(2) == 6\n\n\ndef test_c():\n    assert moitie(4) == 2\n\n\n"
+                               "def test_d():\n    with pytest.raises(ValueError):\n        moitie(-1)\n"})
+    asked = []
+    ts = confirm.make(lambda s, p: asked.append(p) or bon, n_projects=1, seed=3, log=lambda *_: None)
+    assert ts and all(t["project"] == "epreuve_0" for t in ts)
+    assert not set(confirm.TOPICS) & set(make_data.TOPICS)  # jamais les thèmes de l'entraînement
+    ts = json.loads(json.dumps(ts))  # passe par confirm.json
+    from coder import bench
+    assert bench.run(lambda s, p: "rien", ts)["passed"] == 0
+    ok, msg = confirm.verdict({"n": 8, "passed": 5}, {"n": 8, "passed": 5})
+    assert ok and "Confirmé" in msg
+    assert not confirm.verdict({"n": 8, "passed": 4}, {"n": 8, "passed": 5})[0]
+    assert not confirm.verdict({"n": 2, "passed": 2}, {"n": 2, "passed": 0})[0]  # épreuve trop petite
+    assert not confirm.verdict({"n": 8, "passed": 8}, {"n": 6, "passed": 0})[0]  # pas la même épreuve
+
+
+def test_comparaison_avec_le_modele_actuel():
+    from coder import compare
+    av = {"version": 2, "score": 0.40, "passed": 12, "n": 30}
+    assert not compare.verdict(av, {**av}, 0.001)[0]  # égalité : on garde le modèle actuel
+    assert compare.verdict(av, {**av, "score": 0.4334, "passed": 13}, 0.001)[0]
+
+
 def test_consigne_sans_chemin_a_recopier():
     """Le premier essai réel : la grande IA recopiait « chemin/ » de l'exemple (2 échecs sur 10). Plus d'exemple à recopier."""
     assert "chemin/" not in tasks.SYSTEM and "EXACTEMENT" in tasks.SYSTEM and "### stack.py" in tasks.SYSTEM

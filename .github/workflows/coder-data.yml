@@ -1,5 +1,6 @@
 # Chaque nuit : une grande IA gratuite aide à fabriquer des exemples de code VÉRIFIÉS (les tests doivent passer),
-# puis on mesure combien de bugs du banc d'essai elle répare. Les exemples sont gardés dans la publication « coder-data ».
+# fabrique l'épreuve de confirmation inédite de la nuit, puis mesure combien de bugs du banc d'essai elle répare.
+# Tout est gardé dans la publication « coder-data ».
 name: Exemples de code pour Aurora
 
 on:
@@ -38,6 +39,9 @@ jobs:
         continue-on-error: true
         run: |
           .venv/bin/python -m coder.real "${{ github.repository }}" training/data/real.jsonl | tee /tmp/real.json || : > training/data/real.jsonl
+      - name: Épreuve de confirmation inédite (jamais utilisée pour l'entraînement)
+        continue-on-error: true
+        run: .venv/bin/python -m coder.confirm make confirm.json && gh release upload coder-data confirm.json --clobber
       - name: Score de la grande IA sur le banc d'essai (référence)
         continue-on-error: true
         run: .venv/bin/python -m coder.bench_run teacher 10 | tee /tmp/teacher.json
