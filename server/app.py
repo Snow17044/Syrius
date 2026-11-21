@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import journal, transcribe, vision
+from . import group, journal, transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -125,6 +125,10 @@ class Model3DSearch(BaseModel):
 class Model3DCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=300)
     key: str = Field(default="", max_length=80)  # mots-clés de l'objet : maquette déjà créée réutilisée
+
+
+class MembersBody(BaseModel):
+    aurora: bool
 
 
 class ConversationPatch(BaseModel):
@@ -657,6 +661,13 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         except training.TrainingError as e:
             raise HTTPException(400, str(e)) from None
 
+    @app.post("/api/training/aurora", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def training_add_aurora(body: ExampleBody):
+        """👍 ou correction sur une réponse d'Aurora : l'exemple entraîne Aurora (pas Nova)."""
+        if not debate.add_example(db.base, "aurora", body.question, body.answer):
+            raise HTTPException(400, "Exemple refusé (vide, trop court ou contenu interdit).")
+        return {"ok": True}
+
     @app.delete("/api/training/examples/{eid}", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_delete(eid: str):
         if not training.delete_example(db.base, eid[:20]):
@@ -964,7 +975,14 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         conv = db.get_conversation(cid)
         if not conv:
             raise HTTPException(404, "Discussion introuvable")
-        return {**conv, "messages": display_messages(db.get_messages(cid))}
+        return {**conv, "messages": display_messages(db.get_messages(cid)), "members": group.members(db, cid)}
+
+    @app.put("/api/conversations/{cid}/members", dependencies=[Depends(require_auth)])
+    async def set_members(cid: str, body: MembersBody):
+        """Ajoute ou retire Aurora de la discussion (Nova y est toujours)."""
+        if not db.get_conversation(cid):
+            raise HTTPException(404, "Discussion introuvable")
+        return {"members": group.set_member(db, cid, "aurora", body.aurora)}
 
     @app.patch("/api/conversations/{cid}", dependencies=[Depends(require_auth)])
     async def patch_conversation(cid: str, body: ConversationPatch):
@@ -977,10 +995,11 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def delete_conversation(cid: str):
         if not db.delete_conversation(cid):
             raise HTTPException(404)
+        group.forget(db, cid)
         return {"ok": True}
 
     @app.post("/api/conversations/{cid}/messages", dependencies=[Depends(require_auth)])
-    async def send_message(cid: str, body: MessageBody):
+    async def send_message(cid: str, body: MessageBody, request: Request):
         conv = db.get_conversation(cid)
         if not conv:
             raise HTTPException(404, "Discussion introuvable")
@@ -995,11 +1014,28 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         first = not db.get_messages(cid)
         busy.add(cid)
 
+        with_aurora = "aurora" in group.members(db, cid)
+        target = group.addressed(body.text) if with_aurora else ""
+
         async def stream():
             try:
-                loc = round_location(body.location) if db.get_settings().get("location", True) else None
-                async for event in agent.chat(cid, body.text, loc, voice=body.voice, image=image):
-                    yield sse(event)
+                settings = db.get_settings()
+                loc = round_location(body.location) if settings.get("location", True) else None
+                nova_failed = False
+                if target != "aurora":  # « Aurora, … » : seule Aurora répond
+                    async for event in agent.chat(cid, body.text, loc, voice=body.voice, image=image, group=with_aurora):
+                        if event.get("type") == "error":
+                            nova_failed = True
+                        if event.get("type") != "done" or not with_aurora or target == "nova":
+                            yield sse(event)
+                else:
+                    text = (body.text + "\n\n[📷 photo jointe]").strip() if image else body.text
+                    db.add_messages(cid, [{"role": "user", "content": [{"type": "text", "text": text}]}])
+                if with_aurora and target != "nova" and not nova_failed:
+                    async for event in group.aurora_reply(agent.llm, db, cid, settings.get("user_name", ""), body.voice,
+                                                          db.base, getattr(request.state, "uid", "")):
+                        yield sse(event)
+                    yield sse({"type": "done"})
                 if first and conv["title"] == "Nouvelle discussion" and db.get_messages(cid):
                     title = agent.make_title(body.text)
                     db.update_conversation(cid, title=title)

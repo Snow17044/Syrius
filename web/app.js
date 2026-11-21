@@ -501,6 +501,7 @@ function greeting() {
 
 function newConversationView() {
   state.convId = null;
+  setAurora(false);
   store.set("syrius:lastConv", null);
   $("#conv-title").textContent = "Syrius";
   $("#messages").replaceChildren(emptyNode);
@@ -509,6 +510,33 @@ function newConversationView() {
   renderConversations();
   $("#input").focus();
 }
+
+// ------------------------------------------------------------------ discussion à plusieurs (Nova + Aurora)
+function setAurora(on) {
+  state.aurora = !!on;
+  const b = $("#aurora-toggle");
+  b.classList.toggle("active", state.aurora);
+  b.setAttribute("aria-pressed", String(state.aurora));
+  b.setAttribute("aria-label", state.aurora ? "Retirer Aurora de la discussion" : "Ajouter Aurora à la discussion");
+  b.title = b.getAttribute("aria-label");
+  $("#group-tag").classList.toggle("hidden", !state.aurora);
+}
+function groupNote(text) {
+  $("#empty")?.classList.add("hidden");
+  $("#messages").appendChild(node("div", "group-note", text));
+  scrollDown(true);
+}
+$("#aurora-toggle").addEventListener("click", async () => {
+  if (state.streaming) return;
+  const on = !state.aurora;
+  if (state.convId) {
+    try { await api(`/api/conversations/${state.convId}/members`, { method: "PUT", body: JSON.stringify({ aurora: on }) }); }
+    catch (err) { alert(err.message); return; }
+  }
+  setAurora(on);
+  groupNote(on ? "Aurora a rejoint la discussion. Nova répond d'abord, puis Aurora. Pour ne parler qu'à l'une, commence par « Aurora, … » ou « Nova, … »."
+    : "Aurora a quitté la discussion.");
+});
 
 $("#new-chat").addEventListener("click", newConversationView);
 $("#new-chat-drawer").addEventListener("click", () => { newConversationView(); closeDrawer(); });
@@ -521,10 +549,11 @@ async function openConversation(id) {
   state.convId = id;
   store.set("syrius:lastConv", id);
   $("#conv-title").textContent = conv.title;
+  setAurora((conv.members || []).includes("aurora"));
   const box = $("#messages");
   box.replaceChildren();
   for (const m of conv.messages) {
-    const view = addMessage(m.role, m.text);
+    const view = addMessage(m.role, m.text, m.speaker);
     if (m.tools && m.tools.length) setTools(view, [...new Set(m.tools)]);
     (m.diagrams || []).forEach((d) => addDiagramCard(view, d));
   }
@@ -533,18 +562,20 @@ async function openConversation(id) {
   scrollDown(true);
 }
 
-function addMessage(role, text) {
+function addMessage(role, text, speaker) {
   $("#empty")?.classList.add("hidden");
   const wrap = document.createElement("div");
-  wrap.className = `msg ${role}`;
+  wrap.className = `msg ${role}` + (speaker ? ` ${speaker}` : "");
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   const tools = document.createElement("div");
   const body = document.createElement("div");
+  const named = role === "assistant" && (speaker === "aurora" || state.aurora);  // à plusieurs : qui parle
+  if (named) bubble.append(node("div", "speaker-name" + (speaker ? "" : " nova"), speaker === "aurora" ? "Aurora" : "Nova"));
   bubble.append(tools, body);
   wrap.appendChild(bubble);
   $("#messages").appendChild(wrap);
-  const view = { wrap, bubble, tools, body, text: text || "", role };
+  const view = { wrap, bubble, tools, body, text: text || "", role, speaker: speaker || "", named };
   renderText(view, role);
   state.views = (state.views || []).filter((v) => v.wrap.isConnected);
   state.views.push(view);
@@ -576,11 +607,12 @@ function addFeedbackButtons(view) {
     for (let k = i - 1; k >= 0; k--) if (state.views[k].role === "user" && state.views[k].text.trim()) return state.views[k].text.trim();
     return "";
   };
-  const plain = () => view.bubble.children.length === 2 && !view.tools.childElementCount  // ni carte ni image ni action
+  const plain = () => view.bubble.children.length === (view.named ? 3 : 2) && !view.tools.childElementCount  // ni carte ni image ni action
     && !view.body.querySelector("img, canvas, video, iframe");
   const send = async (q, a, btn, done, source, wrong) => {
-    try {
-      await api("/api/training/examples", { method: "POST", body: JSON.stringify({ question: q.slice(0, 500), answer: a.slice(0, 2000), source, wrong: wrong || "" }) });
+    try {  // une réponse d'Aurora entraîne Aurora ; celle de Nova entraîne Nova
+      await api(view.speaker === "aurora" ? "/api/training/aurora" : "/api/training/examples",
+        { method: "POST", body: JSON.stringify({ question: q.slice(0, 500), answer: a.slice(0, 2000), source, wrong: wrong || "" }) });
       up.disabled = down.disabled = true;
       Icons.set(btn, "check", done);
     } catch (err) { alert("Non ajouté : " + err.message); }
@@ -594,7 +626,7 @@ function addFeedbackButtons(view) {
   down.addEventListener("click", () => {
     const q = question();
     if (!q) return;
-    const fix = prompt("Quelle aurait dû être la bonne réponse de Syrius ?\n(elle sera apprise cette nuit)");
+    const fix = prompt(`Quelle aurait dû être la bonne réponse ${view.speaker === "aurora" ? "d'Aurora" : "de Syrius"} ?\n(elle sera apprise cette nuit)`);
     if (fix && fix.trim()) send(q, fix.trim(), down, "Correction ajoutée", "correction", (view.text || "").slice(0, 600));
   });
   view.actions.append(up, down);
@@ -1251,6 +1283,10 @@ async function sendMessage(text) {
   if (!state.convId) {
     const conv = await api("/api/conversations", { method: "POST" });
     state.convId = conv.id;
+    if (state.aurora) {  // Aurora ajoutée avant le premier message
+      try { await api(`/api/conversations/${conv.id}/members`, { method: "PUT", body: JSON.stringify({ aurora: true }) }); }
+      catch (_) { setAurora(false); }
+    }
     store.set("syrius:lastConv", conv.id);
     $("#messages").replaceChildren();
     loadConversations();
@@ -1264,12 +1300,16 @@ async function sendMessage(text) {
     userView.bubble.prepend(im);
     setPhoto(null);
   }
-  const view = addMessage("assistant", "");
-  const typing = document.createElement("div");
-  typing.className = "typing";
-  typing.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
-  view.body.appendChild(typing);
+  let view = addMessage("assistant", "");
+  const typingDots = (v) => {
+    const typing = document.createElement("div");
+    typing.className = "typing";
+    typing.append(document.createElement("i"), document.createElement("i"), document.createElement("i"));
+    v.body.appendChild(typing);
+  };
+  typingDots(view);
   scrollDown(true);
+  let replies = [];  // Nova puis Aurora : réponses lues à voix haute à la fin
 
   setStreaming(true);
   state.controller = new AbortController();
@@ -1308,7 +1348,15 @@ async function sendMessage(text) {
         if (!chunk.startsWith("data: ")) continue;
         let ev;
         try { ev = JSON.parse(chunk.slice(6)); } catch (_) { continue; }
-        if (ev.type === "text") { view.text += ev.text; repaint(); }
+        if (ev.type === "speaker") {  // discussion à plusieurs : Aurora prend la parole
+          renderText(view, "assistant");
+          if (!view.text && !view.tools.childElementCount) view.wrap.remove();  // « Aurora, … » : Nova n'a rien dit
+          else replies.push(view.text);
+          view = addMessage("assistant", "", ev.who);
+          typingDots(view);
+          scrollDown(true);
+        }
+        else if (ev.type === "text") { view.text += ev.text; repaint(); }
         else if (ev.type === "text_replace") { view.text = String(ev.text || ""); repaint(); }
         else if (ev.type === "tool") { tools.push(ev.label); setTools(view, [...new Set(tools)]); scrollDown(); }
         else if (ev.type === "device") { handleDevice(view, ev); scrollDown(); }
@@ -1332,15 +1380,16 @@ async function sendMessage(text) {
     setStreaming(false);
     renderText(view, "assistant");
     const l = L();
-    if (gotError && !view.text && l && l.ready() && l.prefs.fallback) {
+    if (gotError && !view.text && !view.speaker && l && l.ready() && l.prefs.fallback) {
       // Toutes les IA en ligne sont épuisées ou injoignables : le téléphone prend le relais.
       view.bubble.querySelectorAll(".msg-error").forEach((e) => e.remove());
       await answerLocally(view, "IA en ligne indisponible → réponse hors ligne (sur ton téléphone)");
       return;
     }
-    if (gotError && !view.text) $("#input").value = text; // on rend le message pour réessayer
-    state.lastReply = view.text;
-    if (!gotError && view.text && state.settings.voice_reply && !window.SyriusVoice?.active) speak(view.text);
+    if (gotError && !view.text && !replies.length) $("#input").value = text; // on rend le message pour réessayer
+    if (view.text) replies.push(view.speaker === "aurora" && replies.length ? "Aurora : " + view.text : view.text);
+    state.lastReply = replies.join("\n\n");
+    if (!gotError && state.lastReply && state.settings.voice_reply && !window.SyriusVoice?.active) speak(state.lastReply);
     loadConversations();
   }
 }

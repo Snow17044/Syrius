@@ -121,6 +121,18 @@ def learn(base, topic: str, turns: list[dict], speaker: str, text: str) -> bool:
     return True
 
 
+def add_example(base, speaker: str, question: str, answer: str) -> bool:
+    """Exemple choisi à la main par le propriétaire (👍 / correction sur une réponse d'Aurora)."""
+    q, a = " ".join(str(question).split())[:MAX_PROMPT], str(answer).strip()[:2000]
+    if speaker not in SPEAKERS or len(q) < 2 or not a or safety.blocked(q, a):
+        return False
+    data = trained(base)
+    data[speaker] = [e for e in data[speaker] if e["q"] != q] + [{"q": q, "a": a, "at": int(time.time()), "src": "main"}]
+    data[speaker] = data[speaker][-MAX_TRAIN:]
+    base.set_secret(TRAIN_KEY, json.dumps(data, ensure_ascii=False))
+    return True
+
+
 def train_counts(base) -> dict[str, int]:
     return {k: len(v) for k, v in trained(base).items()}
 
@@ -182,34 +194,32 @@ def build_messages(topic: str, turns: list[dict], speaker: str, user_name: str =
     return msgs
 
 
-async def stream_turn(llm, topic: str, turns: list[dict], speaker: str, user_name: str = "",
-                      base=None, uid: str = "", train: bool = False) -> AsyncIterator[dict]:
-    """Événements : {"type": "start", "who"}, {"type": "text", "text"}, {"type": "error"}, {"type": "done"}."""
-    yield {"type": "start", "who": speaker}
-    msgs = build_messages(topic, turns, speaker, user_name)
+async def stream_text(llm, msgs: list[dict], max_tokens: int, base=None, uid: str = "",
+                      out: list[str] | None = None) -> AsyncIterator[str]:
+    """Réponse en direct d'une grande IA gratuite, sans outils. Si une IA atteint sa limite avant d'avoir écrit,
+    la suivante prend le relais. Le texte complet est ajouté à `out`. Lève LLMError si aucune n'a pu répondre."""
     providers = [p for p in llm.ordered(fast=True) if not p.photos_only and not p.coding_only]
     if base is not None and family.quota_left(base, "power", uid) <= 0:
         providers = [p for p in providers if not p.name.startswith("openrouter")] or providers
     if not providers:
-        yield {"type": "error", "message": "Aucun cerveau configuré (voir README)."}
-        return
+        raise LLMError("Aucun cerveau configuré (voir README).")
     last: LLMError | None = None
     for provider in providers:
-        body = {"messages": msgs, "max_tokens": VERDICT_TOKENS if speaker == "verdict" else REPLY_TOKENS}
+        body = {"messages": msgs, "max_tokens": max_tokens}
         if provider.reasoning:
             body["reasoning_effort"] = "low"
         if "qwen3" in provider.model and "groq.com" in provider.base_url:
             body["reasoning_format"] = "hidden"
         streamed = False
-        parts: list[str] = []
         try:
             async for chunk in llm.stream_chat(provider, body):
                 for choice in chunk.get("choices") or []:
                     text = (choice.get("delta") or {}).get("content") or ""
                     if text:
                         streamed = True
-                        parts.append(text)
-                        yield {"type": "text", "text": text}
+                        if out is not None:
+                            out.append(text)
+                        yield text
         except RetryableError as e:
             last = e
             if streamed:
@@ -221,10 +231,25 @@ async def stream_turn(llm, topic: str, turns: list[dict], speaker: str, user_nam
         else:
             if provider.name.startswith("openrouter") and base is not None:
                 family.quota_use(base, "power", uid)
-            log.info("Débat : %s par %s", speaker, provider.name)
-            if train and base is not None:  # débat du propriétaire : la réplique entraîne Nova ou Aurora
-                reply = re.sub(r"<think>.*?(</think>|$)", "", "".join(parts), flags=re.S).strip()
-                learn(base, topic, turns, speaker, reply)
-            yield {"type": "done"}
+            log.info("Réponse sans outils par %s", provider.name)
             return
-    yield {"type": "error", "message": str(last) if last else "Aucune IA disponible."}
+    raise last or LLMError("Aucune IA disponible.")
+
+
+async def stream_turn(llm, topic: str, turns: list[dict], speaker: str, user_name: str = "",
+                      base=None, uid: str = "", train: bool = False) -> AsyncIterator[dict]:
+    """Événements : {"type": "start", "who"}, {"type": "text", "text"}, {"type": "error"}, {"type": "done"}."""
+    yield {"type": "start", "who": speaker}
+    msgs = build_messages(topic, turns, speaker, user_name)
+    parts: list[str] = []
+    try:
+        async for text in stream_text(llm, msgs, VERDICT_TOKENS if speaker == "verdict" else REPLY_TOKENS,
+                                      base, uid, parts):
+            yield {"type": "text", "text": text}
+    except LLMError as e:
+        yield {"type": "error", "message": str(e)}
+        return
+    if train and base is not None:  # débat du propriétaire : la réplique entraîne Nova ou Aurora
+        reply = re.sub(r"<think>.*?(</think>|$)", "", "".join(parts), flags=re.S).strip()
+        learn(base, topic, turns, speaker, reply)
+    yield {"type": "done"}
