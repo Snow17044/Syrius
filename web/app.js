@@ -123,9 +123,7 @@ async function showApp() {
   $("#open-training").classList.toggle("hidden", state.settings?.account?.owner === false);
   refreshLocation();
   await loadConversations();
-  const last = store.get("syrius:lastConv");
-  if (last && state.conversations.some((c) => c.id === last)) await openConversation(last);
-  else newConversationView();
+  newConversationView();  // à chaque ouverture : une nouvelle discussion (les anciennes restent dans le menu)
   flushMemories();
   refreshMemoryCache();
   // Préchauffage de l'IA du téléphone : le premier ordre de la journée n'attend plus le chargement du modèle.
