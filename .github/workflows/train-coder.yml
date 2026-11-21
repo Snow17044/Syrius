@@ -1,5 +1,7 @@
-# Entraîne la petite IA programmeuse d'Aurora (LoRA) sur les exemples VÉRIFIÉS, SEULEMENT s'il y en a assez,
-# puis la mesure sur le banc d'essai. Rien n'est publié sans bon score : le résultat reste un simple fichier à consulter.
+# Chaque nuit : entraîne la petite IA programmeuse d'Aurora (LoRA) sur les exemples VÉRIFIÉS (s'il y en a assez et
+# s'il y a du nouveau depuis le dernier entraînement), puis la mesure sur le banc d'essai.
+# Le nouveau modèle n'est gardé que s'il bat son point de départ ET le modèle actuel sur le banc, puis s'il est
+# CONFIRMÉ sur l'épreuve inédite que la grande IA gratuite a fabriquée cette nuit (tests exécutés).
 name: Entraîner l'IA programmeuse
 
 on:
@@ -10,9 +12,9 @@ on:
         default: "Qwen/Qwen2.5-Coder-0.5B-Instruct"
       minutes:
         description: "Budget de temps d'entraînement (minutes)"
-        default: "240"
+        default: "200"
   schedule:
-    - cron: "17 3 * * 0"  # chaque dimanche
+    - cron: "17 3 * * *"  # chaque nuit (~4 h 17, heure de Paris), après les exemples de la nuit
 
 permissions:
   contents: write
@@ -21,7 +23,7 @@ permissions:
 jobs:
   train:
     runs-on: ubuntu-24.04
-    timeout-minutes: 330
+    timeout-minutes: 345
     env:
       GH_TOKEN: ${{ github.token }}
       SYRIUS_URL: ${{ vars.SYRIUS_URL || 'https://syriusprojet1.vercel.app' }}
@@ -33,7 +35,8 @@ jobs:
         id: check
         run: |
           mkdir -p training/data
-          gh release download coder-data --pattern coder.jsonl --pattern real.jsonl --dir training/data --clobber || true
+          gh release download coder-data --pattern coder.jsonl --pattern real.jsonl --pattern confirm.json \
+            --pattern last-trained.sha --dir training/data --clobber || true
           # les vrais changements que tu as acceptés comptent triple
           if [ -f training/data/real.jsonl ]; then cat training/data/real.jsonl training/data/real.jsonl training/data/real.jsonl >> training/data/coder.jsonl; fi
           n=$( [ -f training/data/coder.jsonl ] && wc -l < training/data/coder.jsonl || echo 0 )
@@ -42,42 +45,100 @@ jobs:
       - name: Débats d'Aurora (10 % au plus, le code reste la priorité)
         if: steps.check.outputs.go == 'true'
         run: python3 training/debate_data.py training/data/coder.jsonl
-      - name: Outils
+      - name: Du nouveau depuis le dernier entraînement ?
+        id: fresh
         if: steps.check.outputs.go == 'true'
+        run: |
+          sha=$(sha256sum training/data/coder.jsonl | cut -c1-64)
+          echo "$sha" > last-trained.sha
+          if [ -f training/data/last-trained.sha ] && [ "$(cat training/data/last-trained.sha)" = "$sha" ]; then
+            echo "Rien de nouveau depuis le dernier entraînement : Aurora se repose cette nuit."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Outils
+        if: steps.fresh.outputs.new == 'true'
         run: |
           python3 -m venv .venv
           .venv/bin/pip install --quiet -r training/requirements.txt pytest
+      - name: Modèle actuel d'Aurora (référence)
+        if: steps.fresh.outputs.new == 'true'
+        run: |
+          mkdir -p build/actuel
+          if gh release download coder-model --pattern coder-model.tgz --pattern bench-apres.json --dir build/actuel --clobber; then
+            mkdir -p build/actuel/modele && tar -xzf build/actuel/coder-model.tgz -C build/actuel/modele
+          else
+            echo "Pas encore de modèle gardé : la référence est l'IA de départ."
+          fi
       - name: Score AVANT entraînement (modèle de départ)
-        if: steps.check.outputs.go == 'true'
+        if: steps.fresh.outputs.new == 'true'
         env:
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
-          mkdir -p build
           .venv/bin/python -m coder.bench_run local "${{ inputs.model || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}" 31 | tee build/bench-avant.json
       - name: Entraînement
-        if: steps.check.outputs.go == 'true'
+        if: steps.fresh.outputs.new == 'true'
         env:
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: |
           .venv/bin/python training/train.py --coder --model "${{ inputs.model || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}" \
-            --data training/data/coder.jsonl --max-len 2048 --epochs 3 --minutes "${{ inputs.minutes || '240' }}" --out build/coder
+            --data training/data/coder.jsonl --max-len 2048 --epochs 3 --minutes "${{ inputs.minutes || '200' }}" --out build/coder
+      - name: Retenir ce qui a été appris (pas deux fois les mêmes exemples)
+        if: steps.fresh.outputs.new == 'true'
+        run: gh release upload coder-data last-trained.sha --clobber || true
       - name: Banc d'essai (bugs réels, tests exécutés)
         id: bench
-        if: steps.check.outputs.go == 'true'
-        run: .venv/bin/python -m coder.bench_run local build/coder 31 | tee build/bench-apres.json
-          if .venv/bin/python -m coder.compare build/bench-avant.json build/bench-apres.json | tee build/verdict.txt; then
-            echo "better=true" >> "$GITHUB_OUTPUT"; else echo "better=false" >> "$GITHUB_OUTPUT"; fi
+        if: steps.fresh.outputs.new == 'true'
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          .venv/bin/python -m coder.bench_run local build/coder 31 | tee build/bench-apres.json
+          # (pas de « | tee » pour décider : sans pipefail, l'échec de la comparaison serait masqué)
+          if .venv/bin/python -m coder.compare build/bench-avant.json build/bench-apres.json > build/verdict.txt; then
+            better=true; else better=false; fi
+          same=false  # un ancien banc d'essai (autre version) ne se compare pas
+          [ -f build/actuel/bench-apres.json ] && same=$(python3 -c "import json; v=lambda f: json.load(open(f)).get('version'); \
+            print('true' if v('build/actuel/bench-apres.json') == v('build/bench-apres.json') else 'false')")
+          if [ "$better" = true ] && [ "$same" = true ]; then
+            # il faut aussi faire mieux que le modèle gardé jusqu'ici (sinon on le garde)
+            printf "Face au modèle actuel : " >> build/verdict.txt
+            if ! .venv/bin/python -m coder.compare build/actuel/bench-apres.json build/bench-apres.json 0.001 >> build/verdict.txt; then
+              better=false; fi
+          fi
+          cat build/verdict.txt
+          echo "better=$better" >> "$GITHUB_OUTPUT"
           { echo "## IA programmeuse"; cat build/verdict.txt; } >> "$GITHUB_STEP_SUMMARY"
           gh release upload coder-data build/bench-apres.json build/verdict.txt --clobber || true
-      - name: Garder le modèle SEULEMENT s'il est meilleur
-        if: steps.check.outputs.go == 'true' && steps.bench.outputs.better == 'true'
+      - name: Confirmation par l'épreuve inédite de la grande IA
+        id: confirm
+        if: steps.fresh.outputs.new == 'true' && steps.bench.outputs.better == 'true'
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          ok=false
+          if [ -f training/data/confirm.json ]; then
+            ref="${{ inputs.model || 'Qwen/Qwen2.5-Coder-0.5B-Instruct' }}"
+            [ -d build/actuel/modele ] && ref=build/actuel/modele
+            .venv/bin/python -m coder.confirm run build/coder training/data/confirm.json > build/confirm-nouveau.json
+            .venv/bin/python -m coder.confirm run "$ref" training/data/confirm.json > build/confirm-reference.json
+            if .venv/bin/python -m coder.confirm verdict build/confirm-nouveau.json build/confirm-reference.json >> build/verdict.txt; then
+              ok=true; fi
+          else
+            echo "Pas d'épreuve de confirmation cette nuit : le modèle attend la prochaine." >> build/verdict.txt
+          fi
+          tail -n 1 build/verdict.txt
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          tail -n 1 build/verdict.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Garder le modèle SEULEMENT s'il est meilleur ET confirmé
+        if: steps.confirm.outputs.ok == 'true'
         run: |
           gh release view coder-model >/dev/null 2>&1 || gh release create coder-model --title "IA programmeuse (modèle)" \
-            --notes "Dernier modèle ayant battu son point de départ sur le banc d'essai." --prerelease
+            --notes "Dernier modèle ayant battu le précédent sur le banc d'essai, confirmé sur une épreuve inédite." --prerelease
           tar -C build/coder -czf build/coder-model.tgz .
           gh release upload coder-model build/coder-model.tgz build/bench-apres.json build/verdict.txt --clobber
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: steps.check.outputs.go == 'true'
+        if: steps.fresh.outputs.new == 'true'
         with:
           name: coder-modele
           path: build/
