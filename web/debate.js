@@ -199,6 +199,7 @@
 
   function open() {
     closeDrawer();
+    $("#debate-train").classList.toggle("hidden", state.settings?.account?.owner === false);
     $("#debate").showModal();
     if (!D.topic) $("#debate-topic").focus();
     else { setButtons(); if (D.paused) status("En pause. Touche « Reprendre » pour continuer."); }

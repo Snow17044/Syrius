@@ -39,6 +39,9 @@ jobs:
           n=$( [ -f training/data/coder.jsonl ] && wc -l < training/data/coder.jsonl || echo 0 )
           echo "Exemples vérifiés : $n (minimum 300)"
           if [ "$n" -ge 300 ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Débats d'Aurora (10 % au plus, le code reste la priorité)
+        if: steps.check.outputs.go == 'true'
+        run: python3 training/debate_data.py training/data/coder.jsonl
       - name: Outils
         if: steps.check.outputs.go == 'true'
         run: |

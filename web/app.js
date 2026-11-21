@@ -2173,7 +2173,8 @@ function renderTraining(d) {
   const st = d.stats || {};
   const ev = (st.evals || []).map((e) => e.pct + " %");
   $("#t-stats").textContent = `Ce que tu lui as appris : ${st.pouce || 0} réponse(s) validée(s) 👍, ${st.correction || 0} correction(s) 👎, ` +
-    `${st.manuel || 0} exemple(s) écrit(s). Notes du contrôle qualité : ${ev.length ? ev.join(" → ") : "pas encore de note"}.`;
+    `${st.manuel || 0} exemple(s) écrit(s). Appris dans tes débats d'IA : ${d.debates?.nova || 0} réplique(s) pour Nova, ` +
+    `${d.debates?.aurora || 0} pour Aurora. Notes du contrôle qualité : ${ev.length ? ev.join(" → ") : "pas encore de note"}.`;
   const pts = run?.points || [];
   const step = pts.length ? pts[pts.length - 1][0] : 0;
   const total = run?.steps_total || 0;

@@ -633,6 +633,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         st["auto"] = {"total": len(auto), "recent": [{"i": n, "q": e["q"], "a": e["a"][:400]}
                                                     for n, e in enumerate(reversed(auto[-15:]))]}
         st["week"] = training.week(db.base, auto)
+        st["debates"] = debate.train_counts(db.base)
         return st
 
     @app.delete("/api/training/auto/{i}", dependencies=[Depends(require_auth), Depends(require_owner)])
@@ -667,7 +668,15 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         """Pour le serveur d'entraînement : les exemples à apprendre (rien d'autre)."""
         mine = [{"q": e["q"], "a": e["a"]} for e in training.examples(db.base)]
         auto = [{"q": e["q"], "a": e["a"], "auto": True} for e in autogen.stored(db.base)[-600:]]
-        return mine + auto
+        debates = [{"q": e["q"], "a": e["a"], "auto": True} for e in debate.trained(db.base)["nova"]]  # répliques de Nova
+        return mine + auto + debates
+
+    @app.get("/api/training/worker/debates", dependencies=[Depends(require_trainer)])
+    async def training_worker_debates(who: str = "aurora"):
+        """Pour l'entraînement d'Aurora (Syrius Code) : ses répliques de débat (rien d'autre)."""
+        if who not in debate.SPEAKERS:
+            raise HTTPException(400, "IA inconnue")
+        return [{"q": e["q"], "a": e["a"]} for e in debate.trained(db.base)[who]]
 
     @app.post("/api/training/worker/generate", dependencies=[Depends(require_trainer)])
     async def training_worker_generate(theme: int | None = None):
@@ -1149,7 +1158,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
         async def stream():
             try:
-                async for event in debate.stream_turn(agent.llm, topic, turns, speaker, name, db.base, uid):
+                async for event in debate.stream_turn(agent.llm, topic, turns, speaker, name, db.base, uid,
+                                                      train=uid == family.OWNER and not family.is_guest(db.base, uid)):
                     yield sse(event)
             except Exception:
                 logging.getLogger("syrius").exception("Erreur pendant le débat")
