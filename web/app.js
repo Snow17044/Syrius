@@ -493,10 +493,10 @@ $("#cm-delete").addEventListener("click", async () => {
 function greeting() {
   const h = new Date().getHours();
   const name = state.settings.user_name ? `, ${state.settings.user_name}` : "";
-  if (h < 5) return `Encore debout${name}\u00a0? Je suis là.`;
-  if (h < 12) return `Bonjour${name}. À votre service.`;
-  if (h < 18) return `Bon après-midi${name}. Que puis-je faire\u00a0?`;
-  return `Bonsoir${name}. Je vous écoute.`;
+  if (h < 5) return `Encore debout${name}\u00a0? Va dormir… mais je suis là.`;
+  if (h < 12) return `Salut${name}\u00a0! On attaque quoi aujourd'hui\u00a0?`;
+  if (h < 18) return `Hey${name}. Je t'écoute, qu'est-ce qu'on fait\u00a0?`;
+  return `Bonsoir${name}. Raconte, je suis là.`;
 }
 
 function newConversationView() {
@@ -1733,12 +1733,15 @@ const BRIEFING_PARTS = {
   anniv: "les anniversaires ou événements de mes souvenirs qui tombent aujourd'hui ou dans les 7 prochains jours",
   actus: "3 actualités importantes du jour",
   journal: "un mot bienveillant sur ce que j'ai écrit hier dans mon journal intime (s'il y a une page)",
+  emails: "le point sur mes emails triés par Aurora (combien d'urgents et à répondre, et lesquels)",
 };
 function briefingOptions() {
   let o = {};
   try { o = JSON.parse(store.get("syrius:briefing:opts") || "{}"); } catch (_) { /* défaut */ }
   const on = (k) => (o[k] === undefined ? true : !!o[k]);
-  const opts = { meteo: on("meteo"), rappels: on("rappels"), anniv: on("anniv"), actus: on("actus"), journal: on("journal") };
+  const owner = state.settings?.account?.owner !== false;  // les emails : propriétaire seulement
+  const opts = { meteo: on("meteo"), rappels: on("rappels"), anniv: on("anniv"), actus: on("actus"), journal: on("journal"),
+    emails: owner && on("emails") };
   if (!Object.values(opts).some(Boolean)) opts.meteo = opts.rappels = true;  // jamais un briefing vide
   return opts;
 }
@@ -1889,6 +1892,7 @@ function refreshBriefingBox() {
   let b = { on: false, hour: 7, minute: 30 };
   try { b = JSON.parse(Native.getBriefing()); } catch (_) { /* défaut */ }
   $("#briefing-on").checked = !!b.on;
+  $("#bopt-emails").classList.toggle("hidden", state.settings?.account?.owner === false);
   const o = briefingOptions();
   document.querySelectorAll("#briefing-box [data-bopt]").forEach((el) => { el.checked = !!o[el.dataset.bopt]; });
   $("#briefing-time").value = `${String(b.hour).padStart(2, "0")}:${String(b.minute).padStart(2, "0")}`;

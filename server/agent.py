@@ -18,7 +18,7 @@ from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, se
 
 log = logging.getLogger("syrius.agent")
 
-UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "web_search", "web_read", "show_places",
+UNTRUSTED_TOOLS = {"list_emails", "search_emails", "read_email", "mail_digest", "web_search", "web_read", "show_places",
                    "get_weather", "list_site_files", "read_site_file", "scan_site"}
 WEB_TOOLS = {"web_search", "web_read", "show_places", "get_weather"}
 SITE_TOOLS = {"list_site_files", "read_site_file"}

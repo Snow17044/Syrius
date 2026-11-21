@@ -180,3 +180,15 @@
 .c-atelier-shot { display: block; width: min(240px, 70%); margin: 10px auto 4px; border-radius: 16px; border: 1px solid var(--line-2); }
 .c-atelier-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; }
 .c-atelier-link { flex: 1 1 auto; text-decoration: none; color: var(--text); padding: 9px 12px; border-radius: 12px; font-size: .86rem; font-weight: 600; }
+
+/* ---------- Tri automatique des emails ---------- */
+.c-mailsort-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.c-switch { display: inline-flex; align-items: center; gap: 6px; font-size: .86rem; }
+.c-ms-cat { margin: 10px 0; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.c-ms-cat > summary { cursor: pointer; font-weight: 650; display: flex; align-items: center; gap: 6px; }
+.c-ms-cat.urgent > summary { color: var(--danger); }
+.c-ms-cat.repondre > summary { color: var(--accent); }
+.c-ms-cat.indesirable > summary { color: var(--amber); }
+.c-ms-item { padding: 8px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.c-ms-cat > summary + .c-ms-item { border-top: 0; margin-top: 4px; }
+.c-ms-item p { margin: 2px 0 0; color: var(--text-2); }
