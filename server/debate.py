@@ -3,10 +3,13 @@
 Le serveur ne garde rien : l'application envoie à chaque tour le sujet et les répliques déjà dites,
 et le serveur renvoie, en direct, la réplique suivante (ou le verdict final).
 """
+import json
 import logging
+import re
+import time
 from collections.abc import AsyncIterator
 
-from . import family
+from . import family, safety
 from .llm import LLMError, RetryableError
 
 log = logging.getLogger("syrius.debate")
@@ -57,6 +60,69 @@ VERDICT_SYSTEM = (
 
 class DebateError(Exception):
     pass
+
+
+# ------------------------------------------------------------------ entraînement de NOS IA (Nova et Aurora)
+# Les répliques des débats du propriétaire deviennent des exemples d'entraînement : Nova (notre petite IA de
+# l'application) et Aurora (notre IA de Syrius Code) apprennent à argumenter en lisant ce que les grandes IA
+# gratuites ont répondu à leur place. Les grandes IA, elles, ne sont pas entraînées (on ne peut pas).
+TRAIN_KEY = "family_debate_train_v1"  # préfixe « family_ » : rangé dans l'espace commun, lu par l'entraînement
+MAX_TRAIN = 300                       # exemples gardés par IA (les plus récents)
+MAX_PROMPT = 480                      # la question d'entraînement tient en 500 caractères (limite de Nova)
+_MODEL_NAMES = re.compile(r"\b(llama|gpt|qwen|mistral|gemini|claude|deepseek|groq|openai|chatgpt)\b", re.I)
+
+
+def train_prompt(topic: str, turns: list[dict], speaker: str) -> str:
+    """La « question » de l'exemple : le sujet, le camp à défendre et ce qui vient d'être dit."""
+    other = "aurora" if speaker == "nova" else "nova"
+    head = f"Débat : « {topic[:150]} ». Tu défends le {SIDES[speaker].lower()} face à {NAMES[other]}."
+    before = [t for t in turns if t["who"] != speaker][-2:]
+    room = MAX_PROMPT - len(head) - 10
+    lines = []
+    for t in reversed(before):  # la dernière réplique d'abord, elle est prioritaire
+        line = f"{NAMES[t['who']]} : {t['text']}"
+        if len(line) > room:
+            line = line[:max(0, room - 1)].rstrip() + "…"
+        if room <= 40:
+            break
+        lines.insert(0, line)
+        room -= len(line) + 2
+    if not lines:
+        lines = ["C'est toi qui ouvres le débat."]
+    return (head + "\n\n" + "\n\n".join(lines))[:MAX_PROMPT]
+
+
+def good_reply(text: str) -> bool:
+    """On n'apprend que des répliques propres : ni trop courtes ni trop longues, sans nom de modèle ni contenu interdit."""
+    return (40 <= len(text) <= 900 and "<think>" not in text and not _MODEL_NAMES.search(text)
+            and not safety.blocked(text))
+
+
+def trained(base) -> dict[str, list[dict]]:
+    try:
+        data = json.loads(base.get_secret(TRAIN_KEY) or "{}")
+    except ValueError:
+        data = {}
+    data = data if isinstance(data, dict) else {}
+    return {k: [e for e in data.get(k, []) if isinstance(e, dict) and e.get("q") and e.get("a")] for k in SPEAKERS}
+
+
+def learn(base, topic: str, turns: list[dict], speaker: str, text: str) -> bool:
+    """Range une réplique comme exemple pour l'IA qui l'a dite. Renvoie True si elle a été gardée."""
+    text = text.strip()
+    if speaker not in SPEAKERS or not good_reply(text) or safety.blocked(topic):
+        return False
+    data = trained(base)
+    q = train_prompt(topic, turns, speaker)
+    if any(e["a"] == text for e in data[speaker]):
+        return False
+    data[speaker] = (data[speaker] + [{"q": q, "a": text, "at": int(time.time())}])[-MAX_TRAIN:]
+    base.set_secret(TRAIN_KEY, json.dumps(data, ensure_ascii=False))
+    return True
+
+
+def train_counts(base) -> dict[str, int]:
+    return {k: len(v) for k, v in trained(base).items()}
 
 
 def clean_turns(turns) -> list[dict]:
@@ -117,7 +183,7 @@ def build_messages(topic: str, turns: list[dict], speaker: str, user_name: str =
 
 
 async def stream_turn(llm, topic: str, turns: list[dict], speaker: str, user_name: str = "",
-                      base=None, uid: str = "") -> AsyncIterator[dict]:
+                      base=None, uid: str = "", train: bool = False) -> AsyncIterator[dict]:
     """Événements : {"type": "start", "who"}, {"type": "text", "text"}, {"type": "error"}, {"type": "done"}."""
     yield {"type": "start", "who": speaker}
     msgs = build_messages(topic, turns, speaker, user_name)
@@ -135,12 +201,14 @@ async def stream_turn(llm, topic: str, turns: list[dict], speaker: str, user_nam
         if "qwen3" in provider.model and "groq.com" in provider.base_url:
             body["reasoning_format"] = "hidden"
         streamed = False
+        parts: list[str] = []
         try:
             async for chunk in llm.stream_chat(provider, body):
                 for choice in chunk.get("choices") or []:
                     text = (choice.get("delta") or {}).get("content") or ""
                     if text:
                         streamed = True
+                        parts.append(text)
                         yield {"type": "text", "text": text}
         except RetryableError as e:
             last = e
@@ -154,6 +222,9 @@ async def stream_turn(llm, topic: str, turns: list[dict], speaker: str, user_nam
             if provider.name.startswith("openrouter") and base is not None:
                 family.quota_use(base, "power", uid)
             log.info("Débat : %s par %s", speaker, provider.name)
+            if train and base is not None:  # débat du propriétaire : la réplique entraîne Nova ou Aurora
+                reply = re.sub(r"<think>.*?(</think>|$)", "", "".join(parts), flags=re.S).strip()
+                learn(base, topic, turns, speaker, reply)
             yield {"type": "done"}
             return
     yield {"type": "error", "message": str(last) if last else "Aucune IA disponible."}

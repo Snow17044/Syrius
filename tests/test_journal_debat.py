@@ -151,3 +151,68 @@ def test_debat_verdict_et_refus(make_client):
 def test_debat_connexion_obligatoire(make_client):
     c = make_client()
     assert c.post("/api/debate/turn", json={"topic": "Les vacances"}, headers=H).status_code == 401
+
+
+# --------------------------------------------------------------- les débats entraînent Nova et Aurora
+GOOD = "Les devoirs apprennent l'autonomie : réviser seul le soir, c'est apprendre à s'organiser."
+
+
+def test_exemple_d_entrainement_d_un_debat(make_db):
+    base = make_db()
+    turns = [{"who": "nova", "text": "Pour !"}, {"who": "aurora", "text": "Contre, car " + "x" * 900},
+             {"who": "user", "text": "Et l'été ?"}]
+    assert debate.learn(base, "Les devoirs", turns, "nova", GOOD)
+    assert not debate.learn(base, "Les devoirs", turns, "nova", GOOD)  # pas de doublon
+    ex = debate.trained(base)["nova"][0]
+    assert ex["a"] == GOOD and len(ex["q"]) <= debate.MAX_PROMPT
+    assert "« Les devoirs »" in ex["q"] and "L'utilisateur : Et l'été ?" in ex["q"] and "pour" in ex["q"]
+    for bad in ("Trop court.", "Comme Llama, je pense que les devoirs sont une très bonne chose pour tous.",
+                "<think>hmm</think> Les devoirs sont une très bonne chose pour tout le monde vraiment."):
+        assert not debate.learn(base, "Les devoirs", turns, "aurora", bad)
+    assert debate.train_counts(base) == {"nova": 1, "aurora": 0}
+
+
+def test_debat_du_proprietaire_entraine_nos_ia(make_client):
+    from server import training
+    c = make_client([reply(GOOD), reply("Contre : les devoirs creusent les inégalités entre les élèves, c'est prouvé.")])
+    login(c)
+    c.post("/api/debate/turn", json={"topic": "Faut-il des devoirs ?"}, headers=H)
+    c.post("/api/debate/turn", json={"topic": "Faut-il des devoirs ?", "turns": [{"who": "nova", "text": GOOD}]}, headers=H)
+    assert debate.train_counts(c.db) == {"nova": 1, "aurora": 1}
+    assert c.get("/api/training").json()["debates"] == {"nova": 1, "aurora": 1}
+    # l'entraînement (GitHub) les récupère : Nova dans ses exemples de la nuit, Aurora à part
+    tok = training.token(c.db)
+    auth = {"Authorization": f"Bearer {tok}"}
+    nova = [e for e in c.get("/api/training/worker/examples", headers=auth).json() if e["a"] == GOOD]
+    assert nova and nova[0]["auto"] is True
+    aurora = c.get("/api/training/worker/debates?who=aurora", headers=auth).json()
+    assert len(aurora) == 1 and aurora[0]["a"].startswith("Contre")
+    assert c.get("/api/training/worker/debates?who=x", headers=auth).status_code == 400
+    assert c.get("/api/training/worker/debates?who=aurora").status_code == 401
+
+
+def test_debat_d_un_proche_n_entraine_pas(make_client):
+    from tests.test_family import member_client
+    c = make_client([reply(GOOD)])
+    login(c)
+    lea = member_client(c)
+    ev = events_of(lea.post("/api/debate/turn", json={"topic": "Faut-il des devoirs ?"}, headers=H).text)
+    assert ev[-1]["type"] == "done"
+    assert debate.train_counts(c.db.base if hasattr(c.db, "base") else c.db) == {"nova": 0, "aurora": 0}
+
+
+def test_script_aurora_garde_10_pour_cent(tmp_path, monkeypatch):
+    import sys
+    sys.path.insert(0, str(ROOT / "training"))
+    import debate_data
+    data = tmp_path / "coder.jsonl"
+    data.write_text("\n".join(json.dumps({"messages": [{"role": "system", "content": "code"}]}) for _ in range(50)) + "\n",
+                    encoding="utf-8")
+    items = [{"q": f"Débat {i}", "a": f"Réplique {i}"} for i in range(20)]
+    monkeypatch.setattr(debate_data, "fetch", lambda: items)
+    monkeypatch.setattr(sys, "argv", ["debate_data.py", str(data)])
+    debate_data.main()
+    lines = data.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 55 and json.loads(lines[0])["messages"][0]["content"] == "code"
+    last = json.loads(lines[-1])["messages"]
+    assert "Aurora" in last[0]["content"] and last[2]["content"] == "Réplique 19"
