@@ -134,3 +134,7 @@ legend { font-size: .85rem; font-weight: 700; color: var(--choco); margin-bottom
   .prod.has-img .prod-img { width: 84px; height: 84px; }
   .prod.has-img .prod-buy { grid-column: 1 / -1; }
 }
+
+/* Textes longs : passent à la ligne sans pousser le prix */
+.prod-info, .cart-lines .n { min-width: 0; overflow-wrap: anywhere; }
+.cart-lines .p, .price { flex-shrink: 0; }
