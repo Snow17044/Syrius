@@ -29,3 +29,9 @@ def test_chaque_onglet_a_son_panneau():
     tabs = re.findall(r'data-tab="([\w-]+)"', HTML)
     panels = re.findall(r'data-panel="([\w-]+)"', HTML)
     assert tabs and tabs == panels
+
+
+def test_syrius_code_ne_deborde_pas_de_l_ecran():
+    """Bug réel : un long code élargissait la page (×4) ; le téléphone dézoomait et le bouton Envoyer sortait de l'écran."""
+    css = (WEB / "code.css").read_text(encoding="utf-8")
+    assert "grid-template-columns: minmax(0, 1fr)" in css and ".c-app > *, .c-tab > * { min-width: 0; }" in css
