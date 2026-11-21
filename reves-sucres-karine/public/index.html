@@ -31,6 +31,7 @@
       <ul class="nav-links" id="menu">
         <li><a href="#apropos">L'atelier</a></li>
         <li><a href="#creations">Créations</a></li>
+        <li id="nav-galerie" hidden><a href="#galerie">Galerie</a></li>
         <li><a href="#sur-mesure">Sur mesure</a></li>
         <li><a href="#avis">Avis</a></li>
         <li><a href="#contact">Contact</a></li>
@@ -137,6 +138,18 @@
             <p>Assortiments joliment emballés pour faire plaisir : fêtes, remerciements, cadeaux d'entreprise.</p>
           </article>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== Galerie (photos ajoutées depuis l'espace admin) ===== -->
+    <section class="section gallery" id="galerie" hidden>
+      <div class="container">
+        <header class="section-head">
+          <p class="eyebrow">En images</p>
+          <h2>La <span class="script">galerie</span></h2>
+          <p class="section-sub">Quelques créations sorties de l'atelier.</p>
+        </header>
+        <div class="gallery-grid" id="gallery-grid"></div>
       </div>
     </section>
 
@@ -261,6 +274,11 @@
     <p class="footer-links"><a href="/commander">Commander</a> · <a href="/suivi">Suivre ma commande</a> · <a href="https://www.instagram.com/lesrevessucresdekarine/" target="_blank" rel="noopener">Instagram</a></p>
     <a href="#accueil" class="back-top">Retour en haut ↑</a>
   </footer>
+
+  <dialog class="lightbox" id="lightbox" aria-label="Photo agrandie">
+    <figure><img src="" alt=""><figcaption></figcaption></figure>
+    <button type="button" class="lightbox-close" aria-label="Fermer">×</button>
+  </dialog>
 
   <script src="script.js"></script>
 </body>

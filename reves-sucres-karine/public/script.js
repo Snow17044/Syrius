@@ -80,4 +80,33 @@
   });
 
   document.getElementById('annee').textContent = new Date().getFullYear();
+
+  // Galerie : photos ajoutées par Karine depuis l'espace admin
+  const lb = document.getElementById('lightbox');
+  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  fetch('/api/galerie')
+    .then((r) => (r.ok ? r.json() : { photos: [] }))
+    .then(({ photos }) => {
+      if (!photos || !photos.length) return;
+      const grid = document.getElementById('gallery-grid');
+      grid.innerHTML = photos.map((p) => `
+        <figure class="gallery-item">
+          <button type="button" data-src="${esc(p.url)}" data-caption="${esc(p.caption)}" aria-label="Agrandir${p.caption ? ' : ' + esc(p.caption) : ' la photo'}">
+            <img src="${esc(p.url)}" alt="${esc(p.caption || 'Création de Karine')}" loading="lazy">
+          </button>
+          ${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ''}
+        </figure>`).join('');
+      document.getElementById('galerie').hidden = false;
+      document.getElementById('nav-galerie').hidden = false;
+      grid.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-src]');
+        if (!b) return;
+        lb.querySelector('img').src = b.dataset.src;
+        lb.querySelector('img').alt = b.dataset.caption || '';
+        lb.querySelector('figcaption').textContent = b.dataset.caption || '';
+        lb.showModal();
+      });
+    })
+    .catch(() => {});
+  lb.addEventListener('click', () => lb.close());
 })();

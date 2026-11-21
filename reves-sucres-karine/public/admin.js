@@ -51,6 +51,42 @@
     toastTimer = setTimeout(() => (t.className = 'toast'), 2600);
   }
 
+  // ---------- Photos : réduction dans le navigateur puis envoi ----------
+  async function shrinkImage(file, max = 1600) {
+    let src;
+    try { src = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch {
+      src = await new Promise((ok, ko) => {
+        const img = new Image();
+        img.onload = () => ok(img);
+        img.onerror = () => ko(new Error('Impossible de lire cette photo (format non pris en charge).'));
+        img.src = URL.createObjectURL(file);
+      });
+    }
+    const w0 = src.width || src.naturalWidth, h0 = src.height || src.naturalHeight;
+    const k = Math.min(1, max / Math.max(w0, h0));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w0 * k);
+    canvas.height = Math.round(h0 * k);
+    canvas.getContext('2d').drawImage(src, 0, 0, canvas.width, canvas.height);
+    const toBlob = (type, q) => new Promise((ok) => canvas.toBlob(ok, type, q));
+    let blob = await toBlob('image/webp', 0.85);
+    if (!blob || blob.type !== 'image/webp') blob = await toBlob('image/jpeg', 0.85);
+    if (!blob) throw new Error('Impossible de préparer cette photo.');
+    return blob;
+  }
+
+  async function uploadImage(action, params, file) {
+    const blob = await shrinkImage(file);
+    const r = await fetch('/api/admin?' + new URLSearchParams({ action, ...params }), {
+      method: 'POST', headers: { 'Content-Type': blob.type }, body: blob, credentials: 'same-origin',
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401) { showLogin(); throw new Error('Session expirée.'); }
+    if (!r.ok) throw new Error(data.error || 'Envoi de la photo impossible.');
+    return data;
+  }
+
   // ---------- Connexion ----------
   function showLogin() {
     $('#app').hidden = true;
@@ -61,7 +97,7 @@
   async function showApp() {
     $('#login').hidden = true;
     $('#app').hidden = false;
-    await Promise.all([loadOrders(), loadProducts(), loadSettings()]);
+    await Promise.all([loadOrders(), loadProducts(), loadSettings(), loadPhotos()]);
   }
 
   $('#login-form').addEventListener('submit', async (e) => {
@@ -344,6 +380,7 @@
       <section class="prod-cat"><h2>${esc(cat)}</h2><div class="prod-rows">
         ${list.map((p) => `
           <div class="prod-row ${p.available ? '' : 'off'}" data-id="${p.id}">
+            ${p.image_url ? `<img class="thumb" src="${esc(p.image_url)}" alt="" loading="lazy">` : '<span class="thumb none" aria-hidden="true">✿</span>'}
             <label class="switch" title="Disponible à la commande"><input type="checkbox" data-avail ${p.available ? 'checked' : ''} aria-label="Disponible : ${esc(p.name)}"><span></span></label>
             <div class="info"><strong>${esc(p.name)}</strong> ${p.unit ? `<small class="muted">${esc(p.unit)}</small>` : ''}<p>${esc(p.description)}</p></div>
             <span class="pr">${euro(p.price_cents)}</span>
@@ -368,9 +405,34 @@
   const pd = $('#product-dialog');
   const pf = $('#product-form');
   let editing = null;
+  let pendingFile = null;
+  let removePhoto = false;
+  let previewUrl = null;
+  function showPreview(url) {
+    $('#pr-preview').innerHTML = url ? `<img src="${esc(url)}" alt="Photo du produit">` : '<span>Pas de photo</span>';
+    $('#pr-photo-remove').hidden = !url;
+  }
+  $('#pr-file').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    pendingFile = f;
+    removePhoto = false;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(f);
+    showPreview(previewUrl);
+  });
+  $('#pr-photo-remove').addEventListener('click', () => {
+    pendingFile = null;
+    removePhoto = true;
+    $('#pr-file').value = '';
+    showPreview('');
+  });
   function openProduct(p) {
     editing = p;
+    pendingFile = null;
+    removePhoto = false;
     pf.reset();
+    showPreview(p?.image_url || '');
     $('#pr-status').textContent = '';
     $('#product-title').textContent = p ? 'Modifier le produit' : 'Nouveau produit';
     $('#pr-delete').hidden = !p;
@@ -398,19 +460,31 @@
       price_cents: Math.round(Number(String(f.price.value).replace(',', '.')) * 100),
       position: Number(f.position.value) || 0, available: f.available.checked,
     };
+    const saveBtn = $('button[type=submit]', pf);
+    saveBtn.disabled = true;
     try {
-      if (editing) {
-        const { product } = await api('products', { method: 'PATCH', body: { id: editing.id, ...body } });
-        products = products.map((x) => (x.id === product.id ? product : x));
-      } else {
-        const { product } = await api('products', { method: 'POST', body });
-        products.push(product);
+      let product;
+      if (editing) ({ product } = await api('products', { method: 'PATCH', body: { id: editing.id, ...body } }));
+      else ({ product } = await api('products', { method: 'POST', body }));
+      if (pendingFile) {
+        saveBtn.textContent = 'Envoi de la photo…';
+        ({ product } = await uploadImage('product_image', { id: product.id }, pendingFile));
+      } else if (removePhoto && product.image_url) {
+        ({ product } = await api('product_image', { method: 'DELETE', params: { id: product.id } }));
       }
+      if (products.some((x) => x.id === product.id)) products = products.map((x) => (x.id === product.id ? product : x));
+      else products.push(product);
       products.sort((a, b) => a.position - b.position || a.id - b.id);
       pd.close();
       renderProducts();
       toast('Produit enregistré');
-    } catch (err) { $('#pr-status').textContent = err.message; }
+    } catch (err) {
+      $('#pr-status').textContent = err.message;
+      loadProducts();
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Enregistrer';
+    }
   });
 
   $('#pr-delete').addEventListener('click', async () => {
@@ -425,6 +499,67 @@
   });
 
   $$('dialog [data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+
+  // ---------- Galerie ----------
+  let photos = [];
+  async function loadPhotos() {
+    try {
+      ({ photos } = await api('photos'));
+      renderPhotos();
+    } catch (err) { toast(err.message, true); }
+  }
+  function renderPhotos() {
+    $('#photos').innerHTML = photos.length
+      ? photos.map((ph) => `
+        <figure class="photo-card" data-id="${ph.id}">
+          <img src="${esc(ph.url)}" alt="${esc(ph.caption)}" loading="lazy">
+          <div class="body">
+            <input value="${esc(ph.caption)}" placeholder="Légende (facultatif)" maxlength="200" data-caption aria-label="Légende">
+            <div class="row"><span class="small muted" data-saved></span><button class="link-btn danger" data-del>Supprimer</button></div>
+          </div>
+        </figure>`).join('')
+      : '<div class="empty" style="grid-column:1/-1">Aucune photo pour l\'instant. Ajoutez vos plus belles créations : elles apparaîtront sur la page d\'accueil.</div>';
+  }
+  $('#gallery-input').addEventListener('change', async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    const prog = $('#gallery-progress');
+    prog.hidden = false;
+    let ok = 0;
+    for (const [i, f] of files.entries()) {
+      prog.textContent = `Envoi de la photo ${i + 1} sur ${files.length}…`;
+      try {
+        const { photo } = await uploadImage('photos', {}, f);
+        photos.unshift(photo);
+        renderPhotos();
+        ok++;
+      } catch (err) { toast(`${f.name} : ${err.message}`, true); }
+    }
+    prog.hidden = true;
+    if (ok) toast(ok > 1 ? `${ok} photos ajoutées` : 'Photo ajoutée');
+  });
+  $('#photos').addEventListener('change', async (e) => {
+    const input = e.target.closest('[data-caption]');
+    if (!input) return;
+    const card = input.closest('.photo-card');
+    const id = Number(card.dataset.id);
+    try {
+      const { photo } = await api('photos', { method: 'PATCH', body: { id, caption: input.value } });
+      photos = photos.map((x) => (x.id === id ? photo : x));
+      $('[data-saved]', card).textContent = '✓ Enregistrée';
+    } catch (err) { toast(err.message, true); }
+  });
+  $('#photos').addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-del]')) return;
+    const id = Number(e.target.closest('.photo-card').dataset.id);
+    if (!confirm('Supprimer cette photo de la galerie ?')) return;
+    try {
+      await api('photos', { method: 'DELETE', params: { id } });
+      photos = photos.filter((x) => x.id !== id);
+      renderPhotos();
+      toast('Photo supprimée');
+    } catch (err) { toast(err.message, true); }
+  });
 
   // ---------- Réglages ----------
   async function loadSettings() {

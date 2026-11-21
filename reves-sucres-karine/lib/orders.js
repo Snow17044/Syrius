@@ -9,7 +9,7 @@ export const ORDER_COLS = `id, code, customer_name, phone, email,
   to_char(pickup_date, 'YYYY-MM-DD') AS pickup_date, pickup_slot, mode, address, message,
   items, total_cents, status, admin_note, source, created_at, updated_at`;
 
-export const PRODUCT_COLS = `id, name, description, category, price_cents, unit, available, position`;
+export const PRODUCT_COLS = `id, name, description, category, price_cents, unit, available, position, image_url`;
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function newCode() {

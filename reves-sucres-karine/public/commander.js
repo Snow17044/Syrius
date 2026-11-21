@@ -58,7 +58,8 @@
       html += `<section class="cat"><h2 class="cat-title">${esc(cat)}</h2><div class="prod-list">`;
       for (const p of list) {
         html += `
-          <article class="prod" data-id="${p.id}">
+          <article class="prod ${p.image_url ? 'has-img' : ''}" data-id="${p.id}">
+            ${p.image_url ? `<button type="button" class="prod-img" data-zoom="${esc(p.image_url)}" data-caption="${esc(p.name + (p.unit ? ' — ' + p.unit : ''))}" aria-label="Agrandir la photo de ${esc(p.name)}"><img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy"></button>` : ''}
             <div class="prod-info">
               <h3>${esc(p.name)} ${p.unit ? `<span class="unit">${esc(p.unit)}</span>` : ''}</h3>
               ${p.description ? `<p>${esc(p.description)}</p>` : ''}
@@ -77,6 +78,8 @@
     }
     $('#catalog').innerHTML = html;
     $('#catalog').addEventListener('click', (e) => {
+      const zoom = e.target.closest('[data-zoom]');
+      if (zoom) return openLightbox(zoom.dataset.zoom, zoom.dataset.caption);
       const btn = e.target.closest('[data-step]');
       if (!btn) return;
       const id = btn.closest('.prod').dataset.id;
@@ -196,6 +199,16 @@
     c.scrollIntoView({ behavior: 'smooth', block: 'start' });
     c.focus({ preventScroll: true });
   }
+
+  // Agrandissement des photos
+  const lb = document.getElementById('lightbox');
+  function openLightbox(src, caption) {
+    lb.querySelector('img').src = src;
+    lb.querySelector('img').alt = caption || '';
+    lb.querySelector('figcaption').textContent = caption || '';
+    lb.showModal();
+  }
+  lb.addEventListener('click', () => lb.close());
 
   load();
 })();

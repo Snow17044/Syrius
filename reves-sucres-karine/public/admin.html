@@ -42,6 +42,7 @@
       <nav class="tabs" role="tablist">
         <button role="tab" data-tab="orders" aria-selected="true">Commandes <span class="badge" id="new-badge" hidden></span></button>
         <button role="tab" data-tab="products" aria-selected="false">Produits</button>
+        <button role="tab" data-tab="photos" aria-selected="false">Photos</button>
         <button role="tab" data-tab="settings" aria-selected="false">Réglages</button>
       </nav>
       <button class="link-btn" id="logout">Déconnexion</button>
@@ -72,6 +73,18 @@
           <button class="btn btn-primary btn-sm" id="new-product">+ Ajouter un produit</button>
         </div>
         <div id="products"></div>
+      </section>
+
+      <!-- Photos -->
+      <section class="tab-panel" id="tab-photos" hidden>
+        <div class="toolbar">
+          <p class="muted grow">Ces photos s'affichent dans la galerie de la page d'accueil. Les plus récentes apparaissent en premier.</p>
+          <label class="btn btn-primary btn-sm file-btn">+ Ajouter des photos
+            <input type="file" id="gallery-input" accept="image/*" multiple hidden>
+          </label>
+        </div>
+        <p class="upload-progress" id="gallery-progress" hidden></p>
+        <div class="photo-grid" id="photos"></div>
       </section>
 
       <!-- Réglages -->
@@ -119,6 +132,16 @@
   <dialog id="product-dialog">
     <form method="dialog" id="product-form" class="dialog-body">
       <h2 id="product-title">Produit</h2>
+      <div class="photo-field">
+        <div class="photo-preview" id="pr-preview"><span>Pas de photo</span></div>
+        <div class="photo-actions">
+          <label class="btn btn-ghost btn-sm file-btn">Choisir une photo
+            <input type="file" id="pr-file" accept="image/*" hidden>
+          </label>
+          <button type="button" class="link-btn danger" id="pr-photo-remove" hidden>Retirer la photo</button>
+          <small class="muted">Prise avec le téléphone ou depuis la galerie. Elle est réduite automatiquement.</small>
+        </div>
+      </div>
       <div class="field"><label for="pr-name">Nom *</label><input id="pr-name" name="name" required maxlength="120"></div>
       <div class="field-row">
         <div class="field"><label for="pr-cat">Catégorie</label><input id="pr-cat" name="category" list="cat-list" maxlength="60"></div>

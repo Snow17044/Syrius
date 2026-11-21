@@ -124,3 +124,13 @@ legend { font-size: .85rem; font-weight: 700; color: var(--choco); margin-bottom
   .prod-buy { flex-direction: row; justify-content: space-between; align-items: center; }
   .cart-bar .btn { width: auto; }
 }
+
+/* ---- Photos des produits ---- */
+.prod-img { flex-shrink: 0; width: 96px; height: 96px; padding: 0; border: 0; border-radius: 12px; overflow: hidden; cursor: zoom-in; background: var(--powder); }
+.prod-img img { width: 100%; height: 100%; object-fit: cover; }
+.prod.has-img .prod-info { flex: 1; }
+@media (max-width: 560px) {
+  .prod.has-img { display: grid; grid-template-columns: 84px 1fr; gap: 12px 14px; }
+  .prod.has-img .prod-img { width: 84px; height: 84px; }
+  .prod.has-img .prod-buy { grid-column: 1 / -1; }
+}

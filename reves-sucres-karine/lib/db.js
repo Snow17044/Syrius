@@ -54,6 +54,13 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS kb_orders_pickup ON kb_orders (pickup_date)`,
   `CREATE TABLE IF NOT EXISTS kb_settings (key TEXT PRIMARY KEY, value JSONB NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS kb_login_attempts (ip TEXT NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  `ALTER TABLE kb_products ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`,
+  `CREATE TABLE IF NOT EXISTS kb_photos (
+     id SERIAL PRIMARY KEY,
+     url TEXT NOT NULL,
+     caption TEXT NOT NULL DEFAULT '',
+     position INTEGER NOT NULL DEFAULT 0,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT now())`,
 ];
 
 // Carte de départ (prix indicatifs, modifiables depuis l'espace admin)

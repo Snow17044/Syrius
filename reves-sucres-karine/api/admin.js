@@ -3,6 +3,7 @@ import { q, getShop, setSetting, DEFAULT_SHOP } from '../lib/db.js';
 import { handler, send, allow, readJson, query, HttpError, text, int, isoDate } from '../lib/http.js';
 import { isAdmin, requireAdmin, login, sessionCookie, clearCookie, changePassword } from '../lib/auth.js';
 import { createOrder, STATUSES, ORDER_COLS, PRODUCT_COLS } from '../lib/orders.js';
+import { readImage, saveImage, deleteImage } from '../lib/storage.js';
 
 function productFields(b) {
   return {
@@ -110,7 +111,57 @@ const actions = {
     }
     if (req.method === 'DELETE') {
       const id = int(query(req).get('id'), { label: 'Le produit', min: 1 });
-      await q(`DELETE FROM kb_products WHERE id = $1`, [id]);
+      const rows = await q(`DELETE FROM kb_products WHERE id = $1 RETURNING image_url`, [id]);
+      if (rows[0]?.image_url) await deleteImage(rows[0].image_url);
+      return send(res, 200, { ok: true });
+    }
+    throw new HttpError(405, 'Méthode non autorisée.');
+  },
+
+  // ---- Photo d'un produit : POST (fichier brut) pour ajouter/remplacer, DELETE pour retirer ----
+  async product_image(req, res) {
+    await requireAdmin(req);
+    const id = int(query(req).get('id'), { label: 'Le produit', min: 1 });
+    const old = await q(`SELECT image_url FROM kb_products WHERE id = $1`, [id]);
+    if (!old.length) throw new HttpError(404, 'Produit introuvable.');
+    let url = '';
+    if (req.method === 'POST') url = await saveImage(await readImage(req), 'produits');
+    else if (req.method !== 'DELETE') throw new HttpError(405, 'Méthode non autorisée.');
+    const rows = await q(`UPDATE kb_products SET image_url = $1 WHERE id = $2 RETURNING ${PRODUCT_COLS}`, [url, id]);
+    if (old[0].image_url) await deleteImage(old[0].image_url);
+    send(res, 200, { product: rows[0] });
+  },
+
+  // ---- Galerie photos ----
+  async photos(req, res) {
+    await requireAdmin(req);
+    if (req.method === 'GET') {
+      return send(res, 200, { photos: await q(`SELECT id, url, caption, position FROM kb_photos ORDER BY position DESC, id DESC`) });
+    }
+    if (req.method === 'POST') {
+      const caption = text(query(req).get('caption'), { label: 'La légende', max: 200 });
+      const url = await saveImage(await readImage(req), 'galerie');
+      const [{ next }] = await q(`SELECT COALESCE(MAX(position), 0) + 1 AS next FROM kb_photos`);
+      const rows = await q(
+        `INSERT INTO kb_photos (url, caption, position) VALUES ($1, $2, $3) RETURNING id, url, caption, position`,
+        [url, caption, next]
+      );
+      return send(res, 201, { photo: rows[0] });
+    }
+    if (req.method === 'PATCH') {
+      const b = await readJson(req);
+      const id = int(b.id, { label: 'La photo', min: 1 });
+      const rows = await q(
+        `UPDATE kb_photos SET caption = $1 WHERE id = $2 RETURNING id, url, caption, position`,
+        [text(b.caption, { label: 'La légende', max: 200 }), id]
+      );
+      if (!rows.length) throw new HttpError(404, 'Photo introuvable.');
+      return send(res, 200, { photo: rows[0] });
+    }
+    if (req.method === 'DELETE') {
+      const id = int(query(req).get('id'), { label: 'La photo', min: 1 });
+      const rows = await q(`DELETE FROM kb_photos WHERE id = $1 RETURNING url`, [id]);
+      if (rows[0]) await deleteImage(rows[0].url);
       return send(res, 200, { ok: true });
     }
     throw new HttpError(405, 'Méthode non autorisée.');
