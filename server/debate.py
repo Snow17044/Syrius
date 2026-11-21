@@ -29,8 +29,8 @@ _COMMON = (
     "- Réponds en français, en 2 à 4 phrases maximum (70 mots au plus) : c'est un échange vif, pas un exposé.\n"
     "- Réponds d'abord à l'argument précédent, puis avance UN argument nouveau, concret (exemple, chiffre connu, "
     "situation de la vie réelle). Ne répète pas un argument déjà dit.\n"
-    "- Si l'utilisateur vient d'intervenir, adresse-toi d'abord à LUI (prénom s'il est connu) : réponds à sa "
-    "question ou à sa remarque, puis reprends le débat. Il est le juge, sois respectueux de son avis.\n"
+    "- Si (et seulement si) l'utilisateur vient d'intervenir, adresse-toi d'abord à LUI : réponds à sa question ou à "
+    "sa remarque, puis reprends le débat. Il est le juge, sois respectueux de son avis.\n"
     "- Tu peux concéder un bon point, avec élégance. Jamais d'insulte, jamais de mépris.\n"
     "- N'invente pas de faits précis (dates, chiffres) si tu n'en es pas sûre. Pas de Markdown, pas de liste, pas "
     "d'emoji : ce texte peut être lu à voix haute.\n"
@@ -92,6 +92,20 @@ def train_prompt(topic: str, turns: list[dict], speaker: str) -> str:
     return (head + "\n\n" + "\n\n".join(lines))[:MAX_PROMPT]
 
 
+# « Bien joué Benjamin », « Merci Léa »… : félicitations adressées à quelqu'un d'autre que les deux IA.
+_PRAISE = re.compile(r"(?i:\b(?:bien jou[ée]|bravo|merci|bonne question|excellente? (?:question|remarque|id[ée]e)))"
+                     r"\s*,?\s*(?!Nova\b|Aurora\b)[A-ZÀ-Ý][a-zà-ÿ]+")
+
+
+def invents_user(text: str, user_spoke: bool, user_name: str = "") -> bool:
+    """Vrai si la réplique parle à l'utilisateur (ou le félicite) alors qu'il n'a rien dit : on ne l'apprend pas."""
+    if user_spoke:
+        return False
+    low = text.lower()
+    return bool(_PRAISE.search(text) or "l'utilisateur" in low or "l’utilisateur" in low
+                or (user_name and re.search(rf"\b{re.escape(user_name)}\b", text, re.I)))
+
+
 def good_reply(text: str) -> bool:
     """On n'apprend que des répliques propres : ni trop courtes ni trop longues, sans nom de modèle ni contenu interdit."""
     return (40 <= len(text) <= 900 and "<think>" not in text and not _MODEL_NAMES.search(text)
@@ -104,14 +118,19 @@ def trained(base) -> dict[str, list[dict]]:
     except ValueError:
         data = {}
     data = data if isinstance(data, dict) else {}
-    return {k: [e for e in data.get(k, []) if isinstance(e, dict) and e.get("q") and e.get("a")] for k in SPEAKERS}
+    # Les répliques apprises avant la correction qui félicitaient l'utilisateur sans qu'il ait parlé sont écartées.
+    return {k: [e for e in data.get(k, []) if isinstance(e, dict) and e.get("q") and e.get("a")
+                and (e.get("src") == "main" or not invents_user(str(e["a"]), "L'utilisateur :" in str(e["q"])))]
+            for k in SPEAKERS}
 
 
-def learn(base, topic: str, turns: list[dict], speaker: str, text: str) -> bool:
+def learn(base, topic: str, turns: list[dict], speaker: str, text: str, user_name: str = "") -> bool:
     """Range une réplique comme exemple pour l'IA qui l'a dite. Renvoie True si elle a été gardée."""
     text = text.strip()
     if speaker not in SPEAKERS or not good_reply(text) or safety.blocked(topic):
         return False
+    if invents_user(text, any(t["who"] == "user" for t in turns), user_name):
+        return False  # « Bien joué X » pour des mots jamais dits : surtout ne pas l'apprendre
     data = trained(base)
     q = train_prompt(topic, turns, speaker)
     if any(e["a"] == text for e in data[speaker]):
@@ -161,37 +180,50 @@ def next_speaker(turns: list[dict]) -> str:
     return "aurora" if last_ai == "nova" else "nova"
 
 
+def _label(who: str, speaker: str, user_name: str) -> str:
+    if who == "user":
+        return f"{user_name} (l'utilisateur, le juge)" if user_name else "L'utilisateur (le juge)"
+    return f"Toi ({NAMES[who]})" if who == speaker else f"{NAMES[who]} (ton adversaire)"
+
+
 def build_messages(topic: str, turns: list[dict], speaker: str, user_name: str = "") -> list[dict]:
-    """Messages pour le modèle : sa propre voix = assistant, les autres = user (avec le nom de qui parle)."""
-    who = f"L'utilisateur s'appelle {user_name}. " if user_name else ""
+    """Tout le débat est donné comme une TRANSCRIPTION étiquetée, dans un seul message.
+
+    Bug réel corrigé : avant, les répliques de l'adversaire arrivaient à la place des messages de l'utilisateur ;
+    l'IA croyait que c'était lui qui parlait (« Bien joué Benjamin » pour des mots jamais dits). Maintenant chaque
+    ligne dit qui parle, et le prénom n'est donné que si l'utilisateur est vraiment intervenu."""
+    user_spoke = any(t["who"] == "user" for t in turns)
+    name = user_name if user_spoke else ""
     if speaker == "verdict":
-        system = VERDICT_SYSTEM + ("\n" + who if who else "")
-        lines = "\n".join(f"{NAMES[t['who']]} : {t['text']}" for t in turns) or "(aucune réplique)"
-        return [{"role": "system", "content": system},
-                {"role": "user", "content": f"Sujet du débat : {topic}\n\nDébat :\n{lines}\n\nFais le bilan."}]
+        lines = "\n".join(f"{_label(t['who'], '', name)} : {t['text']}" for t in turns) or "(aucune réplique)"
+        rule = ("" if user_spoke else "\nL'utilisateur n'est PAS intervenu : ne lui attribue aucune parole et ne "
+                "parle pas de ce qu'il aurait apporté.")
+        return [{"role": "system", "content": VERDICT_SYSTEM + rule},
+                {"role": "user", "content": f"Sujet du débat : {topic}\n\nTranscription du débat :\n{lines}\n\nFais le bilan."}]
     other = "aurora" if speaker == "nova" else "nova"
+    if user_spoke:
+        rule = (f"QUI PARLE : seules les lignes « {_label('user', speaker, name)} : » sont de l'utilisateur. Les lignes "
+                f"« {NAMES[other]} (ton adversaire) : » sont de {NAMES[other]}, JAMAIS de l'utilisateur : ne le félicite pas "
+                "et ne le remercie pas pour un argument de ton adversaire. Ne lui attribue aucune parole qu'il n'a pas écrite.")
+    else:
+        rule = ("QUI PARLE : l'utilisateur regarde mais n'a RIEN dit pour l'instant. Ne t'adresse pas à lui, ne le félicite "
+                "pas, ne le remercie pas et ne lui attribue aucune parole. Tu réponds uniquement à "
+                f"{NAMES[other]}, ton adversaire.")
     system = "\n\n".join([
         PERSONAS[speaker], _COMMON,
         f"Sujet du débat : « {topic} ». Tu défends le camp {SIDES[speaker]}. Ton adversaire est "
-        f"{NAMES[other]} (camp {SIDES[other]}). {who}".strip()])
-    msgs = [{"role": "system", "content": system}]
-    pending: list[str] = []
-    for t in turns:
-        if t["who"] == speaker:
-            if pending:
-                msgs.append({"role": "user", "content": "\n\n".join(pending)})
-                pending = []
-            msgs.append({"role": "assistant", "content": t["text"]})
-        else:
-            pending.append(f"{NAMES[t['who']]} : {t['text']}")
+        f"{NAMES[other]} (camp {SIDES[other]}).", rule])
     if not turns:
-        pending.append("Le débat commence : c'est toi qui ouvres. Présente ta position en une accroche forte.")
+        task = "Le débat commence : c'est toi qui ouvres. Présente ta position en une accroche forte."
     elif turns[-1]["who"] == "user":
-        pending.append("(L'utilisateur vient d'intervenir : réponds-lui d'abord.)")
+        task = (f"La dernière ligne est de {name or "l'utilisateur"} : réponds-lui d'abord à LUI, sur ce qu'il a VRAIMENT "
+                "écrit, puis reprends le débat.")
     else:
-        pending.append("À toi.")
-    msgs.append({"role": "user", "content": "\n\n".join(pending)})
-    return msgs
+        task = f"À toi : réponds à la dernière réplique de {NAMES[other]}."
+    transcript = "\n\n".join(f"{_label(t['who'], speaker, name)} : {t['text']}" for t in turns)
+    content = (f"Transcription du débat jusqu'ici :\n\n{transcript}\n\n---\n{task}" if turns else task)
+    content += "\nÉcris seulement ta prochaine réplique, sans ton nom devant."
+    return [{"role": "system", "content": system}, {"role": "user", "content": content}]
 
 
 async def stream_text(llm, msgs: list[dict], max_tokens: int, base=None, uid: str = "",
@@ -251,5 +283,6 @@ async def stream_turn(llm, topic: str, turns: list[dict], speaker: str, user_nam
         return
     if train and base is not None:  # débat du propriétaire : la réplique entraîne Nova ou Aurora
         reply = re.sub(r"<think>.*?(</think>|$)", "", "".join(parts), flags=re.S).strip()
-        learn(base, topic, turns, speaker, reply)
+        reply = re.sub(r"^\s*(?:Toi|Nova|Aurora)\b[^:\n]{0,40}:\s*", "", reply)  # étiquette recopiée
+        learn(base, topic, turns, speaker, reply, user_name)
     yield {"type": "done"}

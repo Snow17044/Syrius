@@ -8,6 +8,9 @@
     "Faut-il apprendre à coder à l'école ?", "Les voitures électriques sont-elles l'avenir ?"];
   const NAMES = { nova: "Nova · pour", aurora: "Aurora · contre", user: "Toi", verdict: "Verdict" };
   const THINK = /<think>[\s\S]*?(<\/think>|$)/g;
+  // L'IA recopie parfois l'étiquette de la transcription (« Toi (Nova) : … ») : on l'enlève.
+  const LABEL = /^\s*(?:Toi|Nova|Aurora)\b[^:\n]{0,40}:\s*/;
+  const clean = (t) => t.replace(THINK, "").trim().replace(LABEL, "");
   const D = { topic: "", turns: [], target: 6, running: false, paused: false, busy: false, controller: null,
     verdictDone: false, wantVerdict: false };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -71,7 +74,7 @@
           if (ev.type === "start") { p = bubble(who); status(""); }
           else if (ev.type === "text") {
             raw += ev.text;
-            if (p) { p.textContent = raw.replace(THINK, "").trim(); scrollLog(); }
+            if (p) { p.textContent = clean(raw); scrollLog(); }
           } else if (ev.type === "done") ok = true;
           else if (ev.type === "error") throw new Error(ev.message || "Erreur.");
         }
@@ -84,7 +87,7 @@
       D.busy = false;
       D.controller = null;
     }
-    const text = raw.replace(THINK, "").trim();
+    const text = clean(raw);
     if (!ok || !text) { setButtons(); return false; }
     if (who !== "verdict") D.turns.push({ who, text });
     else D.verdictDone = true;
