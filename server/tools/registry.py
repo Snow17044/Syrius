@@ -206,9 +206,9 @@ RUN_PROJECT_TOOL = _tool(
     "run_code_project",
     "ATELIER : écris, LANCE et TESTE un programme sur un vrai serveur Linux (GitHub), comme un développeur sur son "
     "ordinateur : fichiers, installation (pip, npm…), tests, lecture des erreurs et corrections jusqu'à ce que ça marche "
-    "(5 essais). Utilise-le dès que l'utilisateur veut un programme, un script, un site ou un petit projet qui doit "
-    "FONCTIONNER (Python ou Node.js), au lieu de lui faire tester ton code dans Termux. Résultat en 2 à 6 minutes, "
-    "affiché dans la discussion.",
+    "(5 essais). Utilise-le dès que l'utilisateur veut un programme, un script, un SITE WEB ou un petit projet qui doit "
+    "FONCTIONNER (Python, Node.js, ou site HTML/CSS/JS vérifié dans un vrai navigateur, avec capture et aperçu), au "
+    "lieu de lui faire tester ton code dans Termux. Résultat en 2 à 8 minutes, affiché dans la discussion.",
     {"request": {"type": "string", "description": "Cahier des charges complet en français : ce que fait le programme, "
                                                    "langage (Python ou Node.js), contraintes (ex. doit tourner sur Termux), "
                                                    "et ce que les tests doivent vérifier. 10 à 4000 caractères."}},

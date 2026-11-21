@@ -798,7 +798,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
     @app.get("/api/code/atelier", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_list():
-        return [{k: v for k, v in d.items() if k != "files"} | {"nfiles": len(d.get("files") or {})}
+        return [{k: v for k, v in atelier.public(d).items() if k != "files"} | {"nfiles": len(d.get("files") or {})}
                 for d in atelier.items(db.base)]
 
     @app.get("/api/code/atelier/{pid}", dependencies=[Depends(require_auth), Depends(require_owner)])
@@ -806,7 +806,42 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         item = atelier.get(db.base, pid[:20])
         if not item:
             raise HTTPException(404, "Projet introuvable")
+        return atelier.public(item)
+
+    @app.get("/api/code/atelier/{pid}/capture", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_capture(pid: str):
+        data = atelier.screenshot(db.base, pid[:20])
+        if not data:
+            raise HTTPException(404)
+        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+    # Aperçu du site et téléchargement : adresse secrète propre à chaque projet (pas de cookie, pour que les
+    # pages du site et Termux y accèdent). Le site s'ouvre dans un « bac à sable » : origine opaque, il ne peut
+    # ni lire les cookies de Syrius ni appeler son API.
+    SITE_CSP = ("sandbox allow-scripts allow-forms allow-popups allow-modals; default-src 'self' https: data: blob: "
+                "'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'; base-uri 'none'")
+
+    def _atelier_item(pid: str, token: str) -> dict:
+        item = next((d for d in atelier.items(db.base) if d.get("id") == pid[:20]), None)
+        if not atelier.check_token(item, token[:64]):
+            raise HTTPException(404)
         return item
+
+    @app.get("/atelier/{pid}/{token}/projet.zip")
+    async def atelier_zip(pid: str, token: str):
+        item = _atelier_item(pid, token)
+        return Response(atelier.zip_bytes(item), media_type="application/zip", headers={
+            "Content-Disposition": f'attachment; filename="projet-{item["id"]}.zip"', "Cache-Control": "no-store",
+            "X-Robots-Tag": "noindex"})
+
+    @app.get("/atelier/{pid}/{token}/site/{path:path}")
+    async def atelier_site(pid: str, token: str, path: str = ""):
+        found = atelier.site_file(_atelier_item(pid, token), path)
+        if not found:
+            raise HTTPException(404, "Fichier introuvable dans le site")
+        content, ctype = found
+        return Response(content, media_type=ctype, headers={
+            "Content-Security-Policy": SITE_CSP, "Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
 
     @app.post("/api/training/worker/code-next", dependencies=[Depends(require_trainer)])
     async def selfcode_next():

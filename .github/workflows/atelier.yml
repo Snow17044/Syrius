@@ -42,6 +42,7 @@ jobs:
           sudo iptables -I DOCKER-USER -d 168.63.129.16 -j DROP
           docker pull -q python:3.13-slim
           docker pull -q node:22-slim
+          docker pull -q mcr.microsoft.com/playwright:v1.49.1-noble
 
       - name: Aurora travaille (écrire, lancer, corriger)
         if: steps.next.outputs.go == 'true'

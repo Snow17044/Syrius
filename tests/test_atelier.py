@@ -184,3 +184,65 @@ def test_workflow_isole_et_autorise():
     assert "169.254.169.254 -j DROP" in text and "atelier.py fail" in text
     src = (ROOT / "selfcode/atelier.py").read_text()
     assert '"--pids-limit"' in src and '"--memory"' in src and "--env-file" not in src  # aucun secret dans le conteneur
+
+
+# --------------------------------------------------------------- sites web : aperçu, capture, téléchargement
+SITE = {"site/index.html": "<!doctype html><title>Café</title><link rel=stylesheet href=style.css><p>Salut</p>",
+        "site/style.css": "p{color:brown}", "tests/site.test.js": "// test", "package.json": "{}"}
+
+
+def _done_site(c):
+    import base64
+    item = atelier.add(c.db, "Un site vitrine pour un café, beau sur téléphone")
+    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 100
+    atelier.report(c.db, {"id": item["id"], "status": "done", "attempt": 1, "env": "web", "files": SITE,
+                          "screenshot": base64.b64encode(jpeg).decode()})
+    return item, jpeg
+
+
+def test_apercu_du_site_dans_un_bac_a_sable(make_client):
+    c = make_client()
+    login(c)
+    item, jpeg = _done_site(c)
+    p = c.get(f"/api/code/atelier/{item['id']}").json()
+    assert "token" not in p and p["has_shot"] and p["env"] == "web"
+    assert p["site_url"].endswith("/site/") and p["zip_url"].endswith("/projet.zip")
+    anon = type(c)(c.app, base_url="https://testserver")  # sans cookie : comme le site lui-même ou Termux
+    page = anon.get(p["site_url"])
+    assert page.status_code == 200 and "Salut" in page.text and page.headers["content-type"].startswith("text/html")
+    csp = page.headers["content-security-policy"]
+    assert csp.startswith("sandbox ") and "allow-same-origin" not in csp  # le site ne peut pas toucher à Syrius
+    # bug vu au premier essai : cet en-tête empêchait le bac à sable de charger le CSS et le JavaScript du site
+    assert "cross-origin-resource-policy" not in page.headers
+    assert anon.get(p["site_url"] + "style.css").headers["content-type"].startswith("text/css")
+    for bad in ("../package.json", "tests/site.test.js", "inconnu.html", "%2e%2e/package.json"):
+        assert anon.get(p["site_url"] + bad).status_code == 404, bad
+    assert anon.get(p["site_url"].replace(item["token"], "mauvais-jeton")).status_code == 404
+    assert c.get(f"/api/code/atelier/{item['id']}/capture").content == jpeg
+    assert anon.get(f"/api/code/atelier/{item['id']}/capture").status_code == 401
+
+
+def test_telechargement_zip(make_client):
+    import io
+    import zipfile
+    c = make_client()
+    login(c)
+    item, _ = _done_site(c)
+    p = c.get(f"/api/code/atelier/{item['id']}").json()
+    r = type(c)(c.app, base_url="https://testserver").get(p["zip_url"])  # Termux : sans cookie
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    assert set(zipfile.ZipFile(io.BytesIO(r.content)).namelist()) == set(SITE)
+
+
+def test_capture_refusee_si_ce_n_est_pas_une_image(make_db):
+    import base64
+    base = make_db()
+    item = atelier.add(base, "Un site de test pour la capture d'écran")
+    atelier.report(base, {"id": item["id"], "status": "done", "screenshot": base64.b64encode(b"<script>").decode()})
+    assert not atelier.get(base, item["id"]).get("has_shot") and atelier.screenshot(base, item["id"]) == b""
+
+
+def test_l_ia_peut_choisir_un_site():
+    assert worker.parse("ENVIRONNEMENT: web\nTEST: node --test")["env"] == "web"
+    assert worker.parse("ENVIRONNEMENT: site HTML\nTEST: x")["env"] == "web"
+    assert "playwright@1.49.1" in worker.SYSTEM and worker.IMAGES["web"].endswith(f"v{worker.PLAYWRIGHT}-noble")

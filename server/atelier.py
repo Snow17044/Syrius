@@ -9,14 +9,20 @@ Réservé au propriétaire. Le serveur de GitHub ne peut que prendre le projet s
 """
 from __future__ import annotations
 
+import base64
+import hmac
+import io
 import json
 import re
 import secrets
 import time
+import zipfile
 
 from . import safety
 
 KEY = "family_atelier_v1"
+SHOT_KEY = "family_atelier_shot_"  # + id : capture d'écran du site (rangée à part, la liste reste légère)
+MAX_SHOT_BYTES = 600_000
 WORKFLOW = "atelier.yml"
 MAX_ITEMS = 20
 MAX_FILES = 40
@@ -41,6 +47,8 @@ def _load(base) -> list[dict]:
 
 
 def _save(base, items: list[dict]) -> None:
+    for old in items[:-MAX_ITEMS]:  # les projets oubliés emportent leur capture
+        base.set_secret(SHOT_KEY + str(old.get("id", "")), "")
     base.set_secret(KEY, json.dumps(items[-MAX_ITEMS:], ensure_ascii=False))
 
 
@@ -71,7 +79,8 @@ def add(base, text: str) -> dict:
     if sum(1 for d in data if _fresh(d, time.time()).get("status") in ("pending", "running")) >= 2:
         raise AtelierError("2 projets sont déjà en cours dans l'atelier : attends qu'ils soient finis.")
     now = int(time.time())
-    item = {"id": secrets.token_hex(4), "text": t, "status": "pending", "created": now, "updated": now,
+    item = {"id": secrets.token_hex(4), "token": secrets.token_urlsafe(18), "text": t, "status": "pending",
+            "created": now, "updated": now,
             "summary": "", "attempt": 0, "files": {}, "log": "", "setup": "", "test": "", "env": ""}
     data.append(item)
     _save(base, data)
@@ -125,13 +134,82 @@ def report(base, body: dict) -> None:
         d["log"] = str(body.get("log") or "")[-6000:]
         for k in ("setup", "test"):
             d[k] = _CTRL.sub("", str(body.get(k) or ""))[:300]
-        d["env"] = body.get("env") if body.get("env") in ("python", "node") else ""
+        d["env"] = body.get("env") if body.get("env") in ("python", "node", "web") else ""
         files = _files(body.get("files"))
         if files:
             d["files"] = files
+        shot = body.get("screenshot")
+        if isinstance(shot, str) and shot:
+            try:
+                raw = base64.b64decode(shot, validate=True)
+            except ValueError:
+                raw = b""
+            if raw[:3] == b"\xff\xd8\xff" and len(raw) <= MAX_SHOT_BYTES:  # une vraie image JPEG, pas trop lourde
+                base.set_secret(SHOT_KEY + pid, shot)
+                d["has_shot"] = True
         _save(base, data)
         return
     raise AtelierError("projet inconnu")
+
+
+# ------------------------------------------------------------------ aperçu du site, capture, téléchargement
+def check_token(item: dict | None, token: str) -> bool:
+    return bool(item and item.get("token") and token) and hmac.compare_digest(str(item["token"]), str(token))
+
+
+def screenshot(base, pid: str) -> bytes:
+    try:
+        return base64.b64decode(base.get_secret(SHOT_KEY + pid) or "", validate=True)
+    except ValueError:
+        return b""
+
+
+def site_root(files: dict) -> str | None:
+    """Dossier du site : « site/ » s'il existe, sinon la racine si elle a un index.html ; None = pas de site."""
+    if "site/index.html" in files:
+        return "site/"
+    if "index.html" in files:
+        return ""
+    return None
+
+
+TYPES = {"html": "text/html; charset=utf-8", "css": "text/css; charset=utf-8", "js": "text/javascript; charset=utf-8",
+         "mjs": "text/javascript; charset=utf-8", "json": "application/json", "svg": "image/svg+xml",
+         "txt": "text/plain; charset=utf-8", "md": "text/plain; charset=utf-8", "xml": "text/plain; charset=utf-8",
+         "webmanifest": "application/manifest+json"}
+
+
+def site_file(item: dict, path: str) -> tuple[str, str] | None:
+    files = item.get("files") or {}
+    root = site_root(files)
+    if root is None:
+        return None
+    path = (path or "index.html").lstrip("/")
+    if path.endswith("/") or not path:
+        path += "index.html"
+    content = files.get(root + path)
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    if content is None or ext not in TYPES:
+        return None
+    return content, TYPES[ext]
+
+
+def zip_bytes(item: dict) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for path, content in (item.get("files") or {}).items():
+            z.writestr(path, content)
+    return buf.getvalue()
+
+
+def public(item: dict) -> dict:
+    """Ce que l'application reçoit : jamais le jeton seul, mais les adresses d'aperçu et de téléchargement."""
+    out = {k: v for k, v in item.items() if k != "token"}
+    if item.get("token") and item.get("files"):
+        out["zip_url"] = f"/atelier/{item['id']}/{item['token']}/projet.zip"
+        if site_root(item["files"]) is not None:
+            out["site_url"] = f"/atelier/{item['id']}/{item['token']}/site/"
+    return out
 
 
 def for_aurora(item: dict) -> str:

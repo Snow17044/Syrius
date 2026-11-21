@@ -177,3 +177,6 @@
   padding: 12px; border-radius: 12px; margin: 6px 0 0; font-size: .8rem; }
 .c-atelier-pre { padding-top: 40px; }
 .c-atelier-pre > .c-copy { position: absolute; top: 6px; right: 6px; float: none; margin: 0; }
+.c-atelier-shot { display: block; width: min(240px, 70%); margin: 10px auto 4px; border-radius: 16px; border: 1px solid var(--line-2); }
+.c-atelier-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; }
+.c-atelier-link { flex: 1 1 auto; text-decoration: none; color: var(--text); padding: 9px 12px; border-radius: 12px; font-size: .86rem; font-weight: 600; }

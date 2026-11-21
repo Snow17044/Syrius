@@ -289,9 +289,35 @@
         shown = key;
         details.replaceChildren();
         const files = Object.entries(p.files || {});
-        if (p.setup || p.test) {
-          const run = [p.env === "node" ? "pkg install nodejs" : "pkg install python", p.setup, p.test].filter(Boolean).join("\n");
-          details.append(el("div", "c-atelier-label", "Commandes (Termux)"), codeBlock(run, "les commandes"));
+        if (p.has_shot) {  // le site, vu au format téléphone par Aurora
+          const img = el("img", "c-atelier-shot");
+          img.alt = "Capture du site au format téléphone";
+          img.src = `/api/code/atelier/${id}/capture?v=${p.updated}`;
+          details.appendChild(img);
+        }
+        if (p.site_url || p.zip_url) {
+          const bar = el("div", "c-atelier-links");
+          const link = (href, label, icon, dl) => {
+            const a = el("a", "ghost c-atelier-link");
+            a.href = href;
+            if (dl) a.setAttribute("download", ""); else { a.target = "_blank"; a.rel = "noopener"; }
+            Icons.set(a, icon, label);
+            return a;
+          };
+          if (p.site_url) bar.appendChild(link(p.site_url, "Voir le site", "eye"));
+          if (p.zip_url) bar.appendChild(link(p.zip_url, "Télécharger (.zip)", "download", true));
+          details.appendChild(bar);
+        }
+        if (p.setup || p.test || p.zip_url) {
+          const lines = [];
+          if (p.zip_url) {  // tout le projet d'un coup dans Termux, au lieu de copier les fichiers un par un
+            lines.push("pkg install -y unzip curl " + (p.env === "node" ? "nodejs" : "python"),
+              `curl -L -o projet.zip "${location.origin}${p.zip_url}"`, "unzip -o projet.zip -d projet && cd projet");
+          }
+          if (p.env !== "web" && p.setup) lines.push(p.setup);
+          if (p.env === "web") lines.push("cd site && python -m http.server 8080   # puis ouvre http://localhost:8080");
+          else if (p.test) lines.push(p.test + "   # lance les tests");
+          details.append(el("div", "c-atelier-label", "Dans Termux"), codeBlock(lines.join("\n"), "les commandes"));
         }
         for (const [path, content] of files) {
           const d = el("details", "c-atelier-file");
