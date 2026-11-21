@@ -13,6 +13,7 @@ from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_
 from . import skills
 from .tools import dashboard, diagram, model3d
 from . import family, vision
+from .group import NOVA_NOTE
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, select_tools
 
 log = logging.getLogger("syrius.agent")
@@ -99,6 +100,10 @@ def to_openai(stored: list[dict], system: str) -> list[dict]:
                     out.append({"role": "tool", "tool_call_id": b["tool_use_id"], "content": b["content"]})
                 elif b.get("type") == "text":
                     out.append({"role": "user", "content": b["text"]})
+        elif any(b.get("speaker") == "aurora" for b in m["content"]):
+            # discussion à plusieurs : les paroles d'Aurora ne sont jamais celles de Nova
+            text = "\n\n".join(b["text"] for b in m["content"] if b.get("type") == "text" and b.get("text"))
+            out.append({"role": "user", "content": "[Aurora] " + text})
         else:
             text = "\n\n".join(b["text"] for b in m["content"] if b.get("type") == "text")
             msg: dict = {"role": "assistant", "content": text}
@@ -121,6 +126,9 @@ def display_messages(stored: list[dict]) -> list[dict]:
                 out.append({"role": "user", "text": "\n".join(texts), "tools": []})
             continue
         texts = [b["text"] for b in m["content"] if b.get("type") == "text" and b["text"]]
+        if any(b.get("speaker") == "aurora" for b in m["content"]):  # réponse d'Aurora : bulle à part
+            out.append({"role": "assistant", "speaker": "aurora", "text": "\n\n".join(texts), "tools": [], "diagrams": []})
+            continue
         tools = [TOOL_LABELS.get(b.get("name", ""), b.get("name", ""))
                  for b in m["content"] if b.get("type") == "tool_use"]
         diagrams = []
@@ -149,7 +157,7 @@ def display_messages(stored: list[dict]) -> list[dict]:
                                                       if k in ("title", "description", "parts", "facts")}))
                 except model3d.ModelError:
                     pass
-        if out and out[-1]["role"] == "assistant":  # fusionne les étapes d'une même réponse
+        if out and out[-1]["role"] == "assistant" and not out[-1].get("speaker"):  # fusionne les étapes d'une même réponse
             prev = out[-1]
             prev["text"] = "\n\n".join(t for t in [prev["text"], *texts] if t)
             prev["tools"] += tools
@@ -219,7 +227,7 @@ class Agent:
 
     async def chat(self, conversation_id: str, user_text: str,
                    location: dict | None = None, voice: bool = False,
-                   image: str | None = None, profile: str = "syrius") -> AsyncIterator[dict]:
+                   image: str | None = None, profile: str = "syrius", group: bool = False) -> AsyncIterator[dict]:
         if not self.llm.providers:
             yield {"type": "error", "message": "Aucun cerveau configuré : ajoute une clé GROQ_API_KEY "
                                                "ou GEMINI_API_KEY (voir README)."}
@@ -268,6 +276,8 @@ class Agent:
         for _step in range(MAX_STEPS):
             system = (build_aurore_system(settings, skills.prompt_list(base_db)) if aurore
                       else build_system(settings, self.db.list_memories()))  # les souvenirs peuvent changer
+            if group:
+                system += "\n\n" + NOVA_NOTE
             if voice:
                 system += ("\n\nMODE CONVERSATION VOCALE : ta réponse sera lue à voix haute. Réponds en 1 à 3 "
                            "phrases naturelles à l'oral, sans liste, sans tableau, sans Markdown ni emoji. "
