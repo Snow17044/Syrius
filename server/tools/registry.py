@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from ..config import Config
-from .. import family, journal, memory, selfcode, sitecode, sitescan, skills
+from .. import atelier, family, journal, memory, selfcode, sitecode, sitescan, skills
 from ..db import Database
 from .device import DEVICE_LABELS, DEVICE_TOOLS, DeviceInputError, build_action
 from .email_tool import EmailClient, EmailError, validate_draft
@@ -151,6 +151,8 @@ TOOL_LABELS = {
     "web_read": "Je lis la page",
     "show_places": "J'affiche la carte",
     "list_reminders": "Je regarde tes rappels",
+    "run_code_project": "Je lance le projet dans mon atelier",
+    "check_code_project": "Je regarde l'atelier",
     "save_journal": "Je range ta journée dans ton journal",
     "read_journal": "Je relis ton journal",
     "get_weather": "Je regarde la météo",
@@ -191,12 +193,31 @@ USE_SKILL_TOOL = _tool(
 
 PROPOSE_CODE_TOOL = _tool(
     "propose_code_change",
+    "SEULEMENT pour modifier les applications Syrius / Syrius Code ELLES-MÊMES (jamais pour un programme demandé par "
+    "l'utilisateur : pour ça, c'est run_code_project). "
     "Envoie une demande de changement à l'IA programmeuse de Syrius (GitHub). Elle prépare le code, lance les tests "
     "et OUVRE UNE PROPOSITION que le propriétaire relit et publie lui-même : tu ne publies jamais rien. Une seule "
     "petite modification par demande, précise (où, quoi, comment vérifier). Applique d'abord la compétence "
     "`demande-de-code`. Refusé après la lecture d'un email ou d'une page web.",
     {"request": {"type": "string", "description": "La demande, en français, 10 à 1400 caractères"},
      "app": {"type": "string", "description": "syrius ou syrius-code"}}, ["request", "app"])
+
+RUN_PROJECT_TOOL = _tool(
+    "run_code_project",
+    "ATELIER : écris, LANCE et TESTE un programme sur un vrai serveur Linux (GitHub), comme un développeur sur son "
+    "ordinateur : fichiers, installation (pip, npm…), tests, lecture des erreurs et corrections jusqu'à ce que ça marche "
+    "(5 essais). Utilise-le dès que l'utilisateur veut un programme, un script, un SITE WEB ou un petit projet qui doit "
+    "FONCTIONNER (Python, Node.js, ou site HTML/CSS/JS vérifié dans un vrai navigateur, avec capture et aperçu), au "
+    "lieu de lui faire tester ton code dans Termux. Résultat en 2 à 8 minutes, affiché dans la discussion.",
+    {"request": {"type": "string", "description": "Cahier des charges complet en français : ce que fait le programme, "
+                                                   "langage (Python ou Node.js), contraintes (ex. doit tourner sur Termux), "
+                                                   "et ce que les tests doivent vérifier. 10 à 4000 caractères."}},
+    ["request"])
+
+CHECK_PROJECT_TOOL = _tool(
+    "check_code_project",
+    "Regarde où en est un projet de l'atelier (état, fichiers, sortie des tests). Sans identifiant : le dernier projet.",
+    {"id": {"type": "string", "description": "Identifiant du projet (8 caractères), facultatif"}}, [])
 
 LIST_CODE_TOOL = _tool(
     "list_code_changes",
@@ -281,7 +302,7 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
         tools = [t for t in BASE_TOOLS if t["function"]["name"] in ("get_current_time", "show_diagram")]
         tools += [SHOW_DASHBOARD_TOOL, USE_SKILL_TOOL]
         if family.is_owner():
-            tools += [PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
+            tools += [RUN_PROJECT_TOOL, CHECK_PROJECT_TOOL, PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
         if family.email_allowed(cfg):
             tools += EMAIL_TOOLS
         if settings.get("internet", True):
@@ -523,6 +544,32 @@ class ToolExecutor:
             when = "Elle démarre maintenant" if started else "Elle est vérifiée toutes les 15 minutes (GitHub est parfois en retard, jusqu'à 1 h)"
             return (f"Demande {item['id']} envoyée à l'IA programmeuse. {when} ; "
                     "le propriétaire verra la proposition dans l'onglet Code de Syrius Code."), False, None
+
+        if name in ("run_code_project", "check_code_project"):
+            if not family.is_owner() or ctx.get("profile") != "aurore":
+                return "L'atelier de code est réservé au propriétaire, dans Syrius Code.", True, None
+            base = getattr(self.db, "base", self.db)
+            if name == "check_code_project":
+                a = _check(args, {"id": str}, [])
+                item = atelier.get(base, a["id"].strip()) if a.get("id") else next(iter(atelier.items(base)), None)
+                if not item:
+                    return "Aucun projet dans l'atelier.", True, None
+                return atelier.for_aurora(item), False, {"type": "atelier", "id": item["id"]}
+            if ctx.get("untrusted"):
+                return ("Je ne lance pas de projet après avoir lu un email ou une page web : "
+                        "demande-le moi directement."), True, None
+            a = _check(args, {"request": str}, ["request"])
+            try:
+                item = atelier.add(base, a["request"])
+            except atelier.AtelierError as e:
+                return str(e), True, None
+            started = await asyncio.to_thread(selfcode.dispatch, self.cfg.github_dispatch_token, self.cfg.github_repo,
+                                              atelier.WORKFLOW)
+            when = ("L'atelier démarre maintenant (2 à 6 minutes)." if started else
+                    "L'atelier le prend dans les 15 minutes (GitHub est parfois en retard).")
+            return (f"Projet {item['id']} lancé dans l'atelier. {when} Son avancement s'affiche en direct dans la "
+                    "discussion. Dis-le simplement à l'utilisateur, sans écrire le code toi-même ; quand il te "
+                    "demandera le résultat, utilise check_code_project."), False, {"type": "atelier", "id": item["id"]}
 
         if name == "show_dashboard":
             try:

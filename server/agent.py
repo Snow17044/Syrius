@@ -124,6 +124,12 @@ def display_messages(stored: list[dict]) -> list[dict]:
             texts = [b["text"] for b in m["content"] if b.get("type") == "text"]
             if texts:
                 out.append({"role": "user", "text": "\n".join(texts), "tools": []})
+            for b in m["content"]:  # projet de l'atelier d'Aurora : sa carte reste dans l'historique
+                if b.get("type") == "tool_result" and b.get("tool_name") in ("run_code_project", "check_code_project") \
+                        and not b.get("is_error") and out and out[-1]["role"] == "assistant":
+                    found = re.search(r"Projet ([0-9a-f]{8})", str(b.get("content", "")))
+                    if found and not any(d.get("id") == found.group(1) for d in out[-1].get("diagrams", [])):
+                        out[-1].setdefault("diagrams", []).append({"type": "atelier", "id": found.group(1)})
             continue
         texts = [b["text"] for b in m["content"] if b.get("type") == "text" and b["text"]]
         if any(b.get("speaker") == "aurora" for b in m["content"]):  # réponse d'Aurora : bulle à part
