@@ -90,14 +90,46 @@ def test_tour_de_parole():
 def test_messages_du_debat():
     turns = [{"who": "nova", "text": "Pour !"}, {"who": "aurora", "text": "Contre !"}, {"who": "user", "text": "Et l'été ?"}]
     msgs = debate.build_messages("Les devoirs", turns, "nova", "Alex")
-    assert msgs[0]["role"] == "system" and "POUR" in msgs[0]["content"] and "Alex" in msgs[0]["content"]
-    assert msgs[1] == {"role": "assistant", "content": "Pour !"}
-    assert "Aurora : Contre !" in msgs[2]["content"] and "L'utilisateur : Et l'été ?" in msgs[2]["content"]
-    assert "réponds-lui d'abord" in msgs[2]["content"]
+    assert [m["role"] for m in msgs] == ["system", "user"]  # une transcription : plus de rôles mélangés
+    assert "POUR" in msgs[0]["content"]
+    t = msgs[1]["content"]
+    assert "Toi (Nova) : Pour !" in t and "Aurora (ton adversaire) : Contre !" in t
+    assert "Alex (l'utilisateur, le juge) : Et l'été ?" in t and "réponds-lui d'abord" in t
     first = debate.build_messages("Les devoirs", [], "nova")
     assert first[-1]["role"] == "user" and "ouvres" in first[-1]["content"]
     verdict = debate.build_messages("Les devoirs", turns, "verdict")
     assert len(verdict) == 2 and "arbitre" in verdict[0]["content"]
+
+
+def test_l_utilisateur_n_a_rien_dit():
+    """Bug réel : « Bien joué Benjamin » pour des mots jamais dits. Les répliques de l'adversaire arrivaient à la
+    place des messages de l'utilisateur, et son prénom était donné même s'il n'avait rien dit."""
+    turns = [{"who": "nova", "text": "Les devoirs apprennent l'autonomie."}, {"who": "aurora", "text": "Ils creusent les inégalités."}]
+    for speaker in ("nova", "aurora", "verdict"):
+        msgs = debate.build_messages("Les devoirs", turns, speaker, "Benjamin")
+        everything = " ".join(m["content"] for m in msgs)
+        assert "Benjamin" not in everything, speaker  # le prénom n'apparaît pas tant qu'il n'a pas parlé
+        assert not any(m["role"] == "assistant" for m in msgs)
+    assert "n'a RIEN dit" in debate.build_messages("Les devoirs", turns, "nova", "Benjamin")[0]["content"]
+    assert "PAS intervenu" in debate.build_messages("Les devoirs", turns, "verdict", "Benjamin")[0]["content"]
+
+
+def test_on_n_apprend_pas_les_felicitations_inventees(make_db):
+    base = make_db()
+    turns = [{"who": "nova", "text": "Pour, car c'est formateur."}]
+    fake = "Bien joué Benjamin, mais les devoirs creusent surtout les inégalités entre les familles."
+    assert not debate.learn(base, "Les devoirs", turns, "aurora", fake, "Benjamin")
+    assert not debate.learn(base, "Les devoirs", turns, "aurora", "Merci Léa pour cette remarque, mais les devoirs fatiguent.")
+    ok = "Bien joué Nova, mais les devoirs creusent surtout les inégalités entre les familles."
+    assert debate.learn(base, "Les devoirs", turns, "aurora", ok, "Benjamin")  # féliciter l'adversaire : permis
+    spoke = turns + [{"who": "user", "text": "Et les enfants malades ?"}]
+    assert debate.learn(base, "Les devoirs", spoke, "nova", "Bonne question Benjamin : un enfant malade doit se reposer.", "Benjamin")
+    # les anciennes répliques apprises avant la correction sont écartées à la lecture
+    import json
+    data = json.loads(base.get_secret(debate.TRAIN_KEY))
+    data["aurora"].append({"q": "Débat : « x ». Tu défends le contre face à Nova.\n\nNova : Pour.", "a": fake, "at": 1})
+    base.set_secret(debate.TRAIN_KEY, json.dumps(data))
+    assert fake not in [e["a"] for e in debate.trained(base)["aurora"]]
 
 
 def test_historique_nettoye():
