@@ -41,8 +41,9 @@ def ask(base, providers: list, system: str, prompt: str, max_tokens: int = 2500,
     n = used(base, key)
     if n >= budget:
         raise CoderAskError("budget du jour atteint" + (" pour les sites" if kind == "site" else ""))
+    from .llm import strength  # la plus capable d'abord (Codestral en tête s'il existe)
     pool = sorted((p for p in providers if not getattr(p, "photos_only", False)),
-                  key=lambda p: 0 if getattr(p, "coding_only", False) else 1)
+                  key=lambda p: (0 if getattr(p, "coding_only", False) else 1, strength(p)))
     last = ""
     for p in pool:
         try:

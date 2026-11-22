@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import Config
 from .db import Database
-from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
+from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config, strength
 from . import skills
 from .tools import dashboard, diagram, model3d
 from . import family, vision
@@ -176,6 +176,10 @@ def display_messages(stored: list[dict]) -> list[dict]:
 # Les offres gratuites limitent les jetons PAR MINUTE (demande + réponse réservée) : on reste sobre.
 MAX_TOKENS = 3000
 SMALL_TOKENS = 1600
+# Aurora (Syrius Code) : elle réfléchit vraiment (raisonnement poussé) et a la place d'écrire du vrai code.
+AURORA_TOKENS = 6000
+AURORA_SMALL_TOKENS = 3500
+
 _THINK_TAGS = re.compile(r"<think>.*?</think>", re.S)
 # Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
 _WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme", re.I)
@@ -257,7 +261,11 @@ class Agent:
             preferred = ""  # l'IA spécialisée code appartient à Aurora (Syrius Code), plus à Syrius
         if aurore and not image and _WANTS_CODE.search(user_text):
             preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation, réservé à Aurora
-        providers = self.llm.ordered(preferred, photo=bool(image), fast=settings.get("effort") != "high")
+        providers = self.llm.ordered(preferred, photo=bool(image), fast=aurore is False and settings.get("effort") != "high")
+        if aurore and not image:  # Aurora : la plus capable d'abord (les IA en échec récent restent derrière)
+            recent = {p.name for p in providers if p.name in self.llm.stats and
+                      self.llm._rank(p, False) >= 2} if hasattr(self.llm, "stats") else set()
+            providers = sorted(providers, key=lambda p: (p.name in recent, p.name != preferred if preferred else 0, strength(p)))
         if image:  # seules les IA qui « voient » peuvent répondre
             providers = [p for p in providers if p.vision]
             if not providers:
@@ -270,7 +278,7 @@ class Agent:
         if family.quota_left(base, "power", uid) <= 0:
             providers = [p for p in providers if not p.name.startswith("openrouter")] or providers
         power_counted = False
-        effort = "high" if settings.get("effort") == "high" else "low"
+        effort = "high" if (aurore or settings.get("effort") == "high") else "low"  # Aurora réfléchit toujours
         # Outils envoyés : seulement ceux que la demande évoque (+ la fin de la réponse précédente, pour « oui »…).
         last_reply = next((b.get("text", "") for m in reversed(history[:-1]) if m["role"] == "assistant"
                            for b in m["content"] if b.get("type") == "text"), "")
@@ -295,7 +303,7 @@ class Agent:
             if image:
                 vision.attach(msgs, image)
             body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, settings, profile), tool_context, keep_all),
-                    "max_tokens": MAX_TOKENS}
+                    "max_tokens": AURORA_TOKENS if aurore else MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None
             tool_retry = False
@@ -313,7 +321,7 @@ class Agent:
                         req["tool_choice"] = "any" if provider.name == "mistral" else \
                             {"type": "function", "function": {"name": forced}}
                 if shrink:
-                    req["max_tokens"] = SMALL_TOKENS
+                    req["max_tokens"] = AURORA_SMALL_TOKENS if aurore else SMALL_TOKENS
                 if "qwen3" in provider.model and "groq.com" in provider.base_url:
                     req["reasoning_format"] = "hidden"  # pas de « réflexions » affichées dans la réponse
                 if provider.reasoning:
