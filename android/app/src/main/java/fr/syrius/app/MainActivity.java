@@ -489,6 +489,34 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Voix d'Aurora (discussions à plusieurs) : celle choisie, sinon une voix française DIFFÉRENTE de celle de Nova. */
+    private android.speech.tts.Voice auroraVoice() {
+        java.util.List<android.speech.tts.Voice> all = frenchVoices();
+        if (all.isEmpty()) return null;
+        String wanted = getSharedPreferences("syrius_voice", MODE_PRIVATE).getString("aurora_voice", "");
+        for (android.speech.tts.Voice v : all) if (v.getName().equals(wanted)) return v;
+        String novaName = getSharedPreferences("syrius_voice", MODE_PRIVATE).getString("voice", "");
+        if (novaName.isEmpty()) novaName = all.get(0).getName();  // voix de Nova par défaut : la meilleure
+        for (android.speech.tts.Voice v : all) if (!v.getName().equals(novaName)) return v;
+        return all.get(0);
+    }
+
+    /** Chacun sa voix : Nova = la voix choisie, ton un peu grave ; Aurora = une autre voix, ton un peu plus aigu. */
+    private void voiceFor(String who) {
+        try {
+            if ("aurora".equals(who)) {
+                android.speech.tts.Voice v = auroraVoice();
+                if (v != null) tts.setVoice(v);
+                tts.setPitch(1.12f);
+            } else {
+                applyVoice();
+                tts.setPitch(0.94f);
+            }
+        } catch (Exception ignored) {
+            // on garde la voix actuelle
+        }
+    }
+
     private static int voiceScore(android.speech.tts.Voice v) {
         return v.getQuality() * 10 + ("FR".equals(v.getLocale().getCountry()) ? 5 : 0)
                 - (v.isNetworkConnectionRequired() ? 3 : 0);  // la voix locale marche aussi sans Internet
@@ -581,6 +609,8 @@ public class MainActivity extends Activity {
                 o.put("rate", vp.getFloat("rate", 1.05f));
                 android.speech.tts.Voice cur = tts == null ? null : tts.getVoice();
                 o.put("current", cur == null ? "" : cur.getName());
+                android.speech.tts.Voice au = tts == null ? null : auroraVoice();
+                o.put("aurora", au == null ? "" : au.getName());
                 org.json.JSONArray list = new org.json.JSONArray();
                 int n = 0;
                 for (android.speech.tts.Voice v : frenchVoices()) {
@@ -663,9 +693,34 @@ public class MainActivity extends Activity {
             if (trusted() && syrius != null) syrius.warmUp();
         }
 
+        /** Lecture avec la voix de Nova ou d'Aurora (discussions à plusieurs, mode conversation). */
+        @JavascriptInterface
+        public void speakAs(String text, String who) {
+            if (text == null || !trusted() || tts == null) return;
+            voiceFor("aurora".equals(who) ? "aurora" : "nova");
+            say(text);
+        }
+
+        @JavascriptInterface
+        public String ttsSetAuroraVoice(String name) {
+            if (name == null || !trusted() || tts == null) return "Refusé";
+            for (android.speech.tts.Voice v : frenchVoices()) {
+                if (v.getName().equals(name)) {
+                    getSharedPreferences("syrius_voice", MODE_PRIVATE).edit().putString("aurora_voice", name).apply();
+                    return "ok";
+                }
+            }
+            return "Voix introuvable";
+        }
+
         @JavascriptInterface
         public void speak(String text) {
             if (text == null || !trusted() || tts == null) return;
+            voiceFor("nova");  // après une réplique d'Aurora, la voix redevient celle de Nova
+            say(text);
+        }
+
+        private void say(String text) {
             String t = text.length() > 8000 ? text.substring(0, 8000) : text;
             // Android refuse un texte trop long d'un coup (≈ 4 000 caractères) : on lit les longues réponses en morceaux,
             // à la suite. Seul le dernier morceau (« syrius ») prévient la page que Syrius a fini de parler.
@@ -711,7 +766,7 @@ public class MainActivity extends Activity {
         /** Fonctions disponibles dans cette version de l'application. */
         @JavascriptInterface
         public String features() {
-            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"journal\",\"speakend\",\"wake\",\"music\",\"vision\",\"imagegen\",\"voicepick\",\"warmup\"]";
+            return "[\"local\",\"reminders\",\"calendar\",\"briefing\",\"journal\",\"speakend\",\"wake\",\"music\",\"vision\",\"imagegen\",\"voicepick\",\"warmup\",\"voices2\"]";
         }
 
         @JavascriptInterface
