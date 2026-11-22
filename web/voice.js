@@ -70,7 +70,7 @@
   }
 
   // ---------------------------------------------------------------- parole (attend la fin)
-  function speakAndWait(text) {
+  function speakAndWait(text, who) {
     const t = clean(text);
     if (!t) return Promise.resolve();
     return new Promise((resolve) => {
@@ -79,6 +79,7 @@
       // Estimation de durée si le téléphone ne prévient pas de la fin (ancienne application).
       const timer = setTimeout(finish, 1500 + t.length * 75);
       speakAndWait.cancel = () => { stopSpeaking(); finish(); };
+      if (who && typeof window.speakAs === "function") { window.speakAs(t, who, finish); return; }  // chacun sa voix
       const n = Native();
       if (n) {
         window.syriusOnSpeakEnd = finish;
@@ -108,10 +109,30 @@
     if (n && typeof n.keepScreenOn === "function") n.keepScreenOn(!!v);
   }
 
+  // ---------------------------------------------------------------- visages animés (Nova, et Aurora si elle est là)
+  const F = () => window.SyriusFaces;
+  const withAurora = () => { try { return !!state.aurora; } catch (_) { return false; } };
+  function buildFaces() {
+    const box = $("#voice-faces");
+    if (!box || !F()) return;
+    box.replaceChildren(F().make("nova", "Nova"));
+    if (withAurora()) box.appendChild(F().make("aurora", "Aurora"));
+    $("#voice").classList.toggle("has-faces", true);
+    $("#voice").classList.toggle("duo", withAurora());
+    const b = $("#voice-aurora");
+    if (b) b.textContent = withAurora() ? "Aurora est là" : "Inviter Aurora";
+  }
+  function faces(mode) {
+    if (!F()) return;
+    F().set("nova", { mode });
+    F().set("aurora", { mode });
+  }
+
   // ---------------------------------------------------------------- boucle
   async function loop() {
     while (on) {
-      setPhase("listen", "Je vous écoute…");
+      setPhase("listen", "Je t'écoute…");
+      faces("listen");
       $("#voice-heard").textContent = "";
       const text = (await listenOnce()).trim();
       if (!on) break;
@@ -122,18 +143,28 @@
       }
       silences = 0;
       if (STOP.test(text)) {
-        setPhase("speak", "À votre service.");
-        await speakAndWait("À votre service.");
+        setPhase("speak", "À plus tard !");
+        if (F()) F().set("nova", { expr: "content", mode: "talk" });
+        await speakAndWait("Ça marche, à plus tard !", "nova");
         close();
         return;
       }
-      setPhase("think", "Je réfléchis…");
+      setPhase("think", withAurora() ? "Ils réfléchissent…" : "Je réfléchis…");
+      faces("think");
       $("#voice-reply").textContent = "";
-      const reply = await window.SyriusChat.ask(text);
+      const replies = window.SyriusChat.askAll ? await window.SyriusChat.askAll(text) : [{ who: "nova", text: await window.SyriusChat.ask(text), expr: "" }];
       if (!on) break;
-      $("#voice-reply").textContent = clean(reply).slice(0, 400);
-      setPhase("speak", "Je réponds…");
-      await speakAndWait(reply || "Désolé, je n'ai pas de réponse.");
+      if (!replies.length) replies.push({ who: "nova", text: "Désolé, je n'ai pas de réponse.", expr: "inquiet" });
+      faces("idle");
+      for (const r of replies) {  // chacun parle à son tour, avec sa voix et son expression
+        if (!on) break;
+        const name = r.who === "aurora" ? "Aurora" : "Nova";
+        $("#voice-reply").textContent = (replies.length > 1 ? name + " : " : "") + clean(r.text).slice(0, 400);
+        setPhase("speak", name + " répond…");
+        if (F()) F().set(r.who, { expr: r.expr || "content", mode: "talk" });
+        await speakAndWait(r.text, r.who);
+        if (F()) F().set(r.who, { mode: "idle" });
+      }
       if (on && pendingConfirm) { // ex. « Appeler Maman » : on demande un « oui » explicite
         const c = pendingConfirm;
         pendingConfirm = null;
@@ -184,6 +215,7 @@
     silences = 0;
     unstage();
     $("#voice").classList.remove("hidden");
+    buildFaces();
     updateSplit();
     $("#voice-reply").textContent = "";
     keepAwake(true);
@@ -205,6 +237,14 @@
     $("#voice-open").classList.remove("hidden");
     $("#voice-open").addEventListener("click", open);
     $("#voice-close").addEventListener("click", close);
+    // Toucher un visage = toucher l'orbe (couper la parole, reprendre).
+    $("#voice-faces")?.addEventListener("click", () => $("#voice-orb").click());
+    // Inviter Aurora dans la conversation vocale (même bouton que dans la discussion).
+    $("#voice-aurora")?.addEventListener("click", () => {
+      if (withAurora()) return;
+      $("#aurora-toggle").click();
+      setTimeout(buildFaces, 400);
+    });
     // Toucher l'orbe : couper la parole / reprendre / relancer l'écoute.
     $("#voice-orb").addEventListener("click", () => {
       if (phase === "speak" && speakAndWait.cancel) speakAndWait.cancel();

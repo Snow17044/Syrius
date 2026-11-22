@@ -85,7 +85,8 @@ def test_bascule_automatique_si_limite_atteinte(make_client):
     cid = new_conv(c)
     ev = ask(c, cid, "Salut")
     assert "".join(e["text"] for e in ev if e["type"] == "text") == "Réponse de Gemini"
-    assert any(e["type"] == "tool" and "Gemini" in e["label"] for e in ev)
+    # demande de l'utilisateur : le changement de modèle ne s'affiche plus
+    assert not any(e["type"] == "tool" for e in ev)
     assert [r["_provider"] for r in c.fake.requests] == ["groq", "gemini"]
 
 

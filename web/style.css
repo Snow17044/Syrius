@@ -684,3 +684,23 @@ body.voice-split #voice .voice-hint { display: none; }
   background: var(--surface-3); color: var(--text-2); border: 1px solid var(--line-2); }
 .code-copy .ic { width: 14px; height: 14px; }
 .code-copy:active { transform: scale(.95); }
+
+/* ---------- Visages animés (mode conversation) ---------- */
+.voice-faces { display: none; gap: 18px; justify-content: center; align-items: flex-end; cursor: pointer; }
+#voice.has-faces .voice-faces { display: flex; }
+/* l'orbe reste en place (même bouton), mais invisible : on touche les visages */
+#voice.has-faces .voice-orb { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.face { display: grid; justify-items: center; gap: 8px; transition: transform .25s var(--ease), opacity .25s; }
+.face svg { width: min(46vw, 190px); height: auto; display: block; }
+#voice.duo .face svg { width: min(38vw, 160px); }
+.face-bg { fill: #07080c; stroke: var(--line-2); stroke-width: .15; }
+.face-px rect { fill: var(--sky); }
+.face-aurora .face-px rect { fill: var(--accent-3); }
+.face-name { font-size: .8rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+.face[data-mode="talk"] { transform: translateY(-4px) scale(1.04); }
+.face[data-mode="talk"] svg { filter: drop-shadow(0 0 14px rgba(145, 210, 255, .35)); }
+.face-aurora[data-mode="talk"] svg { filter: drop-shadow(0 0 14px rgba(242, 184, 216, .35)); }
+#voice.duo .face:not([data-mode="talk"]) { opacity: .85; }
+.face[data-mode="listen"] svg { animation: breathe 2.2s ease-in-out infinite; }
+.voice-aurora { padding: 6px 12px; font-size: .8rem; border-radius: 99px; }
+@media (prefers-reduced-motion: reduce) { .face, .face svg { animation: none !important; transition: none; } }
