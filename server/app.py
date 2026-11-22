@@ -879,6 +879,17 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         atelier.set_space(db.base, info)
         return {"ok": True, "page": info["page"]}
 
+    @app.get("/api/code/aurora-mode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def aurora_mode_get():
+        return {"mode": atelier.get_mode(db.base)}
+
+    @app.put("/api/code/aurora-mode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def aurora_mode_set(body: dict):
+        try:
+            return {"mode": atelier.set_mode(db.base, str(body.get("mode", "")))}
+        except atelier.AtelierError as e:
+            raise HTTPException(400, str(e)) from None
+
     @app.post("/api/code/atelier/test-start", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_test_start():
         """Essaie de démarrer l'atelier sur GitHub tout de suite (sans projet : il s'arrête aussitôt) et dit pourquoi

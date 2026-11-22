@@ -1,7 +1,16 @@
 """Atelier instantané : sites web écrits par Aurora, testés tout de suite dans l'appli (boîte fermée), sans serveur."""
+import pytest
 from server import atelier, coderask, hfspace
 from tests.conftest import H, login, reply
 from tests.test_agent import events_of
+
+
+@pytest.fixture(autouse=True)
+def _mode_atelier(monkeypatch):
+    """Ces tests portent sur l'atelier : Aurora est en mode « toute seule »."""
+    from server import atelier as _a
+    monkeypatch.setattr(_a, "get_mode", lambda base: "atelier")
+
 
 SITE = """RÉSUMÉ: Un compteur.
 ### FICHIER: index.html

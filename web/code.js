@@ -110,7 +110,7 @@
     if (tab === "tableaux") renderDashboards();
     if (tab === "code") renderCodeTab();
     if (tab === "emails") renderEmailTab();
-    if (tab === "code") renderFast();
+    if (tab === "code") { renderFast(); renderMode(); }
     if (tab === "aurore") scrollDown(true);
   }
   document.querySelectorAll("#c-nav button").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
@@ -584,6 +584,24 @@
     el.textContent = !s.configured ? "Pas encore installé." : (FAST_STAGES[s.stage] || `État : ${s.stage || "inconnu"}`);
     if (s.stage === "BUILDING" || s.stage === "RUNNING_BUILDING") setTimeout(renderFast, 20000);
   }
+  // ------------------------------------------------------------------ façon de coder d'Aurora
+  async function renderMode(mode) {
+    if (!mode) { try { mode = (await api("/api/code/aurora-mode")).mode; } catch (_) { return; } }
+    document.querySelectorAll(".c-mode-opt").forEach((b) => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-checked", String(on));
+    });
+  }
+  document.querySelectorAll(".c-mode-opt").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      const r = await api("/api/code/aurora-mode", { method: "PUT", body: JSON.stringify({ mode: b.dataset.mode }) });
+      renderMode(r.mode);
+      $("#c-mode-msg").textContent = r.mode === "termux" ? "✅ Aurora te donnera le code prêt à coller dans Termux."
+        : "✅ Aurora codera et testera toute seule dans son atelier.";
+    } catch (err) { $("#c-mode-msg").textContent = "⚠ " + err.message; }
+  }));
+
   $("#c-start-test")?.addEventListener("click", async () => {
     const b = $("#c-start-test"), out = $("#c-start-status");
     b.disabled = true;

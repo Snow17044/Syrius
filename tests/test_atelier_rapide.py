@@ -18,6 +18,14 @@ sys.path.insert(0, str(ROOT / "selfcode"))
 import atelier as worker  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _mode_atelier(monkeypatch):
+    """Ces tests portent sur l'atelier : Aurora est en mode « toute seule »."""
+    from server import atelier as _a
+    monkeypatch.setattr(_a, "get_mode", lambda base: "atelier")
+
+
+
 def test_cle_de_l_atelier_limitee_a_ses_routes(make_client):
     c = make_client()
     login(c)

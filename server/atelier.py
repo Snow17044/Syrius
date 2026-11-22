@@ -38,6 +38,23 @@ class AtelierError(ValueError):
     pass
 
 
+# ------------------------------------------------------------------ façon de coder d'Aurora (choisie par le propriétaire)
+MODE_KEY = "family_aurora_mode_v1"
+MODES = ("termux", "atelier")  # termux : elle donne le code prêt à coller ; atelier : elle code et teste toute seule
+
+
+def get_mode(base) -> str:
+    m = base.get_secret(MODE_KEY) or "termux"
+    return m if m in MODES else "termux"
+
+
+def set_mode(base, mode: str) -> str:
+    if mode not in MODES:
+        raise AtelierError("mode inconnu")
+    base.set_secret(MODE_KEY, mode)
+    return mode
+
+
 # ------------------------------------------------------------------ atelier rapide (serveur Hugging Face)
 WORKER_KEY = "family_atelier_worker_v1"  # clé propre à l'atelier : ne sert QU'À prendre et rendre les projets
 SPACE_KEY = "family_atelier_space_v1"    # {"space": "pseudo/syrius-atelier", "url": "https://….hf.space"}

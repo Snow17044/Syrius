@@ -1,3 +1,4 @@
+import pytest
 """L'Atelier d'Aurora : elle écrit un programme, le lance et le corrige elle-même jusqu'à ce que les tests passent."""
 import json
 import sys
@@ -15,6 +16,14 @@ from tests.test_family import member_client
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "selfcode"))
 import atelier as worker  # noqa: E402  (selfcode/atelier.py : le côté serveur de GitHub)
+
+
+@pytest.fixture(autouse=True)
+def _mode_atelier(monkeypatch):
+    """Ces tests portent sur l'atelier : Aurora est en mode « toute seule »."""
+    from server import atelier as _a
+    monkeypatch.setattr(_a, "get_mode", lambda base: "atelier")
+
 
 
 def names(tools):
@@ -65,7 +74,7 @@ def test_limites_et_refus(make_db):
 # --------------------------------------------------------------- Aurora et ses outils
 def test_outils_reserves_a_aurora():
     cfg = Config()
-    assert {"run_code_project", "check_code_project"} <= names(build_tools(cfg, {}, "aurore"))
+    assert {"run_code_project", "check_code_project"} <= names(build_tools(cfg, {"aurora_mode": "atelier"}, "aurore"))
     assert not {"run_code_project", "check_code_project"} & names(build_tools(cfg, {}))  # pas chez Nova
     aurore = (ROOT / "server" / "aurore.md").read_text(encoding="utf-8")
     assert "run_code_project" in aurore and "Termux" in aurore

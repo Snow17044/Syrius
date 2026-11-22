@@ -1,4 +1,5 @@
 """Dans une même discussion, un nouveau projet remplace l'ancien : l'ancien est annulé, le nouveau démarre tout de suite."""
+import pytest
 import json
 import sys
 from pathlib import Path
@@ -10,6 +11,14 @@ from tests.test_agent import events_of
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "selfcode"))
 import atelier as worker  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _mode_atelier(monkeypatch):
+    """Ces tests portent sur l'atelier : Aurora est en mode « toute seule »."""
+    from server import atelier as _a
+    monkeypatch.setattr(_a, "get_mode", lambda base: "atelier")
+
 
 
 def test_meme_discussion_remplace_autre_discussion_non(make_db):

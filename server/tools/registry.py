@@ -324,7 +324,9 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
         tools = [t for t in BASE_TOOLS if t["function"]["name"] in ("get_current_time", "show_diagram")]
         tools += [SHOW_DASHBOARD_TOOL, USE_SKILL_TOOL]
         if family.is_owner():
-            tools += [BUILD_WEB_TOOL, RUN_PROJECT_TOOL, CHECK_PROJECT_TOOL, PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
+            if settings.get("aurora_mode", "termux") == "atelier":  # mode Termux : pas d'atelier, du code à coller
+                tools += [BUILD_WEB_TOOL, RUN_PROJECT_TOOL]
+            tools += [CHECK_PROJECT_TOOL, PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
         if family.email_allowed(cfg):
             tools += EMAIL_TOOLS
         if settings.get("internet", True):
@@ -579,6 +581,11 @@ class ToolExecutor:
             when = "Elle démarre maintenant" if started else "Elle est vérifiée toutes les 15 minutes (GitHub est parfois en retard, jusqu'à 1 h)"
             return (f"Demande {item['id']} envoyée à l'IA programmeuse. {when} ; "
                     "le propriétaire verra la proposition dans l'onglet Code de Syrius Code."), False, None
+
+        if name in ("build_web_page", "run_code_project") and \
+                atelier.get_mode(getattr(self.db, "base", self.db)) == "termux":
+            return ("Mode Termux : pas d'atelier. Donne le code prêt à coller dans Termux (un seul bloc bash qui "
+                    "installe, crée les fichiers et lance)."), True, None
 
         if name == "build_web_page":
             if not family.is_owner() or ctx.get("profile") != "aurore":

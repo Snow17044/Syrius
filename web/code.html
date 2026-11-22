@@ -125,6 +125,17 @@
           <div id="c-code-starters" class="c-chips"></div>
 
           <div class="c-card c-site">
+            <strong>Comment Aurora code</strong>
+            <div class="c-mode" role="radiogroup" aria-label="Façon de coder d'Aurora">
+              <button type="button" class="c-mode-opt" data-mode="termux" role="radio" aria-checked="false">
+                <b>Pour Termux</b><span>Elle te donne un seul bloc à coller : installation, fichiers complets, lancement.</span></button>
+              <button type="button" class="c-mode-opt" data-mode="atelier" role="radio" aria-checked="false">
+                <b>Toute seule (atelier)</b><span>Elle écrit, lance et teste elle-même, puis te montre le résultat.</span></button>
+            </div>
+            <p id="c-mode-msg" class="small muted"></p>
+          </div>
+
+          <div class="c-card c-site">
             <strong>Démarrage de l'atelier sur GitHub</strong>
             <p class="small muted">Les sites web se font tout de suite dans l'appli (atelier instantané). Les programmes Python et
               Node.js tournent sur GitHub : avec la clé GITHUB_DISPATCH_TOKEN, ils démarrent en moins d'une minute.</p>
