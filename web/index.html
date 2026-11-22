@@ -25,6 +25,7 @@
   <script src="/static/model3d.js" defer></script>
   <script src="/static/markdown.js" defer></script>
   <script src="/static/local.js" defer></script>
+  <script src="/static/faces.js" defer></script>
   <script src="/static/voice.js" defer></script>
   <script src="/static/app.js" defer></script>
   <script src="/static/journal.js" defer></script>
@@ -155,10 +156,12 @@
   <section id="voice" class="hidden" aria-label="Conversation vocale" data-phase="">
     <header class="voice-head">
       <div class="voice-tag"><span class="live-dot"></span><span>Conversation en direct</span></div>
+      <button type="button" id="voice-aurora" class="ghost voice-aurora">Inviter Aurora</button>
       <button id="voice-close" class="icon-btn voice-close" aria-label="Terminer la conversation" data-icon="close"></button>
     </header>
     <div class="voice-body">
       <div class="voice-core">
+        <div id="voice-faces" class="voice-faces" aria-label="Visages de Nova et Aurora"></div>
         <button id="voice-orb" class="voice-orb" aria-label="Couper la parole ou reprendre"><span></span><i></i><i></i></button>
         <p id="voice-status" class="voice-status"></p>
         <p id="voice-heard" class="voice-heard"></p>
@@ -166,7 +169,7 @@
       </div>
       <div id="voice-stage" class="voice-stage" aria-live="polite"></div>
     </div>
-    <p class="voice-hint">Dites « stop » ou « merci Syrius » pour terminer · touchez l'orbe pour couper la parole</p>
+    <p class="voice-hint">Dis « stop » ou « merci Syrius » pour terminer · touche un visage pour couper la parole</p>
   </section>
 
   <!-- Studio 3D -->
@@ -417,7 +420,8 @@
       <div id="voice-box" class="set-card hidden">
         <h4 data-icon="wave"><span>Voix de Syrius</span></h4>
         <p id="tts-status" class="small"></p>
-        <label>Voix <select id="voice-select"></select></label>
+        <label>Voix de Nova <select id="voice-select"></select></label>
+        <label id="voice-aurora-row" class="hidden">Voix d'Aurora (discussions à plusieurs) <select id="voice-aurora-select"></select></label>
         <label>Vitesse <input id="voice-rate" type="range" min="0.7" max="1.5" step="0.05" value="1.05"></label>
         <div class="local-actions">
           <button type="button" id="voice-test" class="ghost" data-icon="play"><span>Écouter</span></button>

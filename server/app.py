@@ -33,7 +33,7 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
-    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "uchronie.js": "text/javascript", "uchronie.css": "text/css", "uchronie-monde.json": "application/json", "code.css": "text/css", "reset.js": "text/javascript",
+    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "uchronie.js": "text/javascript", "uchronie.css": "text/css", "uchronie-monde.json": "application/json", "code.css": "text/css", "reset.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -106,6 +106,7 @@ class MessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     location: dict | None = None  # position approximative envoyée par l'app (jamais enregistrée)
     voice: bool = False  # mode conversation : la réponse sera lue à voix haute
+    faces: bool = False  # visages animés : chaque IA commence par son expression (« [rieur] … »)
     image: str | None = Field(default=None, max_length=3_400_000)  # photo (data URL), jamais enregistrée
 
 
@@ -1146,7 +1147,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                 loc = round_location(body.location) if settings.get("location", True) else None
                 nova_failed = False
                 if target != "aurora":  # « Aurora, … » : seule Aurora répond
-                    async for event in agent.chat(cid, body.text, loc, voice=body.voice, image=image, group=with_aurora):
+                    async for event in agent.chat(cid, body.text, loc, voice=body.voice, image=image, group=with_aurora,
+                                                  faces=body.faces):
                         if event.get("type") == "error":
                             nova_failed = True
                         if event.get("type") != "done" or not with_aurora or target == "nova":
@@ -1156,7 +1158,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                     db.add_messages(cid, [{"role": "user", "content": [{"type": "text", "text": text}]}])
                 if with_aurora and target != "nova" and not nova_failed:
                     async for event in group.aurora_reply(agent.llm, db, cid, settings.get("user_name", ""), body.voice,
-                                                          db.base, getattr(request.state, "uid", "")):
+                                                          db.base, getattr(request.state, "uid", ""), faces=body.faces):
                         yield sse(event)
                     yield sse({"type": "done"})
                 if first and conv["title"] == "Nouvelle discussion" and db.get_messages(cid):

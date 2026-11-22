@@ -654,10 +654,13 @@ function addReportButton(view) {
   view.actions.append(btn);
 }
 
+// « [rieur] … » : l'expression du visage (mode conversation) ne s'affiche jamais dans le texte.
+const withoutExpression = (t) => (window.SyriusFaces ? window.SyriusFaces.split(t).text : String(t || ""));
+
 function renderText(view, role) {
   if (role === "user") view.body.textContent = view.text;
   else {
-    window.SyriusMarkdown.render(view.body, view.text);
+    window.SyriusMarkdown.render(view.body, withoutExpression(view.text));
     view.body.querySelectorAll("pre").forEach(addCopyButton);
   }
 }
@@ -1333,7 +1336,7 @@ async function sendMessage(text) {
   };
   typingDots(view);
   scrollDown(true);
-  let replies = [];  // Nova puis Aurora : réponses lues à voix haute à la fin
+  let replies = [];  // Nova puis Aurora : [{ who, text, expr }], lues chacune avec sa voix à la fin
 
   setStreaming(true);
   state.controller = new AbortController();
@@ -1350,7 +1353,7 @@ async function sendMessage(text) {
       method: "POST", credentials: "same-origin", signal: state.controller.signal,
       headers: { "Content-Type": "application/json", "X-Syrius": "1" },
       body: JSON.stringify({ text, location: state.settings.location === false ? null : state.location,
-        voice: !!window.SyriusVoice?.active, image: photo || undefined }),
+        voice: !!window.SyriusVoice?.active, faces: !!window.SyriusVoice?.active, image: photo || undefined }),
     });
     if (res.status === 401) { showLogin(); return; }
     if (!res.ok) {
@@ -1375,7 +1378,7 @@ async function sendMessage(text) {
         if (ev.type === "speaker") {  // discussion à plusieurs : Aurora prend la parole
           renderText(view, "assistant");
           if (!view.text && !view.tools.childElementCount) view.wrap.remove();  // « Aurora, … » : Nova n'a rien dit
-          else replies.push(view.text);
+          else replies.push(replyOf(view));
           view = addMessage("assistant", "", ev.who);
           typingDots(view);
           scrollDown(true);
@@ -1411,9 +1414,10 @@ async function sendMessage(text) {
       return;
     }
     if (gotError && !view.text && !replies.length) $("#input").value = text; // on rend le message pour réessayer
-    if (view.text) replies.push(view.speaker === "aurora" && replies.length ? "Aurora : " + view.text : view.text);
-    state.lastReply = replies.join("\n\n");
-    if (!gotError && state.lastReply && state.settings.voice_reply && !window.SyriusVoice?.active) speak(state.lastReply);
+    if (view.text) replies.push(replyOf(view));
+    state.lastReplies = replies;
+    state.lastReply = replies.map((r) => (r.who === "aurora" && replies.length > 1 ? "Aurora : " : "") + r.text).join("\n\n");
+    if (!gotError && replies.length && state.settings.voice_reply && !window.SyriusVoice?.active) speakAll(replies);
     loadConversations();
   }
 }
@@ -1869,6 +1873,20 @@ function refreshVoiceBox() {
     o.textContent = "Aucune voix française trouvée";
     sel.appendChild(o);
   }
+  // Voix d'Aurora (application récente) : une voix différente de celle de Nova
+  const duo = appFeatures().includes("voices2") && (v.voices || []).length > 1;
+  $("#voice-aurora-row").classList.toggle("hidden", !duo);
+  if (duo) {
+    const asel = $("#voice-aurora-select");
+    asel.replaceChildren();
+    for (const x of v.voices) {
+      const o = document.createElement("option");
+      o.value = x.name;
+      o.textContent = x.label;
+      if (x.name === v.aurora) o.selected = true;
+      asel.appendChild(o);
+    }
+  }
   $("#voice-rate").value = v.rate || 1.05;
   $("#voice-google").classList.toggle("hidden", !!v.google);
   $("#tts-status").textContent = v.google
@@ -1877,6 +1895,11 @@ function refreshVoiceBox() {
       "Installe « Synthèse vocale Google » (gratuit) pour une voix bien plus naturelle.";
 }
 $("#voice-select").addEventListener("change", (e) => { if (Native) Native.ttsSetVoice(e.target.value); });
+$("#voice-aurora-select").addEventListener("change", (e) => {
+  if (!Native || typeof Native.ttsSetAuroraVoice !== "function") return;
+  Native.ttsSetAuroraVoice(e.target.value);
+  Native.speakAs("Bonjour, je suis Aurora. Voilà ma voix.", "aurora");
+});
 $("#voice-rate").addEventListener("change", (e) => { if (Native) Native.ttsSetRate(parseFloat(e.target.value)); });
 $("#voice-test").addEventListener("click", () => {
   if (Native) Native.speak("Bonjour, je suis Nova. Voilà ma voix. Dis-moi si elle te plaît.");
@@ -1914,6 +1937,12 @@ $("#briefing-time").addEventListener("change", saveBriefing);
 
 // Pour le mode conversation : envoie une phrase et renvoie la réponse complète.
 window.SyriusChat = {
+  // Mode conversation à plusieurs : chaque réponse avec qui parle et son expression.
+  async askAll(text) {
+    state.lastReplies = [];
+    await sendMessage(text);
+    return state.lastReplies || [];
+  },
   async ask(text) {
     state.lastReply = "";
     await sendMessage(text);
@@ -1939,8 +1968,44 @@ function bestFrenchVoice() {
     + (/^fr[-_]fr/i.test(v.lang) ? 2 : 0) + (v.localService ? 0 : 1);
   return fr.sort((a, b) => score(b) - score(a))[0] || null;
 }
+function replyOf(view) {
+  const { expr, text } = window.SyriusFaces ? window.SyriusFaces.split(view.text) : { expr: "", text: view.text };
+  return { who: view.speaker === "aurora" ? "aurora" : "nova", text, expr };
+}
+
+// Chacun sa voix : Nova = la voix choisie, Aurora = une autre voix (application Android récente), sinon un ton différent.
+function speakAs(text, who, onEnd) {
+  const clean = spokenText(withoutExpression(text));
+  if (!clean) { if (onEnd) onEnd(); return; }
+  if (Native) {
+    window.syriusOnSpeakEnd = onEnd || null;
+    if (who === "aurora" && typeof Native.speakAs === "function") Native.speakAs(clean, "aurora");
+    else Native.speak(clean);
+    if (onEnd && !appFeatures().includes("speakend")) setTimeout(onEnd, 1500 + clean.length * 75);
+    return;
+  }
+  if (!("speechSynthesis" in window)) { if (onEnd) onEnd(); return; }
+  const u = new SpeechSynthesisUtterance(clean);
+  u.lang = "fr-FR";
+  u.rate = 1.05;
+  const fr = speechSynthesis.getVoices().filter((v) => v.lang && /^fr/i.test(v.lang));
+  const nova = bestFrenchVoice();
+  const voice = who === "aurora" ? (fr.find((v) => v !== nova) || nova) : nova;
+  if (voice) u.voice = voice;
+  u.pitch = who === "aurora" ? 1.15 : 0.92;
+  u.onend = u.onerror = () => { if (onEnd) onEnd(); };
+  speechSynthesis.speak(u);
+}
+
+// Lit les réponses l'une après l'autre (Nova puis Aurora), sans se couper la parole.
+function speakAll(list) {
+  if ("speechSynthesis" in window && !Native) speechSynthesis.cancel();
+  const next = (i) => { if (i < list.length) speakAs(list[i].text, list[i].who, () => next(i + 1)); };
+  next(0);
+}
+
 function speak(text) {
-  const clean = spokenText(text);
+  const clean = spokenText(withoutExpression(text));
   if (!clean) return;
   if (Native) { Native.speak(clean); return; }
   if (!("speechSynthesis" in window)) return;

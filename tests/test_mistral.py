@@ -83,7 +83,8 @@ def test_limite_atteinte_bascule_sur_le_modele_suivant(cfg, make_db):
     login(c)
     cid = c.post("/api/conversations", headers=H).json()["id"]
     r = c.post(f"/api/conversations/{cid}/messages", json={"text": "salut"}, headers=H)
-    assert "Je passe sur" in r.text and "secours." in r.text
+    # le relais se fait en silence : l'utilisateur ne voit plus « Je passe sur … »
+    assert "Je passe sur" not in r.text and "limite" not in r.text and "secours." in r.text
     assert [q["_provider"] for q in fake.requests] == ["groq", "groq2"]
 
 

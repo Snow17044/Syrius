@@ -13,7 +13,7 @@ from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_
 from . import skills
 from .tools import dashboard, diagram, model3d
 from . import family, vision
-from .group import NOVA_NOTE
+from .group import FACES_NOTE, NOVA_NOTE
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, select_tools
 
 log = logging.getLogger("syrius.agent")
@@ -233,7 +233,8 @@ class Agent:
 
     async def chat(self, conversation_id: str, user_text: str,
                    location: dict | None = None, voice: bool = False,
-                   image: str | None = None, profile: str = "syrius", group: bool = False) -> AsyncIterator[dict]:
+                   image: str | None = None, profile: str = "syrius", group: bool = False,
+                   faces: bool = False) -> AsyncIterator[dict]:
         if not self.llm.providers:
             yield {"type": "error", "message": "Aucun cerveau configuré : ajoute une clé GROQ_API_KEY "
                                                "ou GEMINI_API_KEY (voir README)."}
@@ -284,6 +285,8 @@ class Agent:
                       else build_system(settings, self.db.list_memories()))  # les souvenirs peuvent changer
             if group:
                 system += "\n\n" + NOVA_NOTE
+            if faces:
+                system += "\n\n" + FACES_NOTE
             if voice:
                 system += ("\n\nMODE CONVERSATION VOCALE : ta réponse sera lue à voix haute. Réponds en 1 à 3 "
                            "phrases naturelles à l'oral, sans liste, sans tableau, sans Markdown ni emoji. "
@@ -329,9 +332,8 @@ class Agent:
                         continue
                     shrink = False
                     providers = providers[1:]  # limite atteinte : on passe au cerveau suivant
-                    if providers:
-                        yield {"type": "tool", "name": "switch",
-                               "label": f"{e} Je passe sur {providers[0].label}."}
+                    if providers:  # en silence : l'utilisateur ne voit pas le changement de modèle (journal seulement)
+                        log.info("Relais : %s indisponible, %s prend la suite", provider.name, providers[0].name)
                 except LLMError as e:
                     last_error = e
                     # Le modèle a appelé un outil inexistant ou mal formé : on réessaie une fois.
@@ -343,8 +345,7 @@ class Agent:
                     if image and not state["streamed"] and not state["calls"] and len(providers) > 1:
                         # Photo refusée par ce cerveau (format, taille, outils…) : une autre IA qui voit essaie.
                         providers = providers[1:]
-                        yield {"type": "tool", "name": "switch",
-                               "label": f"{e} Je passe sur {providers[0].label}."}
+                        log.info("Relais photo : %s refuse, %s prend la suite", provider.name, providers[0].name)
                         continue
                     break
             if last_error is not None:

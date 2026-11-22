@@ -140,7 +140,7 @@ def test_index_html_sans_script_inline():
 
 
 def test_js_n_utilise_jamais_innerhtml():
-    for f in ("web/app.js", "web/markdown.js", "web/sw.js", "web/journal.js", "web/debate.js"):
+    for f in ("web/app.js", "web/markdown.js", "web/sw.js", "web/journal.js", "web/debate.js", "web/faces.js"):
         src = open(f, encoding="utf-8").read()
         for danger in ("innerHTML", "outerHTML", "insertAdjacentHTML", "eval(", "new Function", "document.write"):
             assert danger not in src.replace("sans jamais utiliser innerHTML", ""), (f, danger)
