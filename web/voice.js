@@ -140,7 +140,7 @@
       if (!on) break;
       if (!text) {
         silences += 1;
-        if (silences >= 3) { setPhase("pause", "En pause — touchez l'orbe pour reprendre."); return; }
+        if (silences >= 3) { setPhase("pause", "En pause — touche un visage pour reprendre."); return; }
         continue;
       }
       silences = 0;
