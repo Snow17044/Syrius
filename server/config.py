@@ -106,6 +106,9 @@ class Config:
     # Facultatif : jeton GitHub « Actions : Read and write » (ce dépôt seulement) pour démarrer l'IA programmeuse tout
     # de suite au lieu d'attendre le passage horaire de GitHub.
     github_dispatch_token: str = field(default_factory=lambda: _env("GITHUB_DISPATCH_TOKEN"))
+    # Publication des sites d'Aurora sur Vercel (bouton « Publier sur Internet », propriétaire seulement)
+    vercel_token: str = field(default_factory=lambda: _env("VERCEL_TOKEN"))
+    vercel_team_id: str = field(default_factory=lambda: _env("VERCEL_TEAM_ID"))
     github_repo: str = field(default_factory=lambda: _env("SYRIUS_GITHUB_REPO", "Snow17044/Syrius"))
     # Cookies "Secure" : obligatoire en production (HTTPS). Désactivable seulement en local.
     cookie_secure: bool = field(default_factory=lambda: _bool("SYRIUS_COOKIE_SECURE", True))

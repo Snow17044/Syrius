@@ -144,6 +144,15 @@ def note(base, pid: str, text: str) -> None:
             return
 
 
+def set_published(base, pid: str, url: str) -> None:
+    data = _load(base)
+    for d in data:
+        if d.get("id") == pid and re.fullmatch(r"https://[a-z0-9.-]+\.vercel\.app", url):
+            d["published"] = url
+            _save(base, data)
+            return
+
+
 def take_next(base) -> dict | None:
     """Pour le serveur de GitHub : le plus ancien projet en attente (marqué « en cours »)."""
     data = _load(base)

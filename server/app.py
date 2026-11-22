@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import atelier, group, journal, mailsort, transcribe, vision
+from . import atelier, group, journal, mailsort, publish, transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -915,6 +915,19 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                                summary=got["summary"] or ("Écriture en cours…" if todo else "Site écrit : test en cours…"))
         return atelier.public(atelier.get(db.base, pid))
 
+    @app.post("/api/code/atelier/{pid}/publish", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_publish(pid: str):
+        """Le propriétaire publie un site terminé sur son Vercel (jamais Aurora toute seule)."""
+        item = atelier.get(db.base, pid[:20])
+        if not item:
+            raise HTTPException(404, "Projet introuvable")
+        try:
+            res = await asyncio.to_thread(publish.publish, item, cfg.vercel_token, cfg.vercel_team_id)
+        except publish.PublishError as e:
+            raise HTTPException(400, str(e)) from None
+        atelier.set_published(db.base, pid, res["url"])
+        return res
+
     @app.post("/api/code/atelier/{pid}/result", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_instant_result(pid: str, body: InstantResultBody):
         item = atelier.get(db.base, pid[:20])
@@ -933,7 +946,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         item = atelier.get(db.base, pid[:20])
         if not item:
             raise HTTPException(404, "Projet introuvable")
-        return atelier.public(item)
+        return {**atelier.public(item), "can_publish": bool(cfg.vercel_token)}
 
     @app.get("/api/code/atelier/{pid}/capture", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_capture(pid: str):
