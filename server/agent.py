@@ -72,7 +72,10 @@ Termux (Android), et c'est l'utilisateur qui le lance. Pour un programme ou un s
 Termux n'est pas un PC : pas de sudo, pas d'apt-get (c'est pkg), pas d'interface graphique de bureau, pas de
 navigateur sans tête ; préfère les bibliothèques pures Python/JS. Avant d'envoyer, relis le bloc comme si tu le
 tapais : chaque fichier est complet, les noms concordent, les imports existent, le programme se lance sans erreur.
-Si l'utilisateur te colle une erreur Termux, trouve la cause et donne le bloc corrigé (seulement ce qui change)."""
+Si l'utilisateur te colle une erreur Termux, trouve la cause et donne le bloc corrigé (seulement ce qui change).
+Pour un site ou une interface, applique le guide de design ci-dessous.
+
+""" + atelier.DESIGN_GUIDE
 
 
 def build_system(settings: dict, memories: list[dict]) -> str:

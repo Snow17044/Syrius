@@ -328,6 +328,29 @@ def for_aurora(item: dict) -> str:
 MAX_INSTANT_ATTEMPTS = 4   # tests + corrections
 MAX_INSTANT_STEPS = 10     # passages d'écriture d'un gros site (fichiers écrits en plusieurs fois)
 PROMPT_FILES_CHARS = 22_000  # contenu des fichiers renvoyé à l'IA à chaque passage (le reste : seulement le nom)
+# Guide de design d'Aurora : pour TOUS ses sites (atelier instantané, atelier GitHub, mode Termux).
+DESIGN_GUIDE = """DESIGN (aussi important que le code : le site doit avoir l'air fait par une agence) :
+- Identité : choisis une palette adaptée au sujet (1 couleur principale, 1 accent, des neutres), en variables CSS
+  (:root { --bg, --surface, --text, --muted, --primary, --accent, --radius, --shadow }). Jamais les couleurs ni la
+  police par défaut du navigateur (Times, liens bleus soulignés).
+- Typographie : police moderne (font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif ; ou une
+  police Google adaptée au thème) ; texte 16-18 px, interligne 1.5-1.7, lignes de 65 caractères maximum ; titres gras,
+  serrés (letter-spacing négatif), échelle nette (h1 clamp(2rem, 6vw, 3.5rem), h2 ≈ 1.75rem, h3 ≈ 1.25rem).
+- Espace : échelle de 8 px (8, 16, 24, 32, 48, 64, 96) ; sections bien aérées (padding 64-96 px sur grand écran,
+  40-56 px sur téléphone) ; conteneur centré max-width ~1100 px avec marges de 16-24 px.
+- Mise en page : mobile d'abord, grid/flex, aucun débordement horizontal ; un vrai en-tête (logo/nom + navigation) ;
+  une section d'accueil forte (titre, sous-titre, bouton d'action) ; puis des sections claires (cartes, colonnes).
+- Composants : boutons d'au moins 44 px de haut, coins arrondis cohérents (10-16 px), un bouton principal plein et un
+  secondaire discret, états survol / focus visible / appui ; cartes avec bordure fine et ombre douce ; champs avec
+  étiquette et focus visible.
+- Lisibilité : contraste d'au moins 4.5:1 pour le texte (WCAG AA) ; jamais de texte gris clair sur blanc.
+- Images : pas d'image externe qui peut disparaître ; utilise du SVG en ligne, des dégradés, des formes CSS ou des
+  emoji pour illustrer ; toute image a un texte alternatif (alt).
+- Finitions : thème sombre automatique (@media (prefers-color-scheme: dark)) si c'est cohérent, transitions douces de
+  150-250 ms (et rien si prefers-reduced-motion), favicon (emoji en SVG), pied de page soigné, alignements parfaits.
+Le banc d'essai vérifie aussi le design (texte trop petit, boutons trop petits, contraste faible, police par défaut,
+pas de titre h1, pas de balise viewport) : ce sont des erreurs à corriger comme les autres."""
+
 WEB_SYSTEM = """Tu es Aurora, une développeuse web experte, soignée et exigeante. Tu fais un site STATIQUE (HTML, CSS,
 JavaScript, sans serveur ni étape de compilation), beau, moderne et adapté au téléphone (responsive). Il est ouvert
 dans un vrai navigateur puis testé automatiquement ; tu reçois les erreurs et tu corriges.
@@ -365,7 +388,9 @@ Règles :
   d'abord index.html, style.css, script.js et tests.js, puis termine par une ligne
   SUITE: autre-page.html, autre.css, …
   qui liste les fichiers qu'il te reste à écrire : on te les redemandera, en plusieurs fois s'il le faut. Pas de ligne
-  SUITE quand le site est complet. Les pages se relient par des liens relatifs et partagent style.css."""
+  SUITE quand le site est complet. Les pages se relient par des liens relatifs et partagent style.css.
+
+""" + DESIGN_GUIDE
 
 _FILE_RX = re.compile(r"^#{2,4}\s*FICHIER\s*:\s*`?([^\n`]+?)`?\s*\n+```[^\n]*\n(.*?)\n```", re.S | re.M)
 _SUMMARY_RX = re.compile(r"^\s*\**R[ÉE]SUM[ÉE]\**\s*:\s*\**\s*(.*)$", re.I | re.M)
