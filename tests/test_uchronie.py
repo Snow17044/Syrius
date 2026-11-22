@@ -200,3 +200,15 @@ def test_site_a_part_limite_par_joueur_et_par_jour():
     c.app.state.quota.per_day = 100
     assert c.post("/api/uchronie/turn", json={"state": started()}, headers=other).status_code == 400
     assert c.get("/api/uchronie/config", headers=other).json()["left"] == 2
+
+
+def test_chaque_empire_liste_ses_territoires():
+    data = {"nations": [
+        {"id": "fra", "name": "France", "territories": ["fra", "dza", "sen", "mdg", "inconnu"]},
+        {"id": "sun", "name": "Union soviétique", "territories": ["rus", "kaz", "ukr"]},  # id ≠ code de territoire
+    ], "owners": {"dza": "gbr", "ind": "gbr"}}
+    s = uchronie.build_start(1936, "", data)
+    assert s["owners"]["dza"] == "fra" and s["owners"]["mdg"] == "fra"  # la liste de l'empire l'emporte
+    assert s["owners"]["kaz"] == "sun" and s["owners"]["rus"] == "sun"
+    assert s["owners"]["ind"] == "gbr"  # l'ancien format marche encore
+    assert "territories" in uchronie.start_messages(1936, "")[0]["content"]

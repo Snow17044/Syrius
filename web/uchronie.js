@@ -166,7 +166,8 @@
       return { nid, parts, area: parts.reduce((s, t) => s + t.area, 0) };
     }).filter((it) => it.area >= min).sort((a, b) => b.area - a.area);
     for (const { nid, parts, area } of items) {
-      const core = parts.reduce((a, b) => (b.area > a.area ? b : a));
+      // Le nom va sur le pays d'origine (la France en France, pas sur Madagascar), sinon sur la plus grande terre.
+      const core = parts.find((t) => t.id === nid) || parts.reduce((a, b) => (b.area > a.area ? b : a));
       const big = area > 600;
       const pt = G.map.latLngToLayerPoint([core.c[1], core.c[0]]);
       const w = nation(nid).name.length * (big ? 9 : 6.5) / 2 + 4, h = big ? 10 : 8;
