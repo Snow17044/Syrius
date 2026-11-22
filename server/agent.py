@@ -12,7 +12,7 @@ from .db import Database
 from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config, strength
 from . import skills
 from .tools import dashboard, diagram, model3d
-from . import family, vision
+from . import atelier, family, vision
 from .group import FACES_NOTE, NOVA_NOTE
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, select_tools
 
@@ -49,9 +49,33 @@ def build_aurore_system(settings: dict, skills_text: str = "") -> str:
         parts.append(f"Prénom de l'utilisateur : {settings['user_name']}")
     if settings.get("internet", True) is False:
         parts.append("Internet est DÉSACTIVÉ dans les réglages : tu n'as pas les outils web_search / web_read.")
+    if settings.get("aurora_mode", "termux") == "termux":
+        parts.append(TERMUX_MODE)
+    else:
+        parts.append("MODE ATELIER (choisi par l'utilisateur) : pour un programme ou un site qui doit marcher, utilise "
+                     "l'atelier (build_web_page pour un site statique, run_code_project pour le reste).")
     if skills_text:
         parts.append(skills_text)
     return "\n\n".join(parts)
+
+
+TERMUX_MODE = """MODE TERMUX (choisi par l'utilisateur, prioritaire sur les consignes d'atelier plus haut) : tu n'as PAS d'atelier. Tu donnes le code prêt à copier-coller dans
+Termux (Android), et c'est l'utilisateur qui le lance. Pour un programme ou un site :
+1. Une phrase sur ce que tu vas faire, puis UN SEUL bloc ```bash à copier en une fois, qui fait TOUT :
+   - installe ce qu'il faut (pkg install -y python nodejs… ; pip install … ; npm install …) ;
+   - crée le dossier (mkdir -p ~/nom-du-projet && cd ~/nom-du-projet) ;
+   - crée CHAQUE fichier en entier avec cat > fichier <<'EOF' … EOF (guillemets autour de EOF : le contenu est
+     copié tel quel ; jamais de « … » ni de « à compléter ») ;
+   - lance le programme (python main.py, node app.js) ; pour un site : python -m http.server 8080, puis dis d'ouvrir
+     http://localhost:8080 dans le navigateur du téléphone.
+2. Ensuite, en quelques lignes : comment s'en servir, et quoi faire en cas d'erreur courante.
+Termux n'est pas un PC : pas de sudo, pas d'apt-get (c'est pkg), pas d'interface graphique de bureau, pas de
+navigateur sans tête ; préfère les bibliothèques pures Python/JS. Avant d'envoyer, relis le bloc comme si tu le
+tapais : chaque fichier est complet, les noms concordent, les imports existent, le programme se lance sans erreur.
+Si l'utilisateur te colle une erreur Termux, trouve la cause et donne le bloc corrigé (seulement ce qui change).
+Pour un site ou une interface, applique le guide de design ci-dessous.
+
+""" + atelier.DESIGN_GUIDE
 
 
 def build_system(settings: dict, memories: list[dict]) -> str:
@@ -256,6 +280,7 @@ class Agent:
         to_save = [history[-1]]
         aurore = profile == "aurore"
         base_db = getattr(self.db, "base", self.db)
+        aurora_mode = atelier.get_mode(base_db) if aurore else ""  # termux : code à coller ; atelier : elle teste seule
         preferred = "" if aurore else settings.get("brain", "")
         if preferred == "codestral":
             preferred = ""  # l'IA spécialisée code appartient à Aurora (Syrius Code), plus à Syrius
@@ -289,7 +314,7 @@ class Agent:
         site_calls = 0
 
         for _step in range(MAX_STEPS):
-            system = (build_aurore_system(settings, skills.prompt_list(base_db)) if aurore
+            system = (build_aurore_system({**settings, "aurora_mode": aurora_mode}, skills.prompt_list(base_db)) if aurore
                       else build_system(settings, self.db.list_memories()))  # les souvenirs peuvent changer
             if group:
                 system += "\n\n" + NOVA_NOTE
@@ -302,7 +327,8 @@ class Agent:
             msgs = to_openai(history, system)
             if image:
                 vision.attach(msgs, image)
-            body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, settings, profile), tool_context, keep_all),
+            body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, {**settings, "aurora_mode": aurora_mode},
+                                                                         profile), tool_context, keep_all),
                     "max_tokens": AURORA_TOKENS if aurore else MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None
@@ -404,7 +430,7 @@ class Agent:
                 else:
                     result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
                                                                          {"location": location, "untrusted": untrusted_seen,
-                                                                          "profile": profile})
+                                                                          "profile": profile, "conv": conversation_id})
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:

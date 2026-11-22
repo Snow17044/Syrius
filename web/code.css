@@ -198,3 +198,10 @@
 .c-atelier-publish { margin: 10px 0 2px; display: grid; gap: 6px; }
 .c-atelier-publish button { width: 100%; }
 .c-atelier-online { color: var(--mint); font-weight: 600; overflow-wrap: anywhere; }
+.c-atelier-state.cancelled { color: var(--muted); text-decoration: line-through; }
+/* Façon de coder d'Aurora */
+.c-mode { display: grid; gap: 8px; margin-top: 8px; }
+.c-mode-opt { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 14px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text); font: inherit; }
+.c-mode-opt span { font-size: .84rem; color: var(--text-2); }
+.c-mode-opt.on { border-color: var(--accent); background: var(--grad-soft); box-shadow: 0 0 0 1px var(--accent) inset; }

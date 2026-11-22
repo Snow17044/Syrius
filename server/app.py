@@ -846,10 +846,10 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/training/worker/atelier-report", dependencies=[Depends(require_atelier_worker)])
     async def atelier_report(body: dict):
         try:
-            atelier.report(db.base, body)
+            cancelled = atelier.report(db.base, body)
         except atelier.AtelierError as e:
             raise HTTPException(400, str(e)) from None
-        return {"ok": True}
+        return {"ok": True, "cancelled": cancelled}
 
     @app.get("/api/code/atelier", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_list():
@@ -878,6 +878,17 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             raise HTTPException(400, str(e)) from None
         atelier.set_space(db.base, info)
         return {"ok": True, "page": info["page"]}
+
+    @app.get("/api/code/aurora-mode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def aurora_mode_get():
+        return {"mode": atelier.get_mode(db.base)}
+
+    @app.put("/api/code/aurora-mode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def aurora_mode_set(body: dict):
+        try:
+            return {"mode": atelier.set_mode(db.base, str(body.get("mode", "")))}
+        except atelier.AtelierError as e:
+            raise HTTPException(400, str(e)) from None
 
     @app.post("/api/code/atelier/test-start", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_test_start():

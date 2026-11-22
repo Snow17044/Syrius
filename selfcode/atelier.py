@@ -258,13 +258,20 @@ def cmd_next() -> None:
         Path(out).open("a").write(f"go=true\nid={item['id']}\n")
 
 
+class Cancelled(Exception):
+    """Le projet a été remplacé par un nouveau dans la même discussion : on arrête tout de suite."""
+
+
 def report(pid: str, status: str, attempt: int, plan: dict, summary: str, log: str, shot: str = "") -> None:
     try:
-        api("/api/training/worker/atelier-report", {
+        res = api("/api/training/worker/atelier-report", {
             "id": pid, "status": status, "attempt": attempt, "summary": summary, "log": log, "env": plan.get("env", ""),
             "setup": plan.get("setup", ""), "test": plan.get("test", ""), "files": project_files(), "screenshot": shot})
     except (urllib.error.URLError, OSError, ValueError) as e:
         print(f"Avancement non envoyé : {e}")
+        return
+    if isinstance(res, dict) and res.get("cancelled") and status == "running":
+        raise Cancelled()
 
 
 def cmd_work() -> None:
@@ -272,7 +279,14 @@ def cmd_work() -> None:
 
 
 def work(item: dict) -> None:
-    """Écrire → lancer → lire les erreurs → corriger, jusqu'à MAX_ATTEMPTS essais."""
+    """Écrire → lancer → lire les erreurs → corriger, jusqu'à MAX_ATTEMPTS essais (arrêt net si le projet est annulé)."""
+    try:
+        _work(item)
+    except Cancelled:
+        print(f"Projet {item['id']} annulé : remplacé par un nouveau projet.")
+
+
+def _work(item: dict) -> None:
     pid = item["id"]
     shutil.rmtree(PROJ, ignore_errors=True)
     PROJ.mkdir(parents=True)

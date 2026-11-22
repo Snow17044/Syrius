@@ -324,7 +324,9 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
         tools = [t for t in BASE_TOOLS if t["function"]["name"] in ("get_current_time", "show_diagram")]
         tools += [SHOW_DASHBOARD_TOOL, USE_SKILL_TOOL]
         if family.is_owner():
-            tools += [BUILD_WEB_TOOL, RUN_PROJECT_TOOL, CHECK_PROJECT_TOOL, PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
+            if settings.get("aurora_mode", "termux") == "atelier":  # mode Termux : pas d'atelier, du code à coller
+                tools += [BUILD_WEB_TOOL, RUN_PROJECT_TOOL]
+            tools += [CHECK_PROJECT_TOOL, PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
         if family.email_allowed(cfg):
             tools += EMAIL_TOOLS
         if settings.get("internet", True):
@@ -580,6 +582,11 @@ class ToolExecutor:
             return (f"Demande {item['id']} envoyée à l'IA programmeuse. {when} ; "
                     "le propriétaire verra la proposition dans l'onglet Code de Syrius Code."), False, None
 
+        if name in ("build_web_page", "run_code_project") and \
+                atelier.get_mode(getattr(self.db, "base", self.db)) == "termux":
+            return ("Mode Termux : pas d'atelier. Donne le code prêt à coller dans Termux (un seul bloc bash qui "
+                    "installe, crée les fichiers et lance)."), True, None
+
         if name == "build_web_page":
             if not family.is_owner() or ctx.get("profile") != "aurore":
                 return "L'atelier instantané est réservé au propriétaire, dans Syrius Code.", True, None
@@ -588,10 +595,12 @@ class ToolExecutor:
                         "demande-le moi directement."), True, None
             a = _check(args, {"request": str}, ["request"])
             try:
-                item = atelier.add_instant(getattr(self.db, "base", self.db), a["request"])
+                item = atelier.add_instant(getattr(self.db, "base", self.db), a["request"], str(ctx.get("conv") or ""))
             except atelier.AtelierError as e:
                 return str(e), True, None
-            return (f"Projet {item['id']} lancé dans l'atelier instantané : le site s'écrit, s'ouvre et se teste tout de "
+            gone = (f"L'ancien projet ({', '.join(item['replaced'])}) de cette discussion est annulé. "
+                    if item.get("replaced") else "")
+            return (gone + f"Projet {item['id']} lancé dans l'atelier instantané : le site s'écrit, s'ouvre et se teste tout de "
                     "suite dans l'appli (aperçu en direct dans la discussion). Dis-le simplement, sans écrire le code "
                     "toi-même."), False, {"type": "atelier", "id": item["id"]}
 
@@ -610,9 +619,11 @@ class ToolExecutor:
                         "demande-le moi directement."), True, None
             a = _check(args, {"request": str}, ["request"])
             try:
-                item = atelier.add(base, a["request"])
+                item = atelier.add(base, a["request"], str(ctx.get("conv") or ""))
             except atelier.AtelierError as e:
                 return str(e), True, None
+            gone = (f"L'ancien projet ({', '.join(item['replaced'])}) de cette discussion est annulé. "
+                    if item.get("replaced") else "")
             # 1) l'atelier rapide (serveur Hugging Face) : quelques secondes ; 2) sinon GitHub
             started = await asyncio.to_thread(atelier.wake, base)
             if not started:
@@ -624,7 +635,7 @@ class ToolExecutor:
             when = ("L'atelier démarre maintenant (2 à 6 minutes)." if started else
                     "Démarrage immédiat impossible (" + (selfcode.last_dispatch_error or "raison inconnue") +
                     ") : l'atelier le prendra à son prochain passage automatique, jusqu'à 1 h.")
-            return (f"Projet {item['id']} lancé dans l'atelier. {when} Son avancement s'affiche en direct dans la "
+            return (gone + f"Projet {item['id']} lancé dans l'atelier. {when} Son avancement s'affiche en direct dans la "
                     "discussion. Dis-le simplement à l'utilisateur, sans écrire le code toi-même ; quand il te "
                     "demandera le résultat, utilise check_code_project."), False, {"type": "atelier", "id": item["id"]}
 

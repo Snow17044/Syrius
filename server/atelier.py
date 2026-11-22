@@ -28,7 +28,7 @@ MAX_ITEMS = 20
 MAX_FILES = 60
 MAX_FILE_CHARS = 60_000
 MAX_TOTAL_CHARS = 450_000  # gros sites : plusieurs pages, scripts et styles
-STATUSES = ("pending", "running", "done", "failed")
+STATUSES = ("pending", "running", "done", "failed", "cancelled")
 _ID = re.compile(r"^[0-9a-f]{8}$")
 _PATH = re.compile(r"^(?!/)(?!.*\.\.)[\w.\-/ ]{1,120}$")
 _CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
@@ -36,6 +36,23 @@ _CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 class AtelierError(ValueError):
     pass
+
+
+# ------------------------------------------------------------------ façon de coder d'Aurora (choisie par le propriétaire)
+MODE_KEY = "family_aurora_mode_v1"
+MODES = ("termux", "atelier")  # termux : elle donne le code prêt à coller ; atelier : elle code et teste toute seule
+
+
+def get_mode(base) -> str:
+    m = base.get_secret(MODE_KEY) or "termux"
+    return m if m in MODES else "termux"
+
+
+def set_mode(base, mode: str) -> str:
+    if mode not in MODES:
+        raise AtelierError("mode inconnu")
+    base.set_secret(MODE_KEY, mode)
+    return mode
 
 
 # ------------------------------------------------------------------ atelier rapide (serveur Hugging Face)
@@ -116,22 +133,31 @@ def get(base, pid: str) -> dict | None:
     return next((d for d in items(base) if d.get("id") == pid), None)
 
 
-def add(base, text: str) -> dict:
+def add(base, text: str, conv: str = "") -> dict:
+    """Nouveau projet. Dans une même discussion, il REMPLACE le projet encore en cours (annulé)."""
     t = str(text).strip()
     if not 10 <= len(t) <= 4000:
         raise AtelierError("Décris le programme en 10 à 4000 caractères.")
     if safety.blocked(t):
         raise AtelierError("Projet refusé : pas de contenu sexuel ni violent.")
     data = _load(base)
-    if sum(1 for d in data if _fresh(d, time.time()).get("status") in ("pending", "running")) >= 2:
+    now_ts = time.time()
+    replaced = []
+    if conv:
+        for d in data:
+            if d.get("conv") == conv and _fresh(d, now_ts).get("status") in ("pending", "running"):
+                d["status"], d["updated"] = "cancelled", int(now_ts)
+                d["summary"] = "Annulé : remplacé par un nouveau projet dans la même discussion."
+                replaced.append(d["id"])
+    if sum(1 for d in data if _fresh(d, now_ts).get("status") in ("pending", "running")) >= 2:
         raise AtelierError("2 projets sont déjà en cours dans l'atelier : attends qu'ils soient finis.")
     now = int(time.time())
     item = {"id": secrets.token_hex(4), "token": secrets.token_urlsafe(18), "text": t, "status": "pending",
             "created": now, "updated": now,
-            "summary": "", "attempt": 0, "files": {}, "log": "", "setup": "", "test": "", "env": ""}
+            "summary": "", "attempt": 0, "files": {}, "log": "", "setup": "", "test": "", "env": "", "conv": conv[:64]}
     data.append(item)
     _save(base, data)
-    return item
+    return {**item, "replaced": replaced}
 
 
 def note(base, pid: str, text: str) -> None:
@@ -179,8 +205,9 @@ def _files(raw) -> dict[str, str]:
     return out
 
 
-def report(base, body: dict) -> None:
-    """Avancement envoyé par le serveur de GitHub (à chaque essai, puis le résultat final)."""
+def report(base, body: dict) -> bool:
+    """Avancement envoyé par le serveur de GitHub (à chaque essai, puis le résultat final).
+    Renvoie True si le projet a été annulé entre-temps : l'atelier arrête alors de travailler dessus."""
     if not isinstance(body, dict):
         raise AtelierError("résultat invalide")
     pid, status = str(body.get("id", "")), body.get("status")
@@ -190,6 +217,8 @@ def report(base, body: dict) -> None:
     for d in data:
         if d.get("id") != pid:
             continue
+        if d.get("status") == "cancelled":
+            return True  # remplacé par un nouveau projet : on ne touche plus à rien
         d["status"] = status
         d["updated"] = int(time.time())
         d["summary"] = _CTRL.sub("", str(body.get("summary") or ""))[:1500]
@@ -214,7 +243,7 @@ def report(base, body: dict) -> None:
                 base.set_secret(SHOT_KEY + pid, shot)
                 d["has_shot"] = True
         _save(base, data)
-        return
+        return False
     raise AtelierError("projet inconnu")
 
 
@@ -299,6 +328,29 @@ def for_aurora(item: dict) -> str:
 MAX_INSTANT_ATTEMPTS = 4   # tests + corrections
 MAX_INSTANT_STEPS = 10     # passages d'écriture d'un gros site (fichiers écrits en plusieurs fois)
 PROMPT_FILES_CHARS = 22_000  # contenu des fichiers renvoyé à l'IA à chaque passage (le reste : seulement le nom)
+# Guide de design d'Aurora : pour TOUS ses sites (atelier instantané, atelier GitHub, mode Termux).
+DESIGN_GUIDE = """DESIGN (aussi important que le code : le site doit avoir l'air fait par une agence) :
+- Identité : choisis une palette adaptée au sujet (1 couleur principale, 1 accent, des neutres), en variables CSS
+  (:root { --bg, --surface, --text, --muted, --primary, --accent, --radius, --shadow }). Jamais les couleurs ni la
+  police par défaut du navigateur (Times, liens bleus soulignés).
+- Typographie : police moderne (font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif ; ou une
+  police Google adaptée au thème) ; texte 16-18 px, interligne 1.5-1.7, lignes de 65 caractères maximum ; titres gras,
+  serrés (letter-spacing négatif), échelle nette (h1 clamp(2rem, 6vw, 3.5rem), h2 ≈ 1.75rem, h3 ≈ 1.25rem).
+- Espace : échelle de 8 px (8, 16, 24, 32, 48, 64, 96) ; sections bien aérées (padding 64-96 px sur grand écran,
+  40-56 px sur téléphone) ; conteneur centré max-width ~1100 px avec marges de 16-24 px.
+- Mise en page : mobile d'abord, grid/flex, aucun débordement horizontal ; un vrai en-tête (logo/nom + navigation) ;
+  une section d'accueil forte (titre, sous-titre, bouton d'action) ; puis des sections claires (cartes, colonnes).
+- Composants : boutons d'au moins 44 px de haut, coins arrondis cohérents (10-16 px), un bouton principal plein et un
+  secondaire discret, états survol / focus visible / appui ; cartes avec bordure fine et ombre douce ; champs avec
+  étiquette et focus visible.
+- Lisibilité : contraste d'au moins 4.5:1 pour le texte (WCAG AA) ; jamais de texte gris clair sur blanc.
+- Images : pas d'image externe qui peut disparaître ; utilise du SVG en ligne, des dégradés, des formes CSS ou des
+  emoji pour illustrer ; toute image a un texte alternatif (alt).
+- Finitions : thème sombre automatique (@media (prefers-color-scheme: dark)) si c'est cohérent, transitions douces de
+  150-250 ms (et rien si prefers-reduced-motion), favicon (emoji en SVG), pied de page soigné, alignements parfaits.
+Le banc d'essai vérifie aussi le design (texte trop petit, boutons trop petits, contraste faible, police par défaut,
+pas de titre h1, pas de balise viewport) : ce sont des erreurs à corriger comme les autres."""
+
 WEB_SYSTEM = """Tu es Aurora, une développeuse web experte, soignée et exigeante. Tu fais un site STATIQUE (HTML, CSS,
 JavaScript, sans serveur ni étape de compilation), beau, moderne et adapté au téléphone (responsive). Il est ouvert
 dans un vrai navigateur puis testé automatiquement ; tu reçois les erreurs et tu corriges.
@@ -336,7 +388,9 @@ Règles :
   d'abord index.html, style.css, script.js et tests.js, puis termine par une ligne
   SUITE: autre-page.html, autre.css, …
   qui liste les fichiers qu'il te reste à écrire : on te les redemandera, en plusieurs fois s'il le faut. Pas de ligne
-  SUITE quand le site est complet. Les pages se relient par des liens relatifs et partagent style.css."""
+  SUITE quand le site est complet. Les pages se relient par des liens relatifs et partagent style.css.
+
+""" + DESIGN_GUIDE
 
 _FILE_RX = re.compile(r"^#{2,4}\s*FICHIER\s*:\s*`?([^\n`]+?)`?\s*\n+```[^\n]*\n(.*?)\n```", re.S | re.M)
 _SUMMARY_RX = re.compile(r"^\s*\**R[ÉE]SUM[ÉE]\**\s*:\s*\**\s*(.*)$", re.I | re.M)
@@ -359,8 +413,8 @@ def parse_reply(reply: str) -> dict:
     return {"files": files, "summary": _CTRL.sub(" ", m.group(1)).strip()[:600] if m else "", "todo": todo}
 
 
-def add_instant(base, text: str) -> dict:
-    item = add(base, text)
+def add_instant(base, text: str, conv: str = "") -> dict:
+    item = add(base, text, conv)
     data = _load(base)
     for d in data:
         if d["id"] == item["id"]:
@@ -407,6 +461,8 @@ def instant_update(base, pid: str, *, files: dict | None = None, summary: str | 
     for d in data:
         if d.get("id") != pid or d.get("mode") != "instant":
             continue
+        if d.get("status") == "cancelled":
+            return d  # remplacé par un nouveau projet : plus aucune modification
         if files:
             merged = {**(d.get("files") or {}), **files}
             d["files"] = _files(merged)

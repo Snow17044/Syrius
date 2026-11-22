@@ -1,6 +1,15 @@
 """Bouton « Publier sur Internet » : un site terminé d'Aurora, mis en ligne sur Vercel, seulement sur demande."""
+import pytest
 from server import atelier, publish
 from tests.conftest import H, login
+
+
+@pytest.fixture(autouse=True)
+def _mode_atelier(monkeypatch):
+    """Ces tests portent sur l'atelier : Aurora est en mode « toute seule »."""
+    from server import atelier as _a
+    monkeypatch.setattr(_a, "get_mode", lambda base: "atelier")
+
 
 FILES = {"index.html": "<!doctype html><title>x</title><p>Salut</p>", "style.css": "p{}", "tests.js": "window.__tests=[]",
          "tests/site.test.js": "//", "package.json": "{}", ".env": "SECRET=1"}
