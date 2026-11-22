@@ -25,9 +25,9 @@ SHOT_KEY = "family_atelier_shot_"  # + id : capture d'écran du site (rangée à
 MAX_SHOT_BYTES = 600_000
 WORKFLOW = "atelier.yml"
 MAX_ITEMS = 20
-MAX_FILES = 40
+MAX_FILES = 60
 MAX_FILE_CHARS = 60_000
-MAX_TOTAL_CHARS = 200_000
+MAX_TOTAL_CHARS = 450_000  # gros sites : plusieurs pages, scripts et styles
 STATUSES = ("pending", "running", "done", "failed")
 _ID = re.compile(r"^[0-9a-f]{8}$")
 _PATH = re.compile(r"^(?!/)(?!.*\.\.)[\w.\-/ ]{1,120}$")
@@ -287,7 +287,9 @@ def for_aurora(item: dict) -> str:
 # ------------------------------------------------------------------ atelier INSTANTANÉ (sites web, dans l'appli)
 # Pour un site statique (HTML/CSS/JS), pas besoin de serveur : l'application ouvre le site dans une boîte fermée
 # (iframe « sandbox »), lance les tests d'Aurora, et renvoie les erreurs ici pour qu'elle corrige. Instantané.
-MAX_INSTANT_ATTEMPTS = 4
+MAX_INSTANT_ATTEMPTS = 4   # tests + corrections
+MAX_INSTANT_STEPS = 10     # passages d'écriture d'un gros site (fichiers écrits en plusieurs fois)
+PROMPT_FILES_CHARS = 22_000  # contenu des fichiers renvoyé à l'IA à chaque passage (le reste : seulement le nom)
 WEB_SYSTEM = """Tu es Aurora, une développeuse web experte, soignée et exigeante. Tu fais un site STATIQUE (HTML, CSS,
 JavaScript, sans serveur ni étape de compilation), beau, moderne et adapté au téléphone (responsive). Il est ouvert
 dans un vrai navigateur puis testé automatiquement ; tu reçois les erreurs et tu corriges.
@@ -320,7 +322,12 @@ Règles :
   Les tests ne doivent jamais modifier le site pour réussir.
 - Aucune erreur dans la console, aucune ressource introuvable. Pas de localStorage obligatoire (il peut être bloqué) :
   entoure-le de try/catch. Pas de clé d'API, pas de mot de passe, rien de sexuel ni de violent.
-- À chaque correction, renvoie le format complet avec le contenu ENTIER de chaque fichier modifié."""
+- À chaque correction, renvoie le format complet avec le contenu ENTIER de chaque fichier modifié.
+- GROS SITE (plusieurs pages, beaucoup de contenu) : c'est possible. Si tout ne tient pas dans une seule réponse, écris
+  d'abord index.html, style.css, script.js et tests.js, puis termine par une ligne
+  SUITE: autre-page.html, autre.css, …
+  qui liste les fichiers qu'il te reste à écrire : on te les redemandera, en plusieurs fois s'il le faut. Pas de ligne
+  SUITE quand le site est complet. Les pages se relient par des liens relatifs et partagent style.css."""
 
 _FILE_RX = re.compile(r"^#{2,4}\s*FICHIER\s*:\s*`?([^\n`]+?)`?\s*\n+```[^\n]*\n(.*?)\n```", re.S | re.M)
 _SUMMARY_RX = re.compile(r"^\s*\**R[ÉE]SUM[ÉE]\**\s*:\s*\**\s*(.*)$", re.I | re.M)
@@ -335,7 +342,12 @@ def parse_reply(reply: str) -> dict:
         if _PATH.match(path) and not path.startswith("node_modules"):
             files[path] = content + "\n"
     m = _SUMMARY_RX.search(reply or "")
-    return {"files": files, "summary": _CTRL.sub(" ", m.group(1)).strip()[:600] if m else ""}
+    todo = []
+    s = re.search(r"^\s*\**SUITE\**\s*:\s*(.+)$", reply or "", re.I | re.M)
+    if s:
+        todo = [p.strip(" `.") for p in s.group(1).split(",")]
+        todo = [p for p in todo if _PATH.match(p) and p not in files][:20]
+    return {"files": files, "summary": _CTRL.sub(" ", m.group(1)).strip()[:600] if m else "", "todo": todo}
 
 
 def add_instant(base, text: str) -> dict:
@@ -350,17 +362,38 @@ def add_instant(base, text: str) -> dict:
     return {**item, "mode": "instant"}
 
 
+def _files_for_prompt(files: dict, focus: str = "") -> str:
+    """Contenu des fichiers pour l'IA, dans la limite d'une demande : d'abord ceux cités dans les erreurs, puis les
+    principaux ; les autres sont seulement nommés (gros sites)."""
+    order = sorted(files, key=lambda p: (p not in focus, p not in ("index.html", "script.js", "style.css", "tests.js"), p))
+    out, room, named = [], PROMPT_FILES_CHARS, []
+    for p in order:
+        c = files[p]
+        if len(c) <= room:
+            out.append(f"### FICHIER: {p}\n```\n{c}\n```")
+            room -= len(c)
+        else:
+            named.append(f"{p} ({len(c)} caractères)")
+    if named:
+        out.append("Autres fichiers déjà écrits (non montrés ici) : " + ", ".join(named))
+    return "\n\n".join(out)
+
+
 def instant_prompt(item: dict, feedback: str = "") -> str:
     if not item.get("files"):
         return f"Site demandé :\n{item['text']}\n\nÉcris le site complet avec ses tests."
-    files = "\n\n".join(f"### FICHIER: {p}\n```\n{c[:9000]}\n```" for p, c in item["files"].items())
+    files = _files_for_prompt(item["files"], feedback)
+    if item.get("todo") and not feedback:  # gros site : on continue l'écriture
+        return (f"Site demandé :\n{item['text']}\n\nDéjà écrit :\n{files}\n\nÉcris maintenant ces fichiers : "
+                f"{', '.join(item['todo'])}. Même format ; termine par SUITE: … s'il en reste encore.")
     return (f"Site demandé :\n{item['text']}\n\nFichiers actuels :\n{files}\n\nRésultat RÉEL dans le navigateur :\n"
             f"{feedback[:3500]}\n\nCorrige la cause (le code du site, pas les tests sauf s'ils sont faux). "
             "Renvoie le format complet avec les fichiers modifiés.")
 
 
 def instant_update(base, pid: str, *, files: dict | None = None, summary: str | None = None, status: str | None = None,
-                   log: str | None = None, attempt: int | None = None) -> dict | None:
+                   log: str | None = None, attempt: int | None = None, todo: list | None = None,
+                   steps: int | None = None) -> dict | None:
     data = _load(base)
     for d in data:
         if d.get("id") != pid or d.get("mode") != "instant":
@@ -376,6 +409,10 @@ def instant_update(base, pid: str, *, files: dict | None = None, summary: str | 
             d["log"] = str(log)[-6000:]
         if attempt is not None:
             d["attempt"] = max(0, min(int(attempt), 20))
+        if todo is not None:
+            d["todo"] = [p for p in todo if isinstance(p, str)][:20]
+        if steps is not None:
+            d["steps"] = max(0, min(int(steps), 50))
         d["updated"] = int(time.time())
         _save(base, data)
         return d

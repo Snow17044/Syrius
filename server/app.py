@@ -892,14 +892,17 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         item = atelier.get(db.base, pid[:20])
         if not item or item.get("mode") != "instant" or item["status"] not in ("pending", "running"):
             raise HTTPException(404, "Projet introuvable ou déjà terminé")
-        attempt = int(item.get("attempt") or 0) + 1
-        if attempt > atelier.MAX_INSTANT_ATTEMPTS:
+        writing = bool(item.get("todo")) and not body.feedback  # gros site : suite de l'écriture, pas un nouvel essai
+        steps = int(item.get("steps") or 0) + 1
+        attempt = int(item.get("attempt") or 0) + (0 if writing else 1)
+        if attempt > atelier.MAX_INSTANT_ATTEMPTS or steps > atelier.MAX_INSTANT_STEPS + atelier.MAX_INSTANT_ATTEMPTS:
             raise HTTPException(409, "Nombre d'essais atteint")
-        atelier.instant_update(db.base, pid, status="running", attempt=attempt,
-                               summary=f"Essai {attempt}/{atelier.MAX_INSTANT_ATTEMPTS} : Aurora écrit le site…")
+        doing = (f"Aurora écrit la suite du site ({', '.join(item['todo'][:4])}…)" if writing
+                 else f"Essai {attempt}/{atelier.MAX_INSTANT_ATTEMPTS} : Aurora écrit le site…")
+        atelier.instant_update(db.base, pid, status="running", attempt=attempt, steps=steps, summary=doing)
         try:
             res = await asyncio.to_thread(coderask.ask, db.base, agent.llm.ordered(), atelier.WEB_SYSTEM,
-                                          atelier.instant_prompt(item, body.feedback), 6000)
+                                          atelier.instant_prompt(item, body.feedback), 6000, "site")
         except coderask.CoderAskError as e:
             atelier.instant_update(db.base, pid, status="failed", summary=f"La grande IA ne répond pas ({e}).")
             raise HTTPException(503, str(e)) from None
@@ -907,7 +910,9 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if not got["files"]:
             atelier.instant_update(db.base, pid, summary="Réponse illisible : Aurora recommence.")
             return {**atelier.public(atelier.get(db.base, pid)), "retry": True}
-        atelier.instant_update(db.base, pid, files=got["files"], summary=got["summary"] or "Site écrit : test en cours…")
+        todo = got["todo"] if steps < atelier.MAX_INSTANT_STEPS else []  # sécurité : pas d'écriture sans fin
+        atelier.instant_update(db.base, pid, files=got["files"], todo=todo,
+                               summary=got["summary"] or ("Écriture en cours…" if todo else "Site écrit : test en cours…"))
         return atelier.public(atelier.get(db.base, pid))
 
     @app.post("/api/code/atelier/{pid}/result", dependencies=[Depends(require_auth), Depends(require_owner)])

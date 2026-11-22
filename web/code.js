@@ -294,12 +294,13 @@
     instantRuns.add(id);
     let feedback = "";
     try {
-      for (let guard = 0; guard < 6; guard++) {
+      for (let guard = 0; guard < 16; guard++) {
         let p;
         try { p = await api(`/api/code/atelier/${id}/ask`, { method: "POST", body: JSON.stringify({ feedback }) }); }
         catch (err) { update(); return; }  // essais épuisés, IA indisponible… : la carte affiche la raison
         update();
         if (p.retry || !p.site_url) { feedback = ""; continue; }
+        if ((p.todo || []).length) { feedback = ""; continue; }  // gros site : Aurora écrit la suite avant le test
         const r = await testInBrowser(p.site_url);
         const log = testReport(r);
         const ok = !(r.errors || []).length && (r.results || []).length > 0 && (r.results || []).every((x) => x.ok);
