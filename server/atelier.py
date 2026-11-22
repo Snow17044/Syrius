@@ -148,7 +148,7 @@ def take_next(base) -> dict | None:
     """Pour le serveur de GitHub : le plus ancien projet en attente (marqué « en cours »)."""
     data = _load(base)
     for d in data:
-        if d.get("status") == "pending":
+        if d.get("status") == "pending" and d.get("mode") != "instant":  # les sites instantanés se font dans l'appli
             d["status"], d["updated"], d["summary"] = "running", int(time.time()), "L'atelier démarre…"
             _save(base, data)
             return {"id": d["id"], "text": d["text"]}
@@ -282,3 +282,101 @@ def for_aurora(item: dict) -> str:
     if item.get("log"):
         parts.append("Dernière sortie des tests :\n```\n" + item["log"][-1500:] + "\n```")
     return "\n\n".join(parts)[:20000]
+
+
+# ------------------------------------------------------------------ atelier INSTANTANÉ (sites web, dans l'appli)
+# Pour un site statique (HTML/CSS/JS), pas besoin de serveur : l'application ouvre le site dans une boîte fermée
+# (iframe « sandbox »), lance les tests d'Aurora, et renvoie les erreurs ici pour qu'elle corrige. Instantané.
+MAX_INSTANT_ATTEMPTS = 4
+WEB_SYSTEM = """Tu es Aurora, une développeuse web experte, soignée et exigeante. Tu fais un site STATIQUE (HTML, CSS,
+JavaScript, sans serveur ni étape de compilation), beau, moderne et adapté au téléphone (responsive). Il est ouvert
+dans un vrai navigateur puis testé automatiquement ; tu reçois les erreurs et tu corriges.
+
+Réponds EXACTEMENT dans ce format, sans rien d'autre :
+RÉSUMÉ: 1 à 3 phrases en français (ce que fait le site, ou ce que tu as corrigé)
+### FICHIER: index.html
+```
+contenu COMPLET
+```
+### FICHIER: style.css
+```
+…
+```
+### FICHIER: script.js
+```
+…
+```
+### FICHIER: tests.js
+```
+window.__tests = [
+  { nom: "le titre s'affiche", test: async (t) => { t.assert(t.text("h1").length > 0, "titre vide"); } },
+  { nom: "le bouton compte", test: async (t) => { t.click("#plus"); await t.wait(100); t.assert(t.text("#n") === "1", "compteur"); } },
+];
+```
+Règles :
+- index.html à la racine, qui charge style.css et script.js (chemins relatifs) ; ajoute d'autres fichiers si utile.
+- tests.js est OBLIGATOIRE : 2 à 6 tests réels de ce que l'utilisateur a demandé. Outils de t : t.q(sélecteur) → élément,
+  t.click(sélecteur), t.type(sélecteur, texte), t.text(sélecteur) → texte, t.assert(condition, message), t.wait(ms).
+  Les tests ne doivent jamais modifier le site pour réussir.
+- Aucune erreur dans la console, aucune ressource introuvable. Pas de localStorage obligatoire (il peut être bloqué) :
+  entoure-le de try/catch. Pas de clé d'API, pas de mot de passe, rien de sexuel ni de violent.
+- À chaque correction, renvoie le format complet avec le contenu ENTIER de chaque fichier modifié."""
+
+_FILE_RX = re.compile(r"^#{2,4}\s*FICHIER\s*:\s*`?([^\n`]+?)`?\s*\n+```[^\n]*\n(.*?)\n```", re.S | re.M)
+_SUMMARY_RX = re.compile(r"^\s*\**R[ÉE]SUM[ÉE]\**\s*:\s*\**\s*(.*)$", re.I | re.M)
+
+
+def parse_reply(reply: str) -> dict:
+    files = {}
+    for path, content in _FILE_RX.findall(reply or ""):
+        path = path.strip()
+        while path.startswith("./"):
+            path = path[2:]
+        if _PATH.match(path) and not path.startswith("node_modules"):
+            files[path] = content + "\n"
+    m = _SUMMARY_RX.search(reply or "")
+    return {"files": files, "summary": _CTRL.sub(" ", m.group(1)).strip()[:600] if m else ""}
+
+
+def add_instant(base, text: str) -> dict:
+    item = add(base, text)
+    data = _load(base)
+    for d in data:
+        if d["id"] == item["id"]:
+            d["mode"] = "instant"
+            d["env"] = "web"
+            d["summary"] = "Aurora prépare le site…"
+    _save(base, data)
+    return {**item, "mode": "instant"}
+
+
+def instant_prompt(item: dict, feedback: str = "") -> str:
+    if not item.get("files"):
+        return f"Site demandé :\n{item['text']}\n\nÉcris le site complet avec ses tests."
+    files = "\n\n".join(f"### FICHIER: {p}\n```\n{c[:9000]}\n```" for p, c in item["files"].items())
+    return (f"Site demandé :\n{item['text']}\n\nFichiers actuels :\n{files}\n\nRésultat RÉEL dans le navigateur :\n"
+            f"{feedback[:3500]}\n\nCorrige la cause (le code du site, pas les tests sauf s'ils sont faux). "
+            "Renvoie le format complet avec les fichiers modifiés.")
+
+
+def instant_update(base, pid: str, *, files: dict | None = None, summary: str | None = None, status: str | None = None,
+                   log: str | None = None, attempt: int | None = None) -> dict | None:
+    data = _load(base)
+    for d in data:
+        if d.get("id") != pid or d.get("mode") != "instant":
+            continue
+        if files:
+            merged = {**(d.get("files") or {}), **files}
+            d["files"] = _files(merged)
+        if summary is not None:
+            d["summary"] = _CTRL.sub(" ", summary)[:1500]
+        if status in STATUSES:
+            d["status"] = status
+        if log is not None:
+            d["log"] = str(log)[-6000:]
+        if attempt is not None:
+            d["attempt"] = max(0, min(int(attempt), 20))
+        d["updated"] = int(time.time())
+        _save(base, data)
+        return d
+    return None

@@ -172,6 +172,9 @@ def setup_atelier(hf_token: str, worker_key: str, syrius_url: str, repo: str) ->
     if status == 403:
         raise SpaceError("Ta clé Hugging Face ne permet pas de créer un Space : il faut une clé avec le droit "
                          "« Write » (huggingface.co/settings/tokens), à mettre dans HF_TOKEN sur Vercel.")
+    if status == 402:
+        raise SpaceError("Hugging Face demande désormais l'abonnement PRO (environ 9 $ par mois) pour ce type de "
+                         "serveur. Sans lui, les sites se font dans l'atelier instantané et le reste sur GitHub.")
     if status not in (200, 201, 409):
         raise SpaceError(f"Création du Space impossible ({status}).")
     files = {"Dockerfile": ATELIER_DOCKERFILE.encode(), "README.md": ATELIER_README.format(repo=repo).encode()}
