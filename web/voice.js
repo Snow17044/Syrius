@@ -8,6 +8,7 @@
   let phase = "";
   let silences = 0;
   let pendingConfirm = null; // action à confirmer à la voix (appel, SMS, lien)
+  let dismissedIn = undefined;  // discussion où Aurora a été renvoyée : on ne la rappelle pas d'office
   const YES = /^(oui|ouais|vas[- ]y|d'accord|ok|okay|appelle|lance|confirme|bien s[uû]r|c'est [çc]a)\b/i;
 
   const $ = (s) => document.querySelector(s);
@@ -112,6 +113,7 @@
   // ---------------------------------------------------------------- visages animés (Nova, et Aurora si elle est là)
   const F = () => window.SyriusFaces;
   const withAurora = () => { try { return !!state.aurora; } catch (_) { return false; } };
+  const currentConv = () => { try { return state.convId || "nouvelle"; } catch (_) { return "nouvelle"; } };
   function buildFaces() {
     const box = $("#voice-faces");
     if (!box || !F()) return;
@@ -120,7 +122,7 @@
     $("#voice").classList.toggle("has-faces", true);
     $("#voice").classList.toggle("duo", withAurora());
     const b = $("#voice-aurora");
-    if (b) b.textContent = withAurora() ? "Aurora est là" : "Inviter Aurora";
+    if (b) b.textContent = withAurora() ? "Laisser Nova seul" : "Inviter Aurora";
   }
   function faces(mode) {
     if (!F()) return;
@@ -216,6 +218,8 @@
     unstage();
     $("#voice").classList.remove("hidden");
     buildFaces();
+    // Aurora vient d'office à côté de Nova quand on parle (sauf si on l'a fait partir pendant cette conversation).
+    if (dismissedIn !== currentConv() && window.SyriusGroup && !window.SyriusGroup.active) window.SyriusGroup.join().then(buildFaces);
     updateSplit();
     $("#voice-reply").textContent = "";
     keepAwake(true);
@@ -239,11 +243,12 @@
     $("#voice-close").addEventListener("click", close);
     // Toucher un visage = toucher l'orbe (couper la parole, reprendre).
     $("#voice-faces")?.addEventListener("click", () => $("#voice-orb").click());
-    // Inviter Aurora dans la conversation vocale (même bouton que dans la discussion).
-    $("#voice-aurora")?.addEventListener("click", () => {
-      if (withAurora()) return;
-      $("#aurora-toggle").click();
-      setTimeout(buildFaces, 400);
+    // Faire partir Aurora (ou la faire revenir) pendant la conversation vocale.
+    $("#voice-aurora")?.addEventListener("click", async () => {
+      if (!window.SyriusGroup) return;
+      if (withAurora()) { await window.SyriusGroup.leave(); dismissedIn = currentConv(); }
+      else { dismissedIn = undefined; await window.SyriusGroup.join(); }
+      buildFaces();
     });
     // Toucher l'orbe : couper la parole / reprendre / relancer l'écoute.
     $("#voice-orb").addEventListener("click", () => {

@@ -526,17 +526,22 @@ function groupNote(text) {
   $("#messages").appendChild(node("div", "group-note", text));
   scrollDown(true);
 }
-$("#aurora-toggle").addEventListener("click", async () => {
-  if (state.streaming) return;
-  const on = !state.aurora;
+// Ajoute ou retire Aurora de la discussion. Renvoie true si c'est fait.
+async function setAuroraMember(on, quiet) {
+  if (state.streaming) return false;
   if (state.convId) {
     try { await api(`/api/conversations/${state.convId}/members`, { method: "PUT", body: JSON.stringify({ aurora: on }) }); }
-    catch (err) { alert(err.message); return; }
+    catch (err) { if (!quiet) alert(err.message); return false; }
   }
   setAurora(on);
-  groupNote(on ? "Aurora a rejoint la discussion. Nova répond d'abord, puis Aurora. Pour ne parler qu'à l'une, commence par « Aurora, … » ou « Nova, … »."
+  if (!quiet) groupNote(on ? "Aurora a rejoint la discussion. Nova répond d'abord, puis Aurora. Pour ne parler qu'à l'une, commence par « Aurora, … » ou « Nova, … »."
     : "Aurora a quitté la discussion.");
-});
+  return true;
+}
+$("#aurora-toggle").addEventListener("click", () => setAuroraMember(!state.aurora));
+// Mode conversation : Aurora vient d'office à côté de Nova (on peut la faire partir avec le bouton en haut).
+window.SyriusGroup = { join: () => (state.aurora ? Promise.resolve(true) : setAuroraMember(true, true)),
+  leave: () => setAuroraMember(false, true), get active() { return !!state.aurora; } };
 
 $("#new-chat").addEventListener("click", newConversationView);
 $("#new-chat-drawer").addEventListener("click", () => { newConversationView(); closeDrawer(); });
