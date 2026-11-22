@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import atelier, group, journal, mailsort, transcribe, vision
+from . import atelier, group, journal, mailsort, transcribe, uchronie, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -33,7 +33,7 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
-    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
+    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "uchronie.js": "text/javascript", "uchronie.css": "text/css", "uchronie-monde.json": "application/json", "code.css": "text/css", "reset.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -113,6 +113,28 @@ class DebateBody(BaseModel):
     topic: str = Field(min_length=3, max_length=300)
     turns: list[dict] = Field(default_factory=list, max_length=200)
     speaker: str = Field(default="", pattern=r"^(|nova|aurora|verdict)$")  # vide = au tour de l'IA suivante
+
+
+class UchronieStartBody(BaseModel):
+    year: int = Field(ge=uchronie.MIN_YEAR, le=uchronie.MAX_YEAR)
+    scenario: str = Field(default="", max_length=300)
+
+
+class UchronieTurnBody(BaseModel):
+    state: dict
+    actions: str = Field(default="", max_length=uchronie.MAX_ACTIONS)
+    span: str = Field(default="mois", pattern=r"^(semaine|mois|trimestre|an)$")
+    diplomacy: list[dict] = Field(default_factory=list, max_length=6)
+
+
+class UchronieTalkBody(BaseModel):
+    state: dict
+    nation: str = Field(min_length=2, max_length=16)
+    messages: list[dict] = Field(min_length=1, max_length=40)
+
+
+class UchronieSaveBody(BaseModel):
+    state: dict
 
 
 class ImageBody(BaseModel):
@@ -316,6 +338,11 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         """Syrius Code (laboratoire d'essai du propriétaire) : la page se charge pour tous, mais tout ce qu'elle
         utilise (/api/code/…) est réservé au propriétaire."""
         return FileResponse(WEB_DIR / "code.html", media_type="text/html")
+
+    @app.get("/uchronie")
+    async def uchronie_page():
+        """Uchronie, le jeu de stratégie historique (la connexion se fait sur la page d'accueil)."""
+        return FileResponse(WEB_DIR / "uchronie.html", media_type="text/html")
 
     @app.get("/reinitialiser")
     async def reset_page():
@@ -1299,6 +1326,70 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"})
+
+    # ------------------------------------------------------------------ Uchronie (jeu de stratégie historique)
+    def sse_stream(events, what: str):
+        async def stream():
+            try:
+                async for event in events:
+                    yield sse(event)
+            except Exception:
+                logging.getLogger("syrius").exception("Erreur pendant %s", what)
+                yield sse({"type": "error", "message": "Erreur interne."})
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"X-Accel-Buffering": "no", "Cache-Control": "no-store"})
+
+    def uchronie_state(raw: dict, need_player: bool = True) -> dict:
+        try:
+            state = uchronie.clean_state(raw)
+        except uchronie.GameError as e:
+            raise HTTPException(400, str(e)) from None
+        if need_player and not state["player"]:
+            raise HTTPException(400, "Choisis d'abord ta nation.")
+        return state
+
+    @app.post("/api/uchronie/start", dependencies=[Depends(require_auth)])
+    async def uchronie_start(body: UchronieStartBody, request: Request):
+        """Nouvelle partie : l'IA met en place le monde de l'année choisie."""
+        scenario = " ".join(body.scenario.split())
+        return sse_stream(uchronie.start_game(agent.llm, body.year, scenario, db.base, request.state.uid),
+                          "la création d'une partie")
+
+    @app.post("/api/uchronie/turn", dependencies=[Depends(require_auth)])
+    async def uchronie_turn(body: UchronieTurnBody, request: Request):
+        """Tour suivant : le maître du jeu résout les décisions du joueur et fait vivre le reste du monde."""
+        state = uchronie_state(body.state)
+        diplomacy = uchronie.clean_diplomacy(body.diplomacy, state)
+        return sse_stream(uchronie.play_turn(agent.llm, state, body.actions.strip(), body.span, diplomacy,
+                                             db.base, request.state.uid), "un tour d'Uchronie")
+
+    @app.post("/api/uchronie/talk", dependencies=[Depends(require_auth)])
+    async def uchronie_talk(body: UchronieTalkBody, request: Request):
+        """Diplomatie : le dirigeant d'une autre nation répond à l'émissaire du joueur."""
+        state = uchronie_state(body.state)
+        if body.nation not in state["nations"] or body.nation == state["player"]:
+            raise HTTPException(400, "Nation inconnue.")
+        try:
+            messages = uchronie.clean_talk(body.messages)
+        except uchronie.GameError as e:
+            raise HTTPException(400, str(e)) from None
+        return sse_stream(uchronie.talk(agent.llm, state, body.nation, messages, db.base, request.state.uid),
+                          "la diplomatie d'Uchronie")
+
+    @app.get("/api/uchronie/save", dependencies=[Depends(require_auth)])
+    async def uchronie_load():
+        return {"state": uchronie.load(db)}
+
+    @app.put("/api/uchronie/save", dependencies=[Depends(require_auth)])
+    async def uchronie_save(body: UchronieSaveBody):
+        state = uchronie_state(body.state, need_player=False)
+        uchronie.save(db, state)
+        return {"ok": True}
+
+    @app.delete("/api/uchronie/save", dependencies=[Depends(require_auth)])
+    async def uchronie_delete():
+        uchronie.delete(db)
+        return {"ok": True}
 
     # ------------------------------------------------------------------ journal intime
     @app.get("/api/journal", dependencies=[Depends(require_auth)])

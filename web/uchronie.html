@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0b0e17">
+  <title>Uchronie</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/leaflet.css">
+  <link rel="stylesheet" href="/static/uchronie.css">
+  <script src="/static/leaflet.js" defer></script>
+  <script src="/static/uchronie.js" defer></script>
+</head>
+<body class="u-body">
+  <div id="u-map" class="u-map" aria-label="Carte du monde"></div>
+
+  <!-- Barre du haut -->
+  <header class="u-top">
+    <a href="/" class="u-btn u-icon" aria-label="Revenir à Syrius">‹</a>
+    <div class="u-title">
+      <strong id="u-date">Uchronie</strong>
+      <span id="u-me" class="u-me hidden"><i id="u-me-dot" class="u-dot"></i><span id="u-me-name"></span></span>
+    </div>
+    <button type="button" id="u-menu" class="u-btn u-icon" aria-label="Menu de la partie">⋯</button>
+  </header>
+  <div id="u-menu-box" class="u-pop hidden">
+    <button type="button" id="u-new">Nouvelle partie</button>
+    <button type="button" id="u-help">Comment jouer</button>
+  </div>
+
+  <!-- Fiche d'un territoire touché sur la carte -->
+  <section id="u-card" class="u-card hidden" aria-live="polite">
+    <button type="button" id="u-card-close" class="u-btn u-icon u-close" aria-label="Fermer">×</button>
+    <p id="u-card-terr" class="u-kicker"></p>
+    <h3><i id="u-card-dot" class="u-dot"></i><span id="u-card-name"></span></h3>
+    <p id="u-card-leader" class="u-small u-muted"></p>
+    <p id="u-card-desc" class="u-small"></p>
+    <p id="u-card-size" class="u-small u-muted"></p>
+    <div class="u-row">
+      <button type="button" id="u-pick" class="u-primary hidden">Jouer cette nation</button>
+      <button type="button" id="u-talk-to" class="u-ghost hidden">Envoyer un émissaire</button>
+    </div>
+  </section>
+
+  <!-- Panneau du bas : décisions, diplomatie, journal, monde -->
+  <section id="u-panel" class="u-panel hidden">
+    <button type="button" id="u-grip" class="u-grip" aria-label="Agrandir ou réduire le panneau"><span></span></button>
+    <nav class="u-tabs" role="tablist">
+      <button type="button" class="u-tab on" data-tab="orders" role="tab">Décisions</button>
+      <button type="button" class="u-tab" data-tab="talk" role="tab">Diplomatie</button>
+      <button type="button" class="u-tab" data-tab="log" role="tab">Journal</button>
+      <button type="button" class="u-tab" data-tab="world" role="tab">Monde</button>
+    </nav>
+
+    <div class="u-pane" data-pane="orders">
+      <p id="u-advice" class="u-advice hidden"></p>
+      <form id="u-orders">
+        <textarea id="u-actions" maxlength="2000" rows="4"
+          placeholder="Tes décisions pour ce tour, en toutes lettres. Ex. : « Je lance un grand plan d'industrialisation, je propose une alliance défensive à la Pologne et je renforce la frontière de l'Est. »"></textarea>
+        <div class="u-row">
+          <label class="u-span">Durée du tour
+            <select id="u-span">
+              <option value="semaine">1 semaine</option>
+              <option value="mois" selected>1 mois</option>
+              <option value="trimestre">3 mois</option>
+              <option value="an">1 an</option>
+            </select>
+          </label>
+          <button type="submit" id="u-end" class="u-primary">Fin du tour</button>
+        </div>
+        <p id="u-talks-note" class="u-small u-muted hidden"></p>
+      </form>
+    </div>
+
+    <div class="u-pane hidden" data-pane="talk">
+      <label class="u-span u-wide">Parler à
+        <select id="u-talk-nation"></select>
+      </label>
+      <div id="u-talk-log" class="u-talk-log" aria-live="polite"></div>
+      <form id="u-talk-form" class="u-say">
+        <input id="u-talk-input" type="text" maxlength="800" autocomplete="off" placeholder="Ton message (proposition, menace, alliance…)" aria-label="Ton message">
+        <button type="submit" class="u-primary">Envoyer</button>
+      </form>
+      <p class="u-small u-muted">Les échanges de ce tour sont transmis au maître du jeu quand tu finis le tour.</p>
+    </div>
+
+    <div class="u-pane hidden" data-pane="log">
+      <ol id="u-log" class="u-log" reversed></ol>
+    </div>
+
+    <div class="u-pane hidden" data-pane="world">
+      <p id="u-summary" class="u-summary"></p>
+      <h4 class="u-kicker">Grandes puissances (par nombre de territoires)</h4>
+      <ol id="u-powers" class="u-powers"></ol>
+    </div>
+  </section>
+
+  <!-- Nouvelle partie -->
+  <section id="u-setup" class="u-sheet hidden">
+    <div class="u-sheet-box">
+      <p class="u-kicker">Jeu de stratégie historique · IA gratuite</p>
+      <h1 class="u-logo">Uchronie</h1>
+      <p class="u-muted">Choisis une époque, prends la tête d'un pays et réécris l'Histoire. Le monde entier réagit à tes décisions.</p>
+      <form id="u-setup-form">
+        <label>Année de départ
+          <input id="u-year" type="number" min="-500" max="2100" step="1" value="1936" required>
+        </label>
+        <div class="u-chips" id="u-eras"></div>
+        <label>Et si… ? <span class="u-muted u-small">(facultatif)</span>
+          <textarea id="u-scenario" maxlength="300" rows="2" placeholder="Ex. : « Et si l'Empire romain d'Orient n'était jamais tombé ? »"></textarea>
+        </label>
+        <button type="submit" class="u-primary u-wide">Créer le monde</button>
+        <button type="button" id="u-setup-cancel" class="u-ghost u-wide hidden">Reprendre ma partie</button>
+      </form>
+      <p class="u-small u-muted">Carte : frontières d'aujourd'hui, réparties entre les nations de l'époque. Les IA peuvent se tromper sur des détails historiques.</p>
+    </div>
+  </section>
+
+  <!-- Choix de la nation -->
+  <section id="u-choose" class="u-banner hidden">
+    <strong>Choisis ta nation</strong>
+    <span class="u-small u-muted">Touche un pays sur la carte, ou cherche-le :</span>
+    <select id="u-choose-list" aria-label="Liste des nations"></select>
+  </section>
+
+  <!-- Attente -->
+  <div id="u-wait" class="u-wait hidden" role="status">
+    <div class="u-spinner" aria-hidden="true"></div>
+    <p id="u-wait-text">Le maître du jeu réfléchit…</p>
+    <p id="u-wait-sub" class="u-small u-muted"></p>
+  </div>
+
+  <!-- Résultat du tour -->
+  <section id="u-news" class="u-sheet hidden">
+    <div class="u-sheet-box u-paper">
+      <p class="u-kicker" id="u-news-date"></p>
+      <h2 class="u-paper-head">La Gazette du monde</h2>
+      <div id="u-news-list"></div>
+      <button type="button" id="u-news-ok" class="u-primary u-wide">Continuer</button>
+    </div>
+  </section>
+
+  <!-- Aide -->
+  <section id="u-helpbox" class="u-sheet hidden">
+    <div class="u-sheet-box">
+      <h2>Comment jouer</h2>
+      <ol class="u-help">
+        <li>Choisis une année de départ (même avant J.-C.) et, si tu veux, un « Et si… ? ».</li>
+        <li>Touche un pays sur la carte pour en prendre la tête.</li>
+        <li>Dans <b>Décisions</b>, écris librement ce que tu fais : économie, armée, alliances, réformes, guerres…</li>
+        <li>En <b>Diplomatie</b>, envoie un émissaire à n'importe quel dirigeant : il te répond dans son rôle.</li>
+        <li>Touche <b>Fin du tour</b> : le maître du jeu fait avancer le temps, fait agir tous les pays et redessine la carte.</li>
+      </ol>
+      <p class="u-small u-muted">Ta partie est sauvegardée automatiquement après chaque tour.</p>
+      <button type="button" id="u-help-ok" class="u-primary u-wide">Compris</button>
+    </div>
+  </section>
+
+  <p id="u-toast" class="u-toast hidden" role="alert"></p>
+</body>
+</html>

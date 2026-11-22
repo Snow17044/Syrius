@@ -684,3 +684,4 @@ body.voice-split #voice .voice-hint { display: none; }
   background: var(--surface-3); color: var(--text-2); border: 1px solid var(--line-2); }
 .code-copy .ic { width: 14px; height: 14px; }
 .code-copy:active { transform: scale(.95); }
+a.ghost, a.chip { text-decoration: none; color: inherit; }
