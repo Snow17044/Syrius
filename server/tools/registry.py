@@ -587,8 +587,11 @@ class ToolExecutor:
                 item = atelier.add(base, a["request"])
             except atelier.AtelierError as e:
                 return str(e), True, None
-            started = await asyncio.to_thread(selfcode.dispatch, self.cfg.github_dispatch_token, self.cfg.github_repo,
-                                              atelier.WORKFLOW)
+            # 1) l'atelier rapide (serveur Hugging Face) : quelques secondes ; 2) sinon GitHub
+            started = await asyncio.to_thread(atelier.wake, base)
+            if not started:
+                started = await asyncio.to_thread(selfcode.dispatch, self.cfg.github_dispatch_token, self.cfg.github_repo,
+                                                  atelier.WORKFLOW)
             if not started:  # la raison s'affiche sur la carte : on sait tout de suite quoi corriger
                 atelier.note(base, item["id"], "Démarrage immédiat impossible (" + (selfcode.last_dispatch_error or "raison inconnue")
                              + "). L'atelier le prendra à son prochain passage automatique (jusqu'à 1 h).")

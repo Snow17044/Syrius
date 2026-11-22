@@ -1995,7 +1995,7 @@ function speakAs(text, who, onEnd) {
   u.rate = 1.05;
   const fr = speechSynthesis.getVoices().filter((v) => v.lang && /^fr/i.test(v.lang));
   const nova = bestFrenchVoice();
-  const voice = who === "aurora" ? (fr.find((v) => v !== nova) || nova) : nova;
+  const voice = who === "aurora" ? (fr.find((v) => !nova || v.name !== nova.name) || nova) : nova;
   if (voice) u.voice = voice;
   u.pitch = who === "aurora" ? 1.15 : 0.92;
   u.onend = u.onerror = () => { if (onEnd) onEnd(); };

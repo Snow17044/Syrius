@@ -110,6 +110,7 @@
     if (tab === "tableaux") renderDashboards();
     if (tab === "code") renderCodeTab();
     if (tab === "emails") renderEmailTab();
+    if (tab === "code") renderFast();
     if (tab === "aurore") scrollDown(true);
   }
   document.querySelectorAll("#c-nav button").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
@@ -479,6 +480,33 @@
     } catch (err) { $("#c-ms-status").textContent = "⚠ " + err.message; }
     b.disabled = false;
     renderMailSort();
+  });
+
+  // ------------------------------------------------------------------ atelier rapide (Hugging Face)
+  const FAST_STAGES = { RUNNING: "✅ Prêt : les projets démarrent en quelques secondes.", BUILDING: "Construction en cours (5 à 10 min la première fois)…",
+    RUNNING_BUILDING: "Mise à jour en cours…", SLEEPING: "Endormi : il se réveille tout seul au prochain projet (environ 1 min).",
+    PAUSED: "⚠ En pause sur Hugging Face.", RUNTIME_ERROR: "⚠ Erreur au démarrage : réinstalle-le.", BUILD_ERROR: "⚠ Erreur de construction : réinstalle-le." };
+  async function renderFast() {
+    const el = $("#c-fast-status");
+    if (!el) return;
+    let s;
+    try { s = await api("/api/code/atelier/fast"); } catch (_) { return; }
+    const b = $("#c-fast-setup");
+    if (!s.hf_token) { el.textContent = "⚠ La clé HF_TOKEN n'est pas dans Vercel."; b.disabled = true; return; }
+    Icons.set(b, "bolt", s.configured ? "Réinstaller / mettre à jour" : "Installer l'atelier rapide");
+    el.textContent = !s.configured ? "Pas encore installé." : (FAST_STAGES[s.stage] || `État : ${s.stage || "inconnu"}`);
+    if (s.stage === "BUILDING" || s.stage === "RUNNING_BUILDING") setTimeout(renderFast, 20000);
+  }
+  $("#c-fast-setup")?.addEventListener("click", async () => {
+    const b = $("#c-fast-setup");
+    b.disabled = true;
+    $("#c-fast-status").textContent = "Installation sur Hugging Face…";
+    try {
+      await api("/api/code/atelier/fast", { method: "POST" });
+      $("#c-fast-status").textContent = "Installé : construction en cours (5 à 10 min la première fois)…";
+      setTimeout(renderFast, 15000);
+    } catch (err) { $("#c-fast-status").textContent = "⚠ " + err.message; }
+    b.disabled = false;
   });
 
   async function renderEmailTab() {

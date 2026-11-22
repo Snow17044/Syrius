@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
     private SyriusAI syrius;
     private boolean pendingBriefing;
     private boolean pendingJournal;
+    private volatile String auroraRetry;  // texte d'Aurora à relire avec la voix de secours si sa voix échoue
     private boolean voiceMode;
     private static final int REQ_PHOTO = 47;
     private ValueCallback<Uri[]> photoCallback;
@@ -456,12 +457,29 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onDone(String id) {
-                    if ("syrius-part".equals(id)) return;  // il reste des morceaux à lire
+                    if (id != null && id.endsWith("-part")) return;  // il reste des morceaux à lire
+                    if (id != null && id.startsWith("aurora")) auroraRetry = null;
                     sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
                 }
 
                 @Override
                 public void onError(String id) {
+                    // La voix d'Aurora a échoué (voix pas téléchargée, moteur occupé…) : elle reparle aussitôt avec
+                    // la voix de secours (autre ton) au lieu de se taire.
+                    String retry = auroraRetry;
+                    auroraRetry = null;
+                    if (retry != null && id != null && id.startsWith("aurora")) {
+                        runOnUiThread(() -> {
+                            try {
+                                applyVoice();
+                                tts.setPitch(1.18f);
+                                tts.speak(retry, TextToSpeech.QUEUE_FLUSH, null, "syrius");
+                            } catch (Exception e) {
+                                sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
+                            }
+                        });
+                        return;
+                    }
                     sendJs("window.syriusOnSpeakEnd && window.syriusOnSpeakEnd()");
                 }
             });
@@ -497,6 +515,8 @@ public class MainActivity extends Activity {
         for (android.speech.tts.Voice v : all) if (v.getName().equals(wanted)) return v;
         String novaName = getSharedPreferences("syrius_voice", MODE_PRIVATE).getString("voice", "");
         if (novaName.isEmpty()) novaName = all.get(0).getName();  // voix de Nova par défaut : la meilleure
+        // par défaut : une voix installée sur le téléphone (une voix « en ligne » peut échouer sans prévenir)
+        for (android.speech.tts.Voice v : all) if (!v.getName().equals(novaName) && !v.isNetworkConnectionRequired()) return v;
         for (android.speech.tts.Voice v : all) if (!v.getName().equals(novaName)) return v;
         return all.get(0);
     }
@@ -697,8 +717,10 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void speakAs(String text, String who) {
             if (text == null || !trusted() || tts == null) return;
-            voiceFor("aurora".equals(who) ? "aurora" : "nova");
-            say(text);
+            boolean aurora = "aurora".equals(who);
+            voiceFor(aurora ? "aurora" : "nova");
+            auroraRetry = aurora ? (text.length() > 3500 ? text.substring(0, 3500) : text) : null;
+            say(text, aurora ? "aurora" : "syrius");
         }
 
         @JavascriptInterface
@@ -717,17 +739,19 @@ public class MainActivity extends Activity {
         public void speak(String text) {
             if (text == null || !trusted() || tts == null) return;
             voiceFor("nova");  // après une réplique d'Aurora, la voix redevient celle de Nova
-            say(text);
+            auroraRetry = null;
+            say(text, "syrius");
         }
 
-        private void say(String text) {
+        private void say(String text, String tag) {
             String t = text.length() > 8000 ? text.substring(0, 8000) : text;
             // Android refuse un texte trop long d'un coup (≈ 4 000 caractères) : on lit les longues réponses en morceaux,
             // à la suite. Seul le dernier morceau (« syrius ») prévient la page que Syrius a fini de parler.
             java.util.List<String> parts = splitForSpeech(t, Math.max(500, Math.min(3500, TextToSpeech.getMaxSpeechInputLength() - 100)));
             for (int i = 0; i < parts.size(); i++) {
+                // le dernier morceau prévient la page (« syrius » / « aurora ») ; « …-part » : il en reste à lire
                 tts.speak(parts.get(i), i == 0 ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD, null,
-                        i == parts.size() - 1 ? "syrius" : "syrius-part");
+                        i == parts.size() - 1 ? tag : tag + "-part");
             }
         }
 

@@ -636,6 +636,14 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             return
         raise HTTPException(401, "Clé d'entraînement invalide")
 
+    async def require_atelier_worker(request: Request) -> None:
+        """L'atelier rapide (Hugging Face) a SA clé, qui n'ouvre que ses propres routes ; sinon, identité de GitHub."""
+        auth_h = request.headers.get("authorization", "")
+        given = auth_h[7:] if auth_h.lower().startswith("bearer ") else ""
+        if given.startswith("atl_") and atelier.check_worker(db.base, given):
+            return
+        await require_trainer(request)
+
     @app.get("/api/training", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_state():
         st = training.state(db.base)
@@ -705,7 +713,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                 "reasons": res.get("reasons", {}), "judge": res.get("judge", ""), "error": res.get("error", ""),
                 "total": len(autogen.stored(db.base))}
 
-    @app.post("/api/training/worker/coder-ask", dependencies=[Depends(require_trainer)])
+    @app.post("/api/training/worker/coder-ask", dependencies=[Depends(require_atelier_worker)])
     async def training_worker_coder_ask(body: CoderAskBody):
         """Une grande IA gratuite écrit du code pour fabriquer les exemples de l'IA programmeuse (budget quotidien)."""
         try:
@@ -819,11 +827,11 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return await _mail_sort_now()
 
     # ------------------------------------------------------------------ atelier d'Aurora (code lancé et testé)
-    @app.post("/api/training/worker/atelier-next", dependencies=[Depends(require_trainer)])
+    @app.post("/api/training/worker/atelier-next", dependencies=[Depends(require_atelier_worker)])
     async def atelier_next():
         return {"project": atelier.take_next(db.base)}
 
-    @app.post("/api/training/worker/atelier-report", dependencies=[Depends(require_trainer)])
+    @app.post("/api/training/worker/atelier-report", dependencies=[Depends(require_atelier_worker)])
     async def atelier_report(body: dict):
         try:
             atelier.report(db.base, body)
@@ -835,6 +843,29 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def atelier_list():
         return [{k: v for k, v in atelier.public(d).items() if k != "files"} | {"nfiles": len(d.get("files") or {})}
                 for d in atelier.items(db.base)]
+
+    @app.get("/api/code/atelier/fast", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_fast_state():
+        info = atelier.space(db.base)
+        st = {"exists": False}
+        if info.get("space"):
+            try:
+                st = await asyncio.to_thread(hfspace.atelier_status, cfg.hf_token, info["space"])
+            except hfspace.SpaceError as e:
+                st = {"exists": True, "stage": "UNKNOWN", "error": str(e)}
+        return {**st, "configured": bool(info.get("space")), "page": info.get("page", ""), "hf_token": bool(cfg.hf_token)}
+
+    @app.post("/api/code/atelier/fast", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_fast_setup(request: Request):
+        """Crée ou met à jour le serveur Hugging Face de l'atelier (nouvelle clé à chaque installation)."""
+        url = f"https://{(request.headers.get('x-forwarded-host') or request.headers.get('host') or '').split(',')[0].strip()}"
+        try:
+            info = await asyncio.to_thread(hfspace.setup_atelier, cfg.hf_token, atelier.worker_token(db.base, renew=True),
+                                           url, cfg.github_repo)
+        except hfspace.SpaceError as e:
+            raise HTTPException(400, str(e)) from None
+        atelier.set_space(db.base, info)
+        return {"ok": True, "page": info["page"]}
 
     @app.get("/api/code/atelier/{pid}", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_get(pid: str):
