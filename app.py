@@ -1,7 +1,15 @@
-"""Point d'entrée pour Vercel (il cherche une variable `app` dans app.py)."""
-import logging
+"""Point d'entrée pour Vercel (il cherche une variable `app` dans app.py).
 
-from server.app import create_app
+Avec la variable UCHRONIE_SEUL=1, ce projet sert le jeu Uchronie seul (site à part, sans compte) au lieu de Syrius.
+"""
+import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
-app = create_app()
+
+if os.environ.get("UCHRONIE_SEUL", "").strip().lower() in ("1", "true", "oui", "yes"):
+    from server.uchronie_site import create_site
+    app = create_site()
+else:
+    from server.app import create_app
+    app = create_app()

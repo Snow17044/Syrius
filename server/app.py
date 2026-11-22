@@ -1376,6 +1376,10 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return sse_stream(uchronie.talk(agent.llm, state, body.nation, messages, db.base, request.state.uid),
                           "la diplomatie d'Uchronie")
 
+    @app.get("/api/uchronie/config")
+    async def uchronie_config():
+        return {"standalone": False}  # dans Syrius : compte, sauvegarde en ligne, pas de limite propre au jeu
+
     @app.get("/api/uchronie/save", dependencies=[Depends(require_auth)])
     async def uchronie_load():
         return {"state": uchronie.load(db)}

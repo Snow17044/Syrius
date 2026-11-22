@@ -152,3 +152,51 @@ def test_connexion_obligatoire_et_page(make_client):
     page = c.get("/uchronie")
     assert page.status_code == 200 and "Uchronie" in page.text
     assert c.get("/static/uchronie-monde.json").json()["territories"][0]["id"]
+
+
+# ------------------------------------------------------------------ site à part (sans compte)
+def site_client(responses=(), per_visitor=3, per_day=100):
+    from fastapi.testclient import TestClient
+
+    from server.uchronie_site import Quota, create_site
+    from tests.conftest import FakeLLM
+    fake = FakeLLM(list(responses))
+    app = create_site(llm=fake)
+    app.state.quota.__init__(None, per_visitor, per_day)
+    assert isinstance(app.state.quota, Quota)
+    c = TestClient(app)
+    c.fake = fake
+    return c
+
+
+def test_site_a_part_sans_compte():
+    c = site_client([reply(json.dumps(START))])
+    page = c.get("/")
+    assert page.status_code == 200 and "Uchronie" in page.text and "Content-Security-Policy" in page.headers
+    assert c.get("/static/uchronie-monde.json").status_code == 200
+    assert c.get("/static/app.js").status_code == 404  # rien de Syrius n'est servi
+    assert c.get("/api/conversations").status_code == 404
+    assert c.get("/api/uchronie/config").json() == {"standalone": True, "left": 3, "per_visitor": 3}
+    assert c.post("/api/uchronie/start", json={"year": 1936}).status_code == 403  # anti-CSRF
+    ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=H).text)
+    assert ev[0] == {"type": "quota", "left": 2}
+    assert next(e for e in ev if e["type"] == "state")["state"]["owners"]["ind"] == "gbr"
+
+
+def test_site_a_part_limite_par_joueur_et_par_jour():
+    turn = {"date": "février 1936", "events": [{"title": "Calme plat", "text": "Rien."}], "summary": "Calme."}
+    c = site_client([reply(json.dumps(turn)), reply("Non.")], per_visitor=2)
+    s = {**started(), "player": "fra"}
+    assert c.post("/api/uchronie/turn", json={"state": s}, headers=H).status_code == 200
+    assert c.post("/api/uchronie/talk", json={"state": s, "nation": "gbr", "messages": [{"who": "me", "text": "Paix ?"}]},
+                  headers=H).status_code == 200
+    r = c.post("/api/uchronie/turn", json={"state": s}, headers=H)
+    assert r.status_code == 429 and "Reviens demain" in r.json()["detail"]
+    other = {**H, "X-Forwarded-For": "203.0.113.9"}  # un autre joueur, lui, peut jouer…
+    assert c.get("/api/uchronie/config", headers=other).json()["left"] == 2
+    c.app.state.quota.per_day = 2  # … sauf si le site entier a atteint sa limite du jour
+    assert c.post("/api/uchronie/turn", json={"state": s}, headers=other).status_code == 429
+    # Une partie invalide ne coûte rien
+    c.app.state.quota.per_day = 100
+    assert c.post("/api/uchronie/turn", json={"state": started()}, headers=other).status_code == 400
+    assert c.get("/api/uchronie/config", headers=other).json()["left"] == 2

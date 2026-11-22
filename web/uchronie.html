@@ -17,7 +17,7 @@
 
   <!-- Barre du haut -->
   <header class="u-top">
-    <a href="/" class="u-btn u-icon" aria-label="Revenir à Syrius">‹</a>
+    <a href="/" id="u-back" class="u-btn u-icon" aria-label="Revenir à Syrius">‹</a>
     <div class="u-title">
       <strong id="u-date">Uchronie</strong>
       <span id="u-me" class="u-me hidden"><i id="u-me-dot" class="u-dot"></i><span id="u-me-name"></span></span>
@@ -27,7 +27,11 @@
   <div id="u-menu-box" class="u-pop hidden">
     <button type="button" id="u-new">Nouvelle partie</button>
     <button type="button" id="u-help">Comment jouer</button>
+    <button type="button" id="u-export">Exporter ma partie (fichier)</button>
+    <button type="button" id="u-import">Importer une partie</button>
+    <p id="u-quota" class="u-quota hidden"></p>
   </div>
+  <input id="u-import-file" type="file" accept=".json,application/json" class="hidden">
 
   <!-- Fiche d'un territoire touché sur la carte -->
   <section id="u-card" class="u-card hidden" aria-live="polite">
@@ -112,6 +116,7 @@
         </label>
         <button type="submit" class="u-primary u-wide">Créer le monde</button>
         <button type="button" id="u-setup-cancel" class="u-ghost u-wide hidden">Reprendre ma partie</button>
+        <button type="button" id="u-setup-import" class="u-ghost u-wide">Importer une partie (fichier)</button>
       </form>
       <p class="u-small u-muted">Carte : frontières d'aujourd'hui, réparties entre les nations de l'époque. Les IA peuvent se tromper sur des détails historiques.</p>
     </div>
@@ -152,7 +157,7 @@
         <li>En <b>Diplomatie</b>, envoie un émissaire à n'importe quel dirigeant : il te répond dans son rôle.</li>
         <li>Touche <b>Fin du tour</b> : le maître du jeu fait avancer le temps, fait agir tous les pays et redessine la carte.</li>
       </ol>
-      <p class="u-small u-muted">Ta partie est sauvegardée automatiquement après chaque tour.</p>
+      <p id="u-save-note" class="u-small u-muted">Ta partie est sauvegardée automatiquement après chaque tour.</p>
       <button type="button" id="u-help-ok" class="u-primary u-wide">Compris</button>
     </div>
   </section>

@@ -67,6 +67,8 @@
 }
 .u-pop button { background: none; border: 0; text-align: left; padding: 13px 16px; cursor: pointer; }
 .u-pop button + button { border-top: 1px solid var(--u-line); }
+.u-quota { margin: 0; padding: 10px 16px; border-top: 1px solid var(--u-line); font-size: .8rem; color: var(--muted); }
+.u-top .u-spacer { width: 42px; }
 
 /* ---------- fiche d'un territoire ---------- */
 .u-card {

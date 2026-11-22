@@ -25,6 +25,7 @@
     selected: null,     // territoire touché
     choosing: false,
     busy: false,
+    standalone: false,  // site à part : pas de compte, parties gardées dans le navigateur
   };
 
   // ------------------------------------------------------------------ réseau
@@ -61,9 +62,17 @@
         let ev;
         try { ev = JSON.parse(chunk.slice(6)); } catch (_) { continue; }
         if (ev.type === "error") throw new Error(ev.message || "Erreur.");
+        if (ev.type === "quota") { showQuota(ev.left); continue; }
         onEvent(ev);
       }
     }
+  }
+
+  function showQuota(left) {
+    const q = $("#u-quota");
+    q.classList.toggle("hidden", left == null);
+    q.textContent = `Demandes à l'IA restantes aujourd'hui : ${left}`;
+    if (left === 5 || left === 1) toast(`Attention : plus que ${left} demande(s) à l'IA aujourd'hui.`);
   }
 
   function needLogin() {
@@ -92,6 +101,7 @@
 
   async function saveRemote() {
     cacheLocal();
+    if (G.standalone) return;
     try { await api("/api/uchronie/save", { method: "PUT", body: { state: G.state } }); }
     catch (err) { if (err.message !== "Non connecté") toast("Sauvegarde en ligne impossible (gardée sur ce téléphone)."); }
   }
@@ -483,10 +493,40 @@
     $("#u-menu").addEventListener("click", (e) => { e.stopPropagation(); $("#u-menu-box").classList.toggle("hidden"); });
     document.addEventListener("click", () => $("#u-menu-box").classList.add("hidden"));
     $("#u-help").addEventListener("click", () => $("#u-helpbox").classList.remove("hidden"));
+    $("#u-export").addEventListener("click", exportGame);
+    $("#u-import").addEventListener("click", () => $("#u-import-file").click());
+    $("#u-setup-import").addEventListener("click", () => $("#u-import-file").click());
+    $("#u-import-file").addEventListener("change", (e) => { if (e.target.files[0]) importGame(e.target.files[0]); e.target.value = ""; });
     $("#u-new").addEventListener("click", () => {
       if (G.state && G.state.player && !confirm("Commencer une nouvelle partie ? La partie en cours sera remplacée à la création du nouveau monde.")) return;
       showSetup();
     });
+  }
+
+  function exportGame() {
+    if (!G.state) { toast("Aucune partie à exporter."); return; }
+    const blob = new Blob([JSON.stringify({ uchronie: 1, state: G.state }, null, 1)], { type: "application/json" });
+    const a = node("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `uchronie-${(nation(G.state.player).name || "monde").replace(/[^\p{L}\p{N}]+/gu, "-")}-tour-${G.state.turn}.json`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  async function importGame(file) {
+    try {
+      if (file.size > 400000) throw new Error("Fichier trop gros.");
+      const data = JSON.parse(await file.text());
+      const st = data && data.state;
+      if (!st || typeof st !== "object" || !st.nations || !st.owners) throw new Error("Ce fichier n'est pas une partie d'Uchronie.");
+      G.state = st;  // le serveur revérifie tout l'état au prochain tour
+      G.talks = {};
+      await saveRemote();
+      if (!G.state.player) startChoosing(); else showGame();
+      toast("Partie importée.");
+    } catch (err) { toast(err.message || "Fichier illisible."); }
   }
 
   function openTab(name) {
@@ -507,11 +547,23 @@
       toast("Impossible de charger la carte.");
       return;
     }
+    try {
+      const cfg = await (await fetch("/api/uchronie/config", { credentials: "same-origin" })).json();
+      G.standalone = !!cfg.standalone;
+      if (G.standalone) {
+        const back = $("#u-back");
+        back.replaceWith(node("span", "u-spacer"));
+        showQuota(cfg.left);
+        $("#u-save-note").textContent = "Ta partie est gardée dans ce navigateur. Menu ⋯ → « Exporter » pour la garder en fichier.";
+      }
+    } catch (_) { /* Syrius : la route n'existe pas */ }
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(LOCAL) || "null"); } catch (_) { /* */ }
     let remote = null;
-    try { remote = (await (await api("/api/uchronie/save")).json()).state; }
-    catch (err) { if (err.message === "Non connecté") return; }
+    if (!G.standalone) {
+      try { remote = (await (await api("/api/uchronie/save")).json()).state; }
+      catch (err) { if (err.message === "Non connecté") return; }
+    }
     // La copie du téléphone l'emporte si elle est plus avancée (sauvegarde en ligne ratée).
     const local = saved && saved.state;
     G.state = local && (!remote || local.turn > remote.turn) ? local : remote;
