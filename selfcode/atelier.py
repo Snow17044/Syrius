@@ -31,6 +31,11 @@ RUN_TIMEOUT = 420  # secondes pour installer + tester
 IMAGES = {"python": "python:3.13-slim", "node": "node:22-slim",
           "web": "mcr.microsoft.com/playwright:v1.49.1-noble"}  # sites : Node + vrai navigateur (Chromium)
 PLAYWRIGHT = "1.49.1"  # même version que l'image : le navigateur est déjà dedans
+# « docker » : serveur de GitHub (un conteneur jetable par essai) ; « local » : serveur Hugging Face de l'atelier
+# (le code tourne dans un processus séparé, sans aucun secret, avec des limites de temps et de taille).
+RUNNER = os.environ.get("ATELIER_RUNNER", "docker")
+KIT = os.environ.get("ATELIER_KIT", "/opt/kit")  # Playwright déjà installé (serveur Hugging Face)
+TOKEN = ""  # clé de l'atelier (serveur Hugging Face) ; vide = identité officielle de GitHub
 SKIP_DIRS = {"node_modules", "__pycache__", ".pytest_cache", ".venv", "venv", ".git", ".npm", ".cache"}
 
 SYSTEM = """Tu es Aurora, une développeuse experte. Tu travailles sur un vrai ordinateur Linux : ce que tu écris est
@@ -68,7 +73,7 @@ Règles :
 def api(path: str, body: dict) -> dict:
     url = os.environ["SYRIUS_URL"].rstrip("/") + path
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers={
-        "Authorization": f"Bearer {syrius_auth.token()}", "Content-Type": "application/json",
+        "Authorization": f"Bearer {TOKEN or syrius_auth.token()}", "Content-Type": "application/json",
         "X-Syrius": "1", "User-Agent": "SyriusAtelier/1.0"})
     with urllib.request.urlopen(req, timeout=150) as r:  # nosec B310 (adresse de ton Syrius)
         return json.loads(r.read(3_000_000) or b"{}")
@@ -130,9 +135,41 @@ def project_files() -> dict[str, str]:
     return dict(list(out.items())[:40])
 
 
+def clean_env() -> dict:
+    """Environnement du code de l'IA : le strict minimum, jamais la clé de l'atelier ni un autre secret."""
+    keep = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "PLAYWRIGHT_BROWSERS_PATH", "TZ") if k in os.environ}
+    home = WORK / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    return {**keep, "HOME": str(home), "CI": "1", "PIP_ROOT_USER_ACTION": "ignore", "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+            "npm_config_update_notifier": "false", "npm_config_fund": "false", "npm_config_audit": "false"}
+
+
+def run_local(script: str) -> tuple[bool, str]:
+    """Serveur Hugging Face : le script tourne dans son propre groupe de processus, environnement vidé, limites."""
+    import signal
+    # limites posées par le shell lui-même (sûr même depuis un fil d'exécution) : temps de calcul, taille des fichiers
+    limits = f"ulimit -t {RUN_TIMEOUT}; ulimit -f 300000; ulimit -c 0\n"
+    p = subprocess.Popen(["bash", "-c", limits + script], cwd=PROJ, env=clean_env(), stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    try:
+        out, _ = p.communicate(timeout=RUN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)  # tout le groupe : serveurs et sous-processus compris
+        out, _ = p.communicate()
+        return False, ((out or "")[-5000:] + f"\nTROP LONG : arrêté après {RUN_TIMEOUT} s (un serveur ou une boucle "
+                       "ne s'arrête pas ?)").strip()
+    try:
+        os.killpg(p.pid, signal.SIGKILL)  # un serveur lancé en arrière-plan ne survit pas au test
+    except (ProcessLookupError, PermissionError):
+        pass
+    return p.returncode == 0, (out or "").strip()[-6000:]
+
+
 def run(env: str, setup: str, test: str) -> tuple[bool, str]:
     """Installation puis test dans un conteneur jetable : ni secret, ni variable d'environnement de GitHub."""
     script = (f"set -e\n{setup}\necho '=== TESTS ==='\n{test}\n") if setup else f"set -e\necho '=== TESTS ==='\n{test}\n"
+    if RUNNER == "local":
+        return run_local(script)
     (WORK / "run.sh").write_text(script, encoding="utf-8")
     cmd = ["docker", "run", "--rm", "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
            "-v", f"{PROJ}:/projet", "-v", f"{WORK / 'run.sh'}:/run.sh:ro", "-w", "/projet",
@@ -151,8 +188,8 @@ def run(env: str, setup: str, test: str) -> tuple[bool, str]:
 SHOT_JS = r"""
 // Capture d'écran du site au format téléphone (lancée par l'atelier, pas par l'IA).
 const http = require("http"), fs = require("fs"), path = require("path");
-const { chromium } = require("/kit/node_modules/playwright");
-const root = process.argv[2];
+const { chromium } = require(process.env.SHOT_KIT + "/node_modules/playwright");
+const root = process.argv[2], out = process.argv[3];
 const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".json": "application/json" };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split("?")[0]);
@@ -166,7 +203,7 @@ const server = http.createServer((req, res) => {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: "networkidle", timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(800);
-  await page.screenshot({ path: "/kit/capture.jpg", type: "jpeg", quality: 70 });
+  await page.screenshot({ path: out, type: "jpeg", quality: 70 });
   await browser.close(); server.close();
 });
 """
@@ -182,10 +219,19 @@ def screenshot() -> str:
     kit.mkdir(exist_ok=True)
     (kit / "shot.js").write_text(SHOT_JS, encoding="utf-8")
     (kit / "capture.jpg").unlink(missing_ok=True)
+    if RUNNER == "local":  # serveur Hugging Face : Playwright déjà installé dans KIT
+        cmd = ["timeout", "90", "node", str(kit / "shot.js"), str(PROJ) + root[len("/projet"):], str(kit / "capture.jpg")]
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=kit, env={**clean_env(), "SHOT_KIT": KIT})
+        except subprocess.TimeoutExpired:
+            return ""
+        shot = kit / "capture.jpg"
+        return base64.b64encode(shot.read_bytes()).decode() if shot.exists() and shot.stat().st_size <= 600_000 else ""
     cmd = ["docker", "run", "--rm", "--memory", "2g", "--pids-limit", "512", "-v", f"{PROJ}:/projet:ro",
-           "-v", f"{kit}:/kit", "-w", "/kit", "-e", "HOME=/tmp", "-e", "npm_config_update_notifier=false", IMAGES["web"],
+           "-v", f"{kit}:/kit", "-w", "/kit", "-e", "HOME=/tmp", "-e", "npm_config_update_notifier=false",
+           "-e", "SHOT_KIT=/kit", IMAGES["web"],
            "sh", "-c", f"(test -d node_modules/playwright || npm install -s --no-audit --no-fund playwright@{PLAYWRIGHT}) "
-                       f"&& timeout 90 node shot.js {root}"]
+                       f"&& timeout 90 node shot.js {root} /kit/capture.jpg"]
     try:
         subprocess.run(cmd, capture_output=True, text=True, timeout=240)
     except subprocess.TimeoutExpired:
@@ -222,7 +268,11 @@ def report(pid: str, status: str, attempt: int, plan: dict, summary: str, log: s
 
 
 def cmd_work() -> None:
-    item = json.loads((WORK / "project.json").read_text(encoding="utf-8"))
+    work(json.loads((WORK / "project.json").read_text(encoding="utf-8")))
+
+
+def work(item: dict) -> None:
+    """Écrire → lancer → lire les erreurs → corriger, jusqu'à MAX_ATTEMPTS essais."""
     pid = item["id"]
     shutil.rmtree(PROJ, ignore_errors=True)
     PROJ.mkdir(parents=True)

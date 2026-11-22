@@ -38,6 +38,53 @@ class AtelierError(ValueError):
     pass
 
 
+# ------------------------------------------------------------------ atelier rapide (serveur Hugging Face)
+WORKER_KEY = "family_atelier_worker_v1"  # clé propre à l'atelier : ne sert QU'À prendre et rendre les projets
+SPACE_KEY = "family_atelier_space_v1"    # {"space": "pseudo/syrius-atelier", "url": "https://….hf.space"}
+
+
+def worker_token(base, renew: bool = False) -> str:
+    t = base.get_secret(WORKER_KEY)
+    if renew or not t:
+        t = "atl_" + secrets.token_urlsafe(32)
+        base.set_secret(WORKER_KEY, t)
+    return t
+
+
+def check_worker(base, given: str) -> bool:
+    t = base.get_secret(WORKER_KEY) or ""
+    return bool(t and given) and hmac.compare_digest(t.encode(), str(given).encode())
+
+
+def space(base) -> dict:
+    try:
+        d = json.loads(base.get_secret(SPACE_KEY) or "{}")
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+def set_space(base, info: dict) -> None:
+    base.set_secret(SPACE_KEY, json.dumps({k: info.get(k, "") for k in ("space", "url", "page")}))
+
+
+def wake(base) -> bool:
+    """Réveille l'atelier rapide : le projet démarre en quelques secondes. False s'il n'existe pas ou ne répond pas."""
+    import urllib.error
+    import urllib.request
+    url = str(space(base).get("url") or "")
+    if not re.fullmatch(r"https://[a-z0-9-]+\.hf\.space", url):
+        return False
+    req = urllib.request.Request(url + "/wake", data=b"{}", method="POST", headers={
+        "X-Atelier-Key": worker_token(base), "User-Agent": "Syrius/1.0", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:  # nosec B310 (adresse de ton atelier, vérifiée ci-dessus)
+            # « ok » : c'est bien l'atelier qui répond (pas la page d'attente d'un serveur endormi)
+            return r.status == 202 and r.read(20).strip() == b"ok"
+    except (urllib.error.URLError, OSError, ValueError):
+        return False  # endormi ou en construction : GitHub prend le relais
+
+
 def _load(base) -> list[dict]:
     try:
         data = json.loads(base.get_secret(KEY) or "[]")
