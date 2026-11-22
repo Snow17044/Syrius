@@ -33,7 +33,7 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
-    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
+    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "atelier-test.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -127,6 +127,17 @@ class Model3DSearch(BaseModel):
 class Model3DCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=300)
     key: str = Field(default="", max_length=80)  # mots-clés de l'objet : maquette déjà créée réutilisée
+
+
+class InstantAskBody(BaseModel):
+    feedback: str = Field(default="", max_length=6000)
+
+
+class InstantResultBody(BaseModel):
+    ok: bool
+    final: bool = True
+    log: str = Field(default="", max_length=8000)
+    summary: str = Field(default="", max_length=600)
 
 
 class ToggleBody(BaseModel):
@@ -274,7 +285,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if "content-security-policy" not in h:  # une page peut fixer une politique plus stricte
             h["Content-Security-Policy"] = CSP
         h["X-Content-Type-Options"] = "nosniff"
-        h["X-Frame-Options"] = "DENY"
+        # l'aperçu d'un site de l'atelier s'affiche DANS Syrius Code (même site) ; tout le reste : jamais dans un cadre
+        h["X-Frame-Options"] = "SAMEORIGIN" if request.url.path.startswith("/atelier/") else "DENY"
         h["Referrer-Policy"] = "no-referrer"
         h["Permissions-Policy"] = "camera=(), geolocation=(self), microphone=(self)"
         h["Cross-Origin-Opener-Policy"] = "same-origin"
@@ -867,6 +879,50 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         atelier.set_space(db.base, info)
         return {"ok": True, "page": info["page"]}
 
+    @app.post("/api/code/atelier/test-start", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_test_start():
+        """Essaie de démarrer l'atelier sur GitHub tout de suite (sans projet : il s'arrête aussitôt) et dit pourquoi
+        ça ne marche pas, le cas échéant."""
+        ok = await asyncio.to_thread(selfcode.dispatch, cfg.github_dispatch_token, cfg.github_repo, atelier.WORKFLOW)
+        return {"ok": ok, "reason": "" if ok else selfcode.last_dispatch_error}
+
+    @app.post("/api/code/atelier/{pid}/ask", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_instant_ask(pid: str, body: InstantAskBody):
+        """Atelier instantané : Aurora écrit (ou corrige) le site ; l'application le teste ensuite dans le navigateur."""
+        item = atelier.get(db.base, pid[:20])
+        if not item or item.get("mode") != "instant" or item["status"] not in ("pending", "running"):
+            raise HTTPException(404, "Projet introuvable ou déjà terminé")
+        attempt = int(item.get("attempt") or 0) + 1
+        if attempt > atelier.MAX_INSTANT_ATTEMPTS:
+            raise HTTPException(409, "Nombre d'essais atteint")
+        atelier.instant_update(db.base, pid, status="running", attempt=attempt,
+                               summary=f"Essai {attempt}/{atelier.MAX_INSTANT_ATTEMPTS} : Aurora écrit le site…")
+        try:
+            res = await asyncio.to_thread(coderask.ask, db.base, agent.llm.ordered(), atelier.WEB_SYSTEM,
+                                          atelier.instant_prompt(item, body.feedback), 6000)
+        except coderask.CoderAskError as e:
+            atelier.instant_update(db.base, pid, status="failed", summary=f"La grande IA ne répond pas ({e}).")
+            raise HTTPException(503, str(e)) from None
+        got = atelier.parse_reply(res.get("text", ""))
+        if not got["files"]:
+            atelier.instant_update(db.base, pid, summary="Réponse illisible : Aurora recommence.")
+            return {**atelier.public(atelier.get(db.base, pid)), "retry": True}
+        atelier.instant_update(db.base, pid, files=got["files"], summary=got["summary"] or "Site écrit : test en cours…")
+        return atelier.public(atelier.get(db.base, pid))
+
+    @app.post("/api/code/atelier/{pid}/result", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_instant_result(pid: str, body: InstantResultBody):
+        item = atelier.get(db.base, pid[:20])
+        if not item or item.get("mode") != "instant":
+            raise HTTPException(404, "Projet introuvable")
+        if body.final:
+            summary = item.get("summary", "") if body.ok else (
+                f"Le site a encore des erreurs après {item.get('attempt', 0)} essais." if not body.summary else body.summary)
+            atelier.instant_update(db.base, pid, status="done" if body.ok else "failed", log=body.log, summary=summary)
+        else:
+            atelier.instant_update(db.base, pid, log=body.log)
+        return atelier.public(atelier.get(db.base, pid))
+
     @app.get("/api/code/atelier/{pid}", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_get(pid: str):
         item = atelier.get(db.base, pid[:20])
@@ -885,7 +941,22 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     # pages du site et Termux y accèdent). Le site s'ouvre dans un « bac à sable » : origine opaque, il ne peut
     # ni lire les cookies de Syrius ni appeler son API.
     SITE_CSP = ("sandbox allow-scripts allow-forms allow-popups allow-modals; default-src 'self' https: data: blob: "
-                "'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'; base-uri 'none'")
+                "'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'; base-uri 'none'")
+    TEST_HEAD = '<script src="/static/atelier-test.js"></script>'
+
+    def _with_tests(html_text: str, has_tests: bool) -> str:
+        """Mode test (atelier instantané) : le banc d'essai écoute les erreurs dès le début, puis les tests d'Aurora."""
+        # scripts chargés en « crossorigin » : sans ça, le navigateur cache le vrai message d'erreur (« Script error. »)
+        html_text = re.sub(r"<script(?![^>]*\bcrossorigin\b)(?=[^>]*\ssrc=)", '<script crossorigin="anonymous"', html_text,
+                           flags=re.I)
+        low = html_text.lower()
+        i = low.find("<head>")
+        html_text = (html_text[:i + 6] + TEST_HEAD + html_text[i + 6:]) if i >= 0 else TEST_HEAD + html_text
+        if has_tests:
+            j = html_text.lower().rfind("</body>")
+            tag = '<script src="tests.js"></script>'
+            html_text = (html_text[:j] + tag + html_text[j:]) if j >= 0 else html_text + tag
+        return html_text
 
     def _atelier_item(pid: str, token: str) -> dict:
         item = next((d for d in atelier.items(db.base) if d.get("id") == pid[:20]), None)
@@ -901,13 +972,19 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             "X-Robots-Tag": "noindex"})
 
     @app.get("/atelier/{pid}/{token}/site/{path:path}")
-    async def atelier_site(pid: str, token: str, path: str = ""):
-        found = atelier.site_file(_atelier_item(pid, token), path)
+    async def atelier_site(pid: str, token: str, path: str = "", test: int = 0):
+        item = _atelier_item(pid, token)
+        found = atelier.site_file(item, path)
         if not found:
             raise HTTPException(404, "Fichier introuvable dans le site")
         content, ctype = found
+        if test and ctype.startswith("text/html"):
+            root = atelier.site_root(item.get("files") or {}) or ""
+            content = _with_tests(content, (root + "tests.js") in (item.get("files") or {}))
         return Response(content, media_type=ctype, headers={
-            "Content-Security-Policy": SITE_CSP, "Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
+            "Content-Security-Policy": SITE_CSP, "Cache-Control": "no-store", "X-Robots-Tag": "noindex",
+            # le site s'ouvre dans une boîte fermée (origine opaque) : ses propres fichiers lui restent lisibles
+            "Access-Control-Allow-Origin": "*"})
 
     @app.post("/api/training/worker/code-next", dependencies=[Depends(require_trainer)])
     async def selfcode_next():

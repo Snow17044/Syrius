@@ -152,6 +152,7 @@ TOOL_LABELS = {
     "show_places": "J'affiche la carte",
     "list_reminders": "Je regarde tes rappels",
     "run_code_project": "Je lance le projet dans mon atelier",
+    "build_web_page": "Je construis le site dans l'atelier instantané",
     "check_code_project": "Je regarde l'atelier",
     "save_journal": "Je range ta journée dans ton journal",
     "mail_digest": "Je regarde le tri de tes emails",
@@ -220,6 +221,16 @@ RUN_PROJECT_TOOL = _tool(
     {"request": {"type": "string", "description": "Cahier des charges complet en français : ce que fait le programme, "
                                                    "langage (Python ou Node.js), contraintes (ex. doit tourner sur Termux), "
                                                    "et ce que les tests doivent vérifier. 10 à 4000 caractères."}},
+    ["request"])
+
+BUILD_WEB_TOOL = _tool(
+    "build_web_page",
+    "ATELIER INSTANTANÉ : fait un SITE WEB STATIQUE (HTML, CSS, JavaScript : page, jeu, outil, portfolio…) et le teste "
+    "en quelques secondes dans un vrai navigateur, directement dans l'appli (erreurs, boutons), avec aperçu en direct "
+    "et corrections automatiques. À préférer pour tout site sans serveur. Pour un site qui a besoin d'un serveur "
+    "(Express, Flask, base de données) ou un programme Python / Node.js : run_code_project.",
+    {"request": {"type": "string", "description": "Cahier des charges complet en français : but du site, contenu, "
+                                                   "style (couleurs, ambiance), et ce que les tests doivent vérifier."}},
     ["request"])
 
 CHECK_PROJECT_TOOL = _tool(
@@ -313,7 +324,7 @@ def build_tools(cfg: Config, settings: dict, profile: str = "syrius") -> list[di
         tools = [t for t in BASE_TOOLS if t["function"]["name"] in ("get_current_time", "show_diagram")]
         tools += [SHOW_DASHBOARD_TOOL, USE_SKILL_TOOL]
         if family.is_owner():
-            tools += [RUN_PROJECT_TOOL, CHECK_PROJECT_TOOL, PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
+            tools += [BUILD_WEB_TOOL, RUN_PROJECT_TOOL, CHECK_PROJECT_TOOL, PROPOSE_CODE_TOOL, LIST_CODE_TOOL]
         if family.email_allowed(cfg):
             tools += EMAIL_TOOLS
         if settings.get("internet", True):
@@ -568,6 +579,21 @@ class ToolExecutor:
             when = "Elle démarre maintenant" if started else "Elle est vérifiée toutes les 15 minutes (GitHub est parfois en retard, jusqu'à 1 h)"
             return (f"Demande {item['id']} envoyée à l'IA programmeuse. {when} ; "
                     "le propriétaire verra la proposition dans l'onglet Code de Syrius Code."), False, None
+
+        if name == "build_web_page":
+            if not family.is_owner() or ctx.get("profile") != "aurore":
+                return "L'atelier instantané est réservé au propriétaire, dans Syrius Code.", True, None
+            if ctx.get("untrusted"):
+                return ("Je ne lance pas de projet après avoir lu un email ou une page web : "
+                        "demande-le moi directement."), True, None
+            a = _check(args, {"request": str}, ["request"])
+            try:
+                item = atelier.add_instant(getattr(self.db, "base", self.db), a["request"])
+            except atelier.AtelierError as e:
+                return str(e), True, None
+            return (f"Projet {item['id']} lancé dans l'atelier instantané : le site s'écrit, s'ouvre et se teste tout de "
+                    "suite dans l'appli (aperçu en direct dans la discussion). Dis-le simplement, sans écrire le code "
+                    "toi-même."), False, {"type": "atelier", "id": item["id"]}
 
         if name in ("run_code_project", "check_code_project"):
             if not family.is_owner() or ctx.get("profile") != "aurore":

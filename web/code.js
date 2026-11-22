@@ -263,6 +263,57 @@
     pre.appendChild(b);
     return pre;
   }
+  // ------------------------------------------------------------------ atelier INSTANTANÉ (sites web, dans l'appli)
+  // Aurora écrit le site → on l'ouvre dans une boîte fermée (iframe « sandbox », sans accès à Syrius) → le banc d'essai
+  // renvoie erreurs et résultats des tests → s'il y a un problème, Aurora corrige. Jusqu'à 4 essais, en quelques secondes.
+  const instantRuns = new Set();
+  function testInBrowser(url) {
+    return new Promise((resolve) => {
+      const frame = el("iframe", "c-test-frame");
+      frame.setAttribute("sandbox", "allow-scripts allow-forms allow-modals");
+      frame.title = "Test du site";
+      let done = false;
+      const finish = (r) => { if (done) return; done = true; clearTimeout(timer); window.removeEventListener("message", onMsg); frame.remove(); resolve(r); };
+      const onMsg = (e) => { if (e.source === frame.contentWindow && e.data && e.data.syriusAtelierTest) finish(e.data); };
+      const timer = setTimeout(() => finish({ errors: ["Le site ne s'est pas chargé ou le banc d'essai n'a pas pu tourner (erreur de script bloquante ?)."], results: [] }), 20000);
+      window.addEventListener("message", onMsg);
+      frame.src = url + "?test=1";
+      document.body.appendChild(frame);
+    });
+  }
+  function testReport(r) {
+    const lines = [];
+    for (const x of r.results || []) lines.push(`${x.ok ? "✔" : "✘"} ${x.nom}${x.ok ? "" : " → " + x.erreur}`);
+    for (const e of r.errors || []) lines.push("Erreur : " + e);
+    const passed = (r.results || []).filter((x) => x.ok).length;
+    lines.push(`Tests : ${passed}/${(r.results || []).length} réussis, ${(r.errors || []).length} erreur(s).`);
+    return lines.join("\n");
+  }
+  async function runInstant(id, update) {
+    if (instantRuns.has(id)) return;
+    instantRuns.add(id);
+    let feedback = "";
+    try {
+      for (let guard = 0; guard < 6; guard++) {
+        let p;
+        try { p = await api(`/api/code/atelier/${id}/ask`, { method: "POST", body: JSON.stringify({ feedback }) }); }
+        catch (err) { update(); return; }  // essais épuisés, IA indisponible… : la carte affiche la raison
+        update();
+        if (p.retry || !p.site_url) { feedback = ""; continue; }
+        const r = await testInBrowser(p.site_url);
+        const log = testReport(r);
+        const ok = !(r.errors || []).length && (r.results || []).length > 0 && (r.results || []).every((x) => x.ok);
+        if (ok || (p.attempt || 0) >= 4) {
+          await api(`/api/code/atelier/${id}/result`, { method: "POST", body: JSON.stringify({ ok, final: true, log }) });
+          update();
+          return;
+        }
+        await api(`/api/code/atelier/${id}/result`, { method: "POST", body: JSON.stringify({ ok: false, final: false, log }) });
+        feedback = log;
+      }
+    } finally { instantRuns.delete(id); update(); }
+  }
+
   function renderAtelier(id) {
     const card = el("div", "c-card c-atelier");
     card.dataset.id = id;
@@ -281,6 +332,9 @@
         if (err.status === 404 && timer) clearInterval(timer);
         return;
       }
+      if (p.mode === "instant" && (p.status === "pending" || p.status === "running") && !instantRuns.has(id)) {
+        runInstant(id, refresh);  // l'atelier instantané tourne ici, dans l'appli
+      }
       const [icon, label] = ATELIER_STATES[p.status] || ATELIER_STATES.pending;
       Icons.set(badge, icon, p.status === "running" && p.attempt ? `${label} · essai ${p.attempt}/5` : label);
       badge.className = "c-atelier-state " + p.status;
@@ -290,6 +344,13 @@
         shown = key;
         details.replaceChildren();
         const files = Object.entries(p.files || {});
+        if (p.mode === "instant" && p.site_url && p.status === "done") {  // le site, en vrai, dans la discussion
+          const live = el("iframe", "c-atelier-live");
+          live.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-popups");
+          live.title = "Aperçu du site";
+          live.src = p.site_url;
+          details.appendChild(live);
+        }
         if (p.has_shot) {  // le site, vu au format téléphone par Aurora
           const img = el("img", "c-atelier-shot");
           img.alt = "Capture du site au format téléphone";
@@ -497,6 +558,17 @@
     el.textContent = !s.configured ? "Pas encore installé." : (FAST_STAGES[s.stage] || `État : ${s.stage || "inconnu"}`);
     if (s.stage === "BUILDING" || s.stage === "RUNNING_BUILDING") setTimeout(renderFast, 20000);
   }
+  $("#c-start-test")?.addEventListener("click", async () => {
+    const b = $("#c-start-test"), out = $("#c-start-status");
+    b.disabled = true;
+    out.textContent = "Je demande à GitHub de démarrer…";
+    try {
+      const r = await api("/api/code/atelier/test-start", { method: "POST" });
+      out.textContent = r.ok ? "✅ GitHub accepte : les projets démarrent tout de suite (environ 30 s à 1 min)."
+        : "⚠ Refusé : " + (r.reason || "raison inconnue") + ".";
+    } catch (err) { out.textContent = "⚠ " + err.message; }
+    b.disabled = false;
+  });
   $("#c-fast-setup")?.addEventListener("click", async () => {
     const b = $("#c-fast-setup");
     b.disabled = true;
