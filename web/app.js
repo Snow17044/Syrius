@@ -121,6 +121,7 @@ async function showApp() {
   $("#app").classList.remove("hidden");
   await loadSettings();
   $("#open-training").classList.toggle("hidden", state.settings?.account?.owner === false);
+  $("#open-code").classList.toggle("hidden", state.settings?.account?.owner === false);  // Syrius Code : propriétaire
   refreshLocation();
   await loadConversations();
   newConversationView();  // à chaque ouverture : une nouvelle discussion (les anciennes restent dans le menu)

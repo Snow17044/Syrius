@@ -28,31 +28,56 @@
   </div>
 
   <div id="c-app" class="screen c-app hidden">
-    <header class="c-head">
-      <div class="c-brand">
-        <span class="c-mark" data-icon="code"></span>
-        <div><strong>Syrius Code</strong><span class="c-sub small muted">Aurora 0.1 · IA pro · laboratoire</span></div>
+    <!-- Même menu que Syrius : discussions, puis les sections -->
+    <aside id="drawer" aria-label="Menu">
+      <div class="drawer-head">
+        <div class="brand"><span class="brand-mark aurora" data-icon="code"></span><span>Syrius Code</span></div>
+        <button id="close-drawer" class="icon-btn" aria-label="Fermer le menu" data-icon="close"></button>
       </div>
-      <div class="c-head-actions">
-        <button type="button" id="c-theme" class="icon-btn" aria-label="Changer de thème" data-icon="palette"></button>
-        <button type="button" id="c-menu" class="icon-btn" aria-label="Mes discussions" data-icon="menu"></button>
+      <button type="button" id="c-new" class="primary wide" data-icon="compose"><span>Nouvelle discussion</span></button>
+      <div class="list-label">Discussions</div>
+      <ul id="c-conv-list"></ul>
+      <div class="drawer-foot" id="c-nav">
+        <button type="button" data-go="aurore" class="ghost wide on" data-icon="sparkle"><span>Aurora</span></button>
+        <button type="button" data-go="sites" class="ghost wide" data-icon="shield"><span>Sites</span></button>
+        <button type="button" data-go="tableaux" class="ghost wide" data-icon="chart"><span>Tableaux de bord</span></button>
+        <button type="button" data-go="emails" class="ghost wide" data-icon="mail"><span>Emails</span></button>
+        <button type="button" data-go="code" class="ghost wide" data-icon="code"><span>Code</span></button>
+        <div class="drawer-sep"></div>
+        <a href="/" class="ghost wide btn-link c-switch-app" data-icon="orbit"><span>Syrius (Nova)</span></a>
+        <button type="button" id="c-theme" class="ghost wide" data-icon="palette"><span>Thème</span></button>
+        <button type="button" id="c-logout" class="ghost wide subtle" data-icon="logout"><span>Déconnexion</span></button>
       </div>
-    </header>
+    </aside>
+    <div id="backdrop" class="hidden"></div>
+
+    <div id="main">
+      <header class="topbar">
+        <button type="button" id="c-menu" class="icon-btn" aria-label="Ouvrir le menu" data-icon="menu"></button>
+        <div class="title-block">
+          <h2 id="c-title">Aurora</h2>
+          <div class="title-sub"><span class="net-status">Syrius Code · en ligne</span></div>
+        </div>
+        <button type="button" id="c-newchat" class="icon-btn" aria-label="Nouvelle discussion" data-icon="compose"></button>
+      </header>
 
     <main class="c-main">
       <!-- Aurora : discussion -->
       <section id="tab-aurore" class="c-tab on" data-tab="aurore">
         <div id="c-messages" class="c-messages" aria-live="polite">
-          <div id="c-empty" class="c-empty">
-            <div class="c-empty-mark" data-icon="sparkle"></div>
-            <h2>Bonjour, je suis Aurora</h2>
-            <p class="muted">Code, tableaux de bord, emails pro, sites et sécurité : dis-moi ce qu'il faut faire.</p>
+          <div id="c-empty" class="empty c-empty">
+            <div class="hero-orb aurora" aria-hidden="true"><div class="orb big"><span></span></div></div>
+            <div class="hero-tag"><span class="live-dot"></span><span>Aurora 0.1 · en ligne</span></div>
+            <p class="greeting">Bonjour, je suis Aurora.</p>
+            <p class="hero-sub">Code, sites web, tableaux de bord, emails pro et sécurité : dis-moi ce qu'il faut faire.</p>
             <div id="c-starters" class="c-chips"></div>
           </div>
         </div>
         <form id="c-form" class="c-composer">
-          <textarea id="c-input" rows="1" maxlength="20000" placeholder="Écris à Aurora…" aria-label="Message pour Aurora"></textarea>
-          <button type="submit" id="c-send" class="c-send" aria-label="Envoyer" data-icon="send"></button>
+          <div class="composer-box">
+            <textarea id="c-input" rows="1" maxlength="20000" placeholder="Écris à Aurora…" aria-label="Message pour Aurora"></textarea>
+            <button type="submit" id="c-send" class="send" aria-label="Envoyer" data-icon="send"></button>
+          </div>
         </form>
       </section>
 
@@ -199,23 +224,8 @@
       </section>
     </main>
 
-    <nav class="c-nav" id="c-nav" aria-label="Sections">
-      <button type="button" data-go="aurore" class="on" data-icon="sparkle"><span>Aurora</span></button>
-      <button type="button" data-go="sites" data-icon="shield"><span>Sites</span></button>
-      <button type="button" data-go="tableaux" data-icon="chart"><span>Tableaux</span></button>
-      <button type="button" data-go="emails" data-icon="mail"><span>Emails</span></button>
-      <button type="button" data-go="code" data-icon="code"><span>Code</span></button>
-    </nav>
+    </div>
   </div>
 
-  <!-- Mes discussions -->
-  <dialog id="c-convs">
-    <div class="sheet">
-      <header class="sheet-head"><h3>Discussions</h3><button type="button" id="c-convs-close" class="icon-btn" aria-label="Fermer" data-icon="close"></button></header>
-      <button type="button" id="c-new" class="primary wide" data-icon="plus"><span>Nouvelle discussion</span></button>
-      <ul id="c-conv-list" class="c-cards"></ul>
-      <button type="button" id="c-logout" class="ghost wide" data-icon="logout"><span>Se déconnecter</span></button>
-    </div>
-  </dialog>
 </body>
 </html>

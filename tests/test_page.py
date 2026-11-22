@@ -34,4 +34,4 @@ def test_chaque_onglet_a_son_panneau():
 def test_syrius_code_ne_deborde_pas_de_l_ecran():
     """Bug réel : un long code élargissait la page (×4) ; le téléphone dézoomait et le bouton Envoyer sortait de l'écran."""
     css = (WEB / "code.css").read_text(encoding="utf-8")
-    assert "grid-template-columns: minmax(0, 1fr)" in css and ".c-app > *, .c-tab > * { min-width: 0; }" in css
+    assert ".c-app > *, .c-tab > *, #main > * { min-width: 0; }" in css and ".c-main { flex: 1; position: relative; min-height: 0; min-width: 0; }" in css
