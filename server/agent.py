@@ -404,7 +404,7 @@ class Agent:
                 else:
                     result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
                                                                          {"location": location, "untrusted": untrusted_seen,
-                                                                          "profile": profile})
+                                                                          "profile": profile, "conv": conversation_id})
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:

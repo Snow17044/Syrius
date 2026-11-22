@@ -198,3 +198,4 @@
 .c-atelier-publish { margin: 10px 0 2px; display: grid; gap: 6px; }
 .c-atelier-publish button { width: 100%; }
 .c-atelier-online { color: var(--mint); font-weight: 600; overflow-wrap: anywhere; }
+.c-atelier-state.cancelled { color: var(--muted); text-decoration: line-through; }

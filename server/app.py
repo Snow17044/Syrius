@@ -846,10 +846,10 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     @app.post("/api/training/worker/atelier-report", dependencies=[Depends(require_atelier_worker)])
     async def atelier_report(body: dict):
         try:
-            atelier.report(db.base, body)
+            cancelled = atelier.report(db.base, body)
         except atelier.AtelierError as e:
             raise HTTPException(400, str(e)) from None
-        return {"ok": True}
+        return {"ok": True, "cancelled": cancelled}
 
     @app.get("/api/code/atelier", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_list():

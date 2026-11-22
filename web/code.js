@@ -250,7 +250,7 @@
   }
 
   // ------------------------------------------------------------------ atelier d'Aurora : avancement en direct
-  const ATELIER_STATES = { pending: ["clock", "En attente de l'atelier"], running: ["refresh", "Aurora travaille"],
+  const ATELIER_STATES = { cancelled: ["close", "Annulé (remplacé)"], pending: ["clock", "En attente de l'atelier"], running: ["refresh", "Aurora travaille"],
     done: ["ok", "Ça marche : tests réussis"], failed: ["alert", "Pas réussi"] };
   function codeBlock(text, label) {
     const pre = el("pre", "c-atelier-pre");
@@ -419,9 +419,9 @@
           details.appendChild(d);
         }
       }
-      if ((p.status === "done" || p.status === "failed") && timer) { clearInterval(timer); timer = null; }
+      if (["done", "failed", "cancelled"].includes(p.status) && timer) { clearInterval(timer); timer = null; }
     }
-    refresh().then(() => { if (!timer && !/(done|failed)/.test(badge.className)) timer = setInterval(refresh, 6000); });
+    refresh().then(() => { if (!timer && !/(done|failed|cancelled)/.test(badge.className)) timer = setInterval(refresh, 6000); });
     return card;
   }
 

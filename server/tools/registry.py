@@ -588,10 +588,12 @@ class ToolExecutor:
                         "demande-le moi directement."), True, None
             a = _check(args, {"request": str}, ["request"])
             try:
-                item = atelier.add_instant(getattr(self.db, "base", self.db), a["request"])
+                item = atelier.add_instant(getattr(self.db, "base", self.db), a["request"], str(ctx.get("conv") or ""))
             except atelier.AtelierError as e:
                 return str(e), True, None
-            return (f"Projet {item['id']} lancé dans l'atelier instantané : le site s'écrit, s'ouvre et se teste tout de "
+            gone = (f"L'ancien projet ({', '.join(item['replaced'])}) de cette discussion est annulé. "
+                    if item.get("replaced") else "")
+            return (gone + f"Projet {item['id']} lancé dans l'atelier instantané : le site s'écrit, s'ouvre et se teste tout de "
                     "suite dans l'appli (aperçu en direct dans la discussion). Dis-le simplement, sans écrire le code "
                     "toi-même."), False, {"type": "atelier", "id": item["id"]}
 
@@ -610,9 +612,11 @@ class ToolExecutor:
                         "demande-le moi directement."), True, None
             a = _check(args, {"request": str}, ["request"])
             try:
-                item = atelier.add(base, a["request"])
+                item = atelier.add(base, a["request"], str(ctx.get("conv") or ""))
             except atelier.AtelierError as e:
                 return str(e), True, None
+            gone = (f"L'ancien projet ({', '.join(item['replaced'])}) de cette discussion est annulé. "
+                    if item.get("replaced") else "")
             # 1) l'atelier rapide (serveur Hugging Face) : quelques secondes ; 2) sinon GitHub
             started = await asyncio.to_thread(atelier.wake, base)
             if not started:
@@ -624,7 +628,7 @@ class ToolExecutor:
             when = ("L'atelier démarre maintenant (2 à 6 minutes)." if started else
                     "Démarrage immédiat impossible (" + (selfcode.last_dispatch_error or "raison inconnue") +
                     ") : l'atelier le prendra à son prochain passage automatique, jusqu'à 1 h.")
-            return (f"Projet {item['id']} lancé dans l'atelier. {when} Son avancement s'affiche en direct dans la "
+            return (gone + f"Projet {item['id']} lancé dans l'atelier. {when} Son avancement s'affiche en direct dans la "
                     "discussion. Dis-le simplement à l'utilisateur, sans écrire le code toi-même ; quand il te "
                     "demandera le résultat, utilise check_code_project."), False, {"type": "atelier", "id": item["id"]}
 
