@@ -294,12 +294,13 @@
     instantRuns.add(id);
     let feedback = "";
     try {
-      for (let guard = 0; guard < 6; guard++) {
+      for (let guard = 0; guard < 16; guard++) {
         let p;
         try { p = await api(`/api/code/atelier/${id}/ask`, { method: "POST", body: JSON.stringify({ feedback }) }); }
         catch (err) { update(); return; }  // essais épuisés, IA indisponible… : la carte affiche la raison
         update();
         if (p.retry || !p.site_url) { feedback = ""; continue; }
+        if ((p.todo || []).length) { feedback = ""; continue; }  // gros site : Aurora écrit la suite avant le test
         const r = await testInBrowser(p.site_url);
         const log = testReport(r);
         const ok = !(r.errors || []).length && (r.results || []).length > 0 && (r.results || []).every((x) => x.ok);
@@ -369,6 +370,31 @@
           if (p.site_url) bar.appendChild(link(p.site_url, "Voir le site", "eye"));
           if (p.zip_url) bar.appendChild(link(p.zip_url, "Télécharger (.zip)", "download", true));
           details.appendChild(bar);
+        }
+        if (p.site_url && p.status === "done" && p.can_publish) {  // publier : toujours sur TON appui, jamais tout seul
+          const pub = el("div", "c-atelier-publish");
+          if (p.published) {
+            const a = el("a", "c-atelier-online", p.published.replace("https://", ""));
+            a.href = p.published; a.target = "_blank"; a.rel = "noopener";
+            pub.append(el("span", "small muted", "En ligne : "), a);
+          }
+          const msg = el("p", "small");
+          const btn = el("button", p.published ? "ghost" : "primary");
+          btn.type = "button";
+          Icons.set(btn, "send", p.published ? "Republier la dernière version" : "Publier sur Internet");
+          btn.addEventListener("click", async () => {
+            if (!p.published && !confirm("Publier ce site sur Internet ? Tout le monde pourra le voir avec son adresse.")) return;
+            btn.disabled = true;
+            msg.textContent = "Publication sur Vercel…";
+            try {
+              const r = await api(`/api/code/atelier/${id}/publish`, { method: "POST" });
+              msg.textContent = "✅ En ligne : " + r.url;
+              shown = "";
+              refresh();
+            } catch (err) { msg.textContent = "⚠ " + err.message; btn.disabled = false; }
+          });
+          pub.append(btn, msg);
+          details.appendChild(pub);
         }
         if (p.setup || p.test || p.zip_url) {
           const lines = [];

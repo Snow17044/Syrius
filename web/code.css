@@ -195,3 +195,6 @@
 /* Atelier instantané : test invisible et aperçu en direct */
 .c-test-frame { position: fixed; left: -10000px; top: 0; width: 390px; height: 760px; border: 0; visibility: hidden; }
 .c-atelier-live { display: block; width: 100%; height: 440px; margin: 10px 0 4px; border: 1px solid var(--line-2); border-radius: 14px; background: #fff; }
+.c-atelier-publish { margin: 10px 0 2px; display: grid; gap: 6px; }
+.c-atelier-publish button { width: 100%; }
+.c-atelier-online { color: var(--mint); font-weight: 600; overflow-wrap: anywhere; }

@@ -68,6 +68,17 @@ SLOW_TTFT = 8.0      # secondes avant le premier mot : au-delà, l'IA passe derr
 FAIL_MEMORY = 300    # une IA en échec est mise derrière les autres pendant 5 minutes
 
 
+# Les IA gratuites les plus capables d'abord quand il faut de l'intelligence (Aurora, atelier) ;
+# les plus petites ne servent qu'en secours.
+STRONG_FIRST = ("nemotron-3-ultra", "gpt-oss-120b", "codestral", "gemini", "gpt-4.1", "gemma-4-31b", "glm-4.7",
+                "mistral", "llama-3.3-70b", "gpt-oss-20b", "gemma-4-26b")
+
+
+def strength(provider) -> int:
+    m = f"{provider.name} {provider.model}".lower()
+    return next((i for i, k in enumerate(STRONG_FIRST) if k in m), len(STRONG_FIRST))
+
+
 class ChatClient:
     # 25 s sans un seul octet = l'IA est bloquée : on passe tout de suite à la suivante (avant : 120 s d'attente).
     def __init__(self, providers: list[Provider], timeout: float = 25):

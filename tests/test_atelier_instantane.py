@@ -36,7 +36,7 @@ def test_aurora_lance_un_site_instantane(make_client, monkeypatch):
 
 def test_boucle_ecrire_tester_corriger(make_client, monkeypatch):
     prompts = []
-    monkeypatch.setattr(coderask, "ask", lambda base, prov, system, prompt, max_tokens=0: prompts.append((system, prompt)) or {"text": SITE})
+    monkeypatch.setattr(coderask, "ask", lambda base, prov, system, prompt, max_tokens=0, kind="code": prompts.append((system, prompt)) or {"text": SITE})
     c = make_client([reply("", [("build_web_page", {"request": "Un compteur de cafés joli sur téléphone"})]), reply("C'est parti.")])
     login(c)
     pid = _launch(c)
@@ -95,3 +95,50 @@ def test_message_clair_si_hugging_face_demande_pro(monkeypatch):
         raise AssertionError("402 attendu")
     except hfspace.SpaceError as e:
         assert "PRO" in str(e) and "atelier instantané" in str(e)
+
+
+BIG_1 = SITE.replace("RÉSUMÉ: Un compteur.", "RÉSUMÉ: Un grand site, première partie.") + "\nSUITE: apropos.html, contact.html\n"
+BIG_2 = """RÉSUMÉ: Les pages restantes.
+### FICHIER: apropos.html
+```html
+<!doctype html><html><head><title>À propos</title></head><body><a href="index.html">Accueil</a></body></html>
+```
+### FICHIER: contact.html
+```html
+<!doctype html><html><head><title>Contact</title></head><body><a href="index.html">Accueil</a></body></html>
+```
+"""
+
+
+def test_gros_site_ecrit_en_plusieurs_fois(make_client, monkeypatch):
+    replies, prompts = [BIG_1, BIG_2], []
+    monkeypatch.setattr(coderask, "ask", lambda base, prov, system, prompt, max_tokens=0, kind="code":
+                        prompts.append((prompt, kind)) or {"text": replies.pop(0)})
+    c = make_client([reply("", [("build_web_page", {"request": "Un grand site de 3 pages pour mon club"})]), reply("Ok.")])
+    login(c)
+    pid = _launch(c)
+    p = c.post(f"/api/code/atelier/{pid}/ask", json={}, headers=H).json()
+    assert p["todo"] == ["apropos.html", "contact.html"] and p["attempt"] == 1
+    p = c.post(f"/api/code/atelier/{pid}/ask", json={}, headers=H).json()  # la suite : pas un nouvel essai
+    assert p["todo"] == [] and p["attempt"] == 1 and p["steps"] == 2
+    assert {"index.html", "apropos.html", "contact.html", "tests.js"} <= set(p["files"])
+    assert "Écris maintenant ces fichiers : apropos.html, contact.html" in prompts[1][0]
+    assert all(kind == "site" for _, kind in prompts)  # budget à part pour les sites
+    assert "GROS SITE" in atelier.WEB_SYSTEM
+
+
+def test_budget_des_sites_a_part(make_db, monkeypatch):
+    from server.llm import Provider
+    base = make_db()
+    monkeypatch.setattr(coderask.autogen, "_ask", lambda *a, **k: "réponse")
+    prov = [Provider("groq", "Groq", "https://g.example/v1", "m", "k")]
+    coderask.ask(base, prov, "", "une demande de site assez longue", kind="site")
+    assert coderask.used(base, coderask.SITE_KEY) == 1 and coderask.used(base) == 0
+    assert coderask.SITE_BUDGET > coderask.DAILY_BUDGET
+
+
+def test_fichiers_envoyes_a_l_ia_limites(make_db):
+    files = {f"page{i}.html": "x" * 5000 for i in range(10)} | {"index.html": "<p>accueil</p>", "script.js": "erreur ici"}
+    txt = atelier._files_for_prompt(files, "Erreur dans page7.html")
+    assert "### FICHIER: page7.html" in txt and "### FICHIER: index.html" in txt  # celui de l'erreur, puis les principaux
+    assert len(txt) < atelier.PROMPT_FILES_CHARS + 2000 and "Autres fichiers déjà écrits" in txt
