@@ -10,21 +10,23 @@
   };
   const state = { convId: null, streaming: false, convs: [] };
 
-  // ------------------------------------------------------------------ thème : « syrius » (par défaut) ou « nature »
-  const THEME_COLORS = { syrius: "#0d0f16", nature: "#eef3e6" };
+  // ------------------------------------------------------------------ thème : « syrius » (par défaut) ou « nature » (forêt la nuit)
+  // Même réglage que Syrius : changer de thème dans une appli le change dans l'autre.
+  const THEME_COLORS = { syrius: "#0d0f16", nature: "#0a1714" };
   function applyTheme(t) {
     const theme = t === "nature" ? "nature" : "syrius";
     document.documentElement.dataset.theme = theme;
     $("#c-theme-color").setAttribute("content", THEME_COLORS[theme]);
     const b = $("#c-theme");
     if (b) {
-      Icons.set(b, theme === "nature" ? "palette" : "leaf", theme === "nature" ? "Thème Syrius" : "Thème Nature");
-      b.setAttribute("aria-label", theme === "nature" ? "Thème Syrius" : "Thème Nature");
-      b.title = theme === "nature" ? "Passer au thème Syrius" : "Passer au thème Nature";
+      const label = theme === "nature" ? "Thème Syrius" : "Thème Forêt";
+      Icons.set(b, theme === "nature" ? "palette" : "leaf", label);
+      b.setAttribute("aria-label", label);
+      b.title = theme === "nature" ? "Revenir au thème Syrius" : "Passer au thème Forêt";
     }
-    store.set("syrius:code:theme", theme);
+    store.set("syrius:theme", theme);
   }
-  applyTheme(store.get("syrius:code:theme"));
+  applyTheme(store.get("syrius:theme") || store.get("syrius:code:theme"));
   $("#c-theme").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "nature" ? "syrius" : "nature"));
 
   // ------------------------------------------------------------------ réseau

@@ -35,3 +35,15 @@ def test_syrius_code_ne_deborde_pas_de_l_ecran():
     """Bug réel : un long code élargissait la page (×4) ; le téléphone dézoomait et le bouton Envoyer sortait de l'écran."""
     css = (WEB / "code.css").read_text(encoding="utf-8")
     assert ".c-app > *, .c-tab > *, #main > * { min-width: 0; }" in css and ".c-main { flex: 1; position: relative; min-height: 0; min-width: 0; }" in css
+
+
+def test_theme_foret_commun_aux_deux_applis(make_client):
+    """Thème « Forêt » (forêt la nuit) : même réglage dans Syrius et Syrius Code, image servie."""
+    from pathlib import Path
+    web = Path(__file__).resolve().parents[1] / "web"
+    r = make_client().get("/static/foret.svg")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
+    assert 'id="theme-toggle"' in (web / "index.html").read_text(encoding="utf-8")
+    for f in ("app.js", "code.js"):
+        assert 'store.set("syrius:theme", theme)' in (web / f).read_text(encoding="utf-8")
+    assert '/static/foret.svg' in (web / "style.css").read_text(encoding="utf-8")

@@ -138,4 +138,4 @@ def test_page_code_coherente():
     assert "style=" not in html  # la politique de sécurité interdit les styles dans la page
     tabs = re.findall(r'data-go="([\w-]+)"', html)
     assert tabs == re.findall(r'<section id="tab-([\w-]+)"', html)
-    assert 'data-theme="nature"' in (web / "code.css").read_text(encoding="utf-8").replace("[data-theme=\"nature\"]", 'data-theme="nature"')
+    assert '[data-theme="nature"]' in (web / "style.css").read_text(encoding="utf-8")  # thème Forêt commun aux deux applis
