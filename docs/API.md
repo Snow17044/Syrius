@@ -1,7 +1,9 @@
 # API de Syrius : un assistant IA sur ton site
 
-Syrius peut répondre aux visiteurs d'un autre site. Le propriétaire de Syrius crée une **clé** dans
-*Réglages → Services → API* et te l'envoie. Le domaine du serveur Syrius est noté `SYRIUS` ci-dessous
+Syrius peut répondre aux visiteurs d'un autre site. Le plus simple : le propriétaire de Syrius t'envoie un
+**lien** (*Réglages → Services → API → Créer le lien*). Tu l'ouvres, tu décris ton site, et la page te donne le code
+à coller. Le lien ne sert qu'une fois et reste valable 7 jours. Le propriétaire peut aussi créer la clé lui-même et
+te l'envoyer. Le domaine du serveur Syrius est noté `SYRIUS` ci-dessous
 (par exemple `https://syriusprojet1.vercel.app`).
 
 L'assistant de l'API ne voit rien de privé : pas de souvenirs, pas d'emails, pas d'outils. Il connaît seulement

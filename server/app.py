@@ -34,7 +34,7 @@ STATIC_FILES = {
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
     "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "atelier-test.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
-    "foret.svg": "image/svg+xml",
+    "foret.svg": "image/svg+xml", "partenaire.js": "text/javascript",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -422,6 +422,34 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             return JSONResponse({"error": str(e)}, status_code=e.status, headers=cors)
         return JSONResponse({"reply": reply, "name": k.get("bot_name", "Nova"), "usage": usage}, headers=cors)
 
+    class InviteBody(BaseModel):
+        token: str = Field(min_length=1, max_length=100)
+        name: str = Field(default="", max_length=60)
+        origins: list[str] = Field(default_factory=list, max_length=10)
+        instructions: str = Field(default="", max_length=4000)
+        bot_name: str = Field(default="Nova", max_length=30)
+
+    @app.post("/api/v1/invite/info")
+    async def public_invite_info(body: InviteBody):
+        try:
+            return publicapi.invite_info(db.base, body.token)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+
+    @app.post("/api/v1/invite/redeem")
+    async def public_invite_redeem(body: InviteBody):
+        try:
+            key, raw = publicapi.redeem_invite(db.base, body.token, body.name, body.origins, body.instructions,
+                                               body.bot_name)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+        return {"key": key, "secret": raw}
+
+    @app.get("/partenaire")
+    async def partner_page():
+        """Page ouverte par l'ami avec le lien d'invitation (le jeton est après # : jamais envoyé dans l'adresse)."""
+        return FileResponse(WEB_DIR / "partenaire.html", media_type="text/html", headers={"Cache-Control": "no-store"})
+
     @app.get("/widget.js")
     async def public_widget():
         """Bulle de discussion à coller sur le site d'un ami (voir docs/API.md)."""
@@ -648,7 +676,23 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     # Clés de l'API publique : gérées par le propriétaire seulement.
     @app.get("/api/apikeys", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def apikeys_list():
-        return {"keys": publicapi.list_keys(db.base), "per_visitor": publicapi.PER_VISITOR}
+        return {"keys": publicapi.list_keys(db.base), "invites": publicapi.list_invites(db.base),
+                "per_visitor": publicapi.PER_VISITOR}
+
+    @app.post("/api/apikeys/invites", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_invite(body: ApiKeyBody):
+        """Lien à envoyer à un ami : il décrit lui-même son site et reçoit son code (une fois, 7 jours)."""
+        try:
+            inv, token = publicapi.create_invite(db.base, body.limit or publicapi.DEFAULT_LIMIT, body.name)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+        return {"invite": inv, "token": token}  # le lien complet est /partenaire#<token> (montré une fois)
+
+    @app.delete("/api/apikeys/invites/{iid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_invite_cancel(iid: str):
+        if not publicapi.cancel_invite(db.base, iid):
+            raise HTTPException(404, "Lien introuvable")
+        return {"ok": True}
 
     @app.post("/api/apikeys", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def apikeys_create(body: ApiKeyBody):

@@ -193,3 +193,19 @@
   background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text); font: inherit; }
 .c-mode-opt span { font-size: .84rem; color: var(--text-2); }
 .c-mode-opt.on { border-color: var(--accent); background: var(--grad-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+
+/* ---------- Page « partenaire » (ami qui met Syrius sur son site) ---------- */
+.p-body { overflow-y: auto; }
+.p-wrap { max-width: 620px; margin: 0 auto; padding: 32px 16px 60px; display: grid; gap: 18px; }
+.p-hero { text-align: center; }
+.p-hero .orb.big { margin: 0 auto 14px; }
+.p-hero h1 { margin: 0 0 6px; font-size: 1.6rem; }
+.p-card { display: grid; gap: 10px; padding: 22px 18px; border-radius: var(--r-lg); background: var(--surface);
+  border: 1px solid var(--line); box-shadow: var(--sh); }
+.p-card h2 { margin: 0 0 4px; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; }
+.p-card h3 { margin: 12px 0 0; font-size: 1rem; }
+.p-card label { display: grid; gap: 6px; font-size: .92rem; color: var(--text-2); }
+.p-card input, .p-card textarea { width: 100%; }
+.p-card code { background: var(--surface-2); padding: 1px 5px; border-radius: 6px; font-size: .86em; overflow-wrap: anywhere; }
+.p-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--text-2); }
+#p-snippet { font-family: ui-monospace, monospace; font-size: .85rem; }

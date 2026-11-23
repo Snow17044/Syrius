@@ -124,3 +124,56 @@ def test_adresses_de_site():
             raise AssertionError(bad)
         except publicapi.ApiError:
             pass
+
+
+def test_lien_pour_un_ami(make_client, monkeypatch):
+    """Le propriétaire envoie un lien ; l'ami décrit son site et reçoit sa clé, une seule fois."""
+    _fake_ai(monkeypatch)
+    c = make_client()
+    login(c)
+    r = c.post("/api/apikeys/invites", json={"name": "Léo", "limit": 120}, headers=H).json()
+    token = r["token"]
+    assert token not in str(c.get("/api/apikeys", headers=H).json())  # jamais réaffiché
+    assert c.get("/api/apikeys", headers=H).json()["invites"][0]["note"] == "Léo"
+    c.cookies.clear()  # l'ami n'a pas de compte Syrius
+    assert c.get("/partenaire").status_code == 200 and c.get("/static/partenaire.js").status_code == 200
+    assert c.post("/api/v1/invite/info", json={"token": token}).json()["limit"] == 120
+    assert c.post("/api/v1/invite/redeem", json={"token": token, "name": "Garage", "origins": []}).status_code == 400
+    assert c.post("/api/v1/invite/redeem", json={"token": token, "name": "Garage", "origins": ["javascript:x"]}).status_code == 400
+    ok = c.post("/api/v1/invite/redeem", json={"token": token, "name": "Garage de Léo", "origins": ["garage-leo.fr"],
+                                               "instructions": "Ouvert 8h-18h."})
+    assert ok.status_code == 200 and ok.json()["key"]["limit"] == 120 and ok.json()["key"]["origins"] == [SITE]
+    secret = ok.json()["secret"]
+    # le lien ne marche qu'une fois
+    assert c.post("/api/v1/invite/redeem", json={"token": token, "name": "Autre", "origins": [SITE]}).status_code == 404
+    assert c.post("/api/v1/invite/info", json={"token": token}).status_code == 404
+    assert c.post("/api/v1/invite/info", json={"token": "x" * 32}).status_code == 404
+    # la clé de l'ami marche sur son site
+    assert c.post("/api/v1/chat", json={"message": "Salut"},
+                  headers={"Authorization": f"Bearer {secret}", "Origin": SITE}).status_code == 200
+    login(c)
+    assert c.get("/api/apikeys", headers=H).json()["invites"] == []
+
+
+def test_lien_annule_ou_expire(make_db, monkeypatch):
+    base = make_db()
+    inv, token = publicapi.create_invite(base)
+    assert publicapi.cancel_invite(base, inv["id"])
+    try:
+        publicapi.invite_info(base, token)
+        raise AssertionError("404 attendu")
+    except publicapi.ApiError as e:
+        assert e.status == 404
+    _, token2 = publicapi.create_invite(base)
+    real = publicapi.time.time
+    monkeypatch.setattr(publicapi.time, "time", lambda: real() + 8 * 86400)
+    try:
+        publicapi.invite_info(base, token2)
+        raise AssertionError("expiré")
+    except publicapi.ApiError as e:
+        assert e.status == 404
+
+
+def test_creation_de_lien_reservee_au_proprietaire(make_client):
+    c = make_client()
+    assert c.post("/api/apikeys/invites", json={}, headers=H).status_code == 401

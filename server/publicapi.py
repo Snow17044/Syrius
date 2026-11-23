@@ -248,3 +248,73 @@ def answer(providers: list, k: dict, messages: list[dict]) -> str:
         if text:
             return text
     raise ApiError(503, "L'assistant est momentanément indisponible. Réessaie dans un instant.")
+
+
+# ------------------------------------------------------------------ liens d'invitation
+# Le propriétaire crée un lien ; son ami l'ouvre, décrit son site et reçoit SA clé + le code à coller.
+# Un lien = une seule clé, valable 7 jours. Seule l'empreinte du lien est gardée.
+INVITES = "family_publicapi_invites_v1"
+INVITE_DAYS = 7
+MAX_INVITES = 20
+
+
+def _load_invites(base) -> list[dict]:
+    try:
+        items = json.loads(base.get_secret(INVITES) or "[]")
+    except ValueError:
+        return []
+    now = time.time()
+    return [i for i in items if isinstance(i, dict) and i.get("hash") and i.get("expires", 0) > now] \
+        if isinstance(items, list) else []
+
+
+def create_invite(base, limit: int = DEFAULT_LIMIT, note: str = "") -> tuple[dict, str]:
+    items = _load_invites(base)
+    if len(items) >= MAX_INVITES:
+        raise ApiError(400, f"{MAX_INVITES} liens en attente au maximum : annules-en un.")
+    raw = secrets.token_urlsafe(24)
+    inv = {"id": secrets.token_hex(6), "hash": _hash(raw), "created": int(time.time()),
+           "expires": int(time.time()) + INVITE_DAYS * 86400, "limit": max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT)),
+           "note": " ".join(str(note or "").split())[:60]}
+    items.append(inv)
+    base.set_secret(INVITES, json.dumps(items))
+    return {k: inv[k] for k in ("id", "created", "expires", "limit", "note")}, raw
+
+
+def list_invites(base) -> list[dict]:
+    return [{k: i.get(k) for k in ("id", "created", "expires", "limit", "note")} for i in _load_invites(base)]
+
+
+def cancel_invite(base, iid: str) -> bool:
+    items = _load_invites(base)
+    left = [i for i in items if i["id"] != iid]
+    base.set_secret(INVITES, json.dumps(left))
+    return len(left) != len(items)
+
+
+def _find_invite(items: list[dict], token: str) -> dict | None:
+    if not isinstance(token, str) or not 20 <= len(token) <= 64:
+        return None
+    h = _hash(token)
+    return next((i for i in items if hmac.compare_digest(i["hash"], h)), None)
+
+
+def invite_info(base, token: str) -> dict:
+    inv = _find_invite(_load_invites(base), token)
+    if inv is None:
+        raise ApiError(404, "Ce lien n'est plus valable (déjà utilisé ou expiré). Demande-en un nouveau.")
+    return {"limit": inv["limit"], "expires": inv["expires"]}
+
+
+def redeem_invite(base, token: str, name: str, origins: list[str], instructions: str, bot_name: str) -> tuple[dict, str]:
+    items = _load_invites(base)
+    inv = _find_invite(items, token)
+    if inv is None:
+        raise ApiError(404, "Ce lien n'est plus valable (déjà utilisé ou expiré). Demande-en un nouveau.")
+    if not " ".join(str(name or "").split()):
+        raise ApiError(400, "Indique le nom de ton site.")
+    if not [o for o in origins or [] if str(o).strip()]:
+        raise ApiError(400, "Indique l'adresse de ton site (ex. : https://monsite.fr).")
+    key, raw = create_key(base, name, origins, instructions, inv["limit"], bot_name)  # vérifie les adresses
+    base.set_secret(INVITES, json.dumps([i for i in items if i["id"] != inv["id"]]))  # lien utilisable une fois
+    return key, raw

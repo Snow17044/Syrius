@@ -474,9 +474,25 @@
         <p class="muted small">Crée une clé pour le site d'un ami : ses visiteurs parlent à ton assistant dans une bulle
           de discussion. L'assistant de l'API ne voit rien de privé (ni tes discussions, ni ta mémoire, ni tes emails)
           et chaque clé a une limite de messages par jour.</p>
+        <h5 data-icon="link"><span>Envoyer un lien à un ami</span></h5>
+        <p class="muted small">Ton ami ouvre le lien, décrit son site et reçoit tout seul le code à coller.
+          Un lien = un site, valable 7 jours.</p>
+        <div class="inline-form">
+          <input id="api-inv-note" type="text" maxlength="60" placeholder="Pour qui ? (ex. : Léo)" autocomplete="off">
+          <input id="api-inv-limit" type="number" min="1" max="3000" value="300" aria-label="Messages par jour (au plus)" title="Messages par jour (au plus)">
+        </div>
+        <button type="button" id="api-invite" class="primary wide" data-icon="link"><span>Créer le lien</span></button>
+        <div id="api-inv-box" class="hidden">
+          <input id="api-inv-url" type="text" readonly spellcheck="false" aria-label="Lien pour ton ami">
+          <div class="local-actions">
+            <button type="button" id="api-inv-share" class="ghost" data-icon="send"><span>Envoyer</span></button>
+            <button type="button" id="api-inv-copy" class="ghost" data-icon="link"><span>Copier</span></button>
+          </div>
+          <p class="small muted">Ce lien n'est affiché qu'une fois.</p>
+        </div>
         <ul id="api-list" class="family-list"></ul>
         <details id="api-form">
-          <summary>Nouvelle clé</summary>
+          <summary>Créer une clé moi-même</summary>
           <label>Nom du site<input id="api-name" type="text" maxlength="60" placeholder="Ex. : Garage de Léo"></label>
           <label>Adresse du site (une par ligne)
             <textarea id="api-origins" rows="2" maxlength="600" placeholder="https://garage-leo.fr"></textarea></label>

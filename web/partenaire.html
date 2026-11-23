@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr" data-theme="syrius">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f16">
+  <meta name="robots" content="noindex">
+  <title>Un assistant IA sur ton site</title>
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/code.css">
+  <script src="/static/icons.js" defer></script>
+  <script src="/static/partenaire.js" defer></script>
+</head>
+<body class="code-body p-body">
+  <main class="p-wrap">
+    <div class="p-hero">
+      <div class="orb big"><span></span></div>
+      <h1>Un assistant IA sur ton site</h1>
+      <p class="muted">Une bulle de discussion qui répond à tes visiteurs, 24 h/24. Propulsé par Syrius.</p>
+    </div>
+
+    <section id="p-bad" class="p-card hidden">
+      <h2 data-icon="alert"><span>Lien plus valable</span></h2>
+      <p id="p-bad-text" class="muted">Ce lien a déjà été utilisé ou a expiré. Demande-en un nouveau à la personne qui te l'a envoyé.</p>
+    </section>
+
+    <form id="p-form" class="p-card hidden" autocomplete="off">
+      <h2 data-icon="sparkle"><span>1. Décris ton site</span></h2>
+      <label>Nom du site<input id="p-name" type="text" maxlength="60" required placeholder="Ex. : Garage de Léo"></label>
+      <label>Adresse du site
+        <input id="p-origin" type="text" maxlength="200" required placeholder="https://mon-site.fr" inputmode="url"></label>
+      <p class="muted small">La bulle ne marchera que sur cette adresse. Tu as aussi une version avec www, ou une
+        adresse de test ? Ajoute-la ici (une par ligne) :</p>
+      <textarea id="p-origins-more" rows="2" maxlength="600" placeholder="https://www.mon-site.fr"></textarea>
+      <label>Nom de l'assistant<input id="p-bot" type="text" maxlength="30" value="Nova"></label>
+      <label>Ce que l'assistant doit savoir
+        <textarea id="p-instr" rows="7" maxlength="4000" placeholder="Qui tu es, ce que tu proposes, tes horaires, tes prix, ton adresse, comment te contacter, le ton à employer (tutoiement ou vouvoiement)…"></textarea></label>
+      <p class="muted small">Plus tu donnes d'infos, mieux il répond. Il n'invente jamais un prix ou un horaire qui
+        n'est pas écrit ici. Tu pourras demander une modification plus tard.</p>
+      <p id="p-limit" class="small muted"></p>
+      <button type="submit" id="p-go" class="primary wide" data-icon="sparkle"><span>Créer mon assistant</span></button>
+      <p id="p-msg" class="small" role="status"></p>
+    </form>
+
+    <section id="p-done" class="p-card hidden">
+      <h2 data-icon="check"><span>2. Colle ce code sur ton site</span></h2>
+      <p>Copie ce code et colle-le dans chaque page de ton site, juste avant la balise <code>&lt;/body&gt;</code>.</p>
+      <textarea id="p-snippet" rows="4" readonly spellcheck="false" aria-label="Code à coller"></textarea>
+      <button type="button" id="p-copy" class="primary wide" data-icon="link"><span>Copier le code</span></button>
+      <p id="p-copy-msg" class="small" role="status"></p>
+      <p class="small"><strong>Garde ce code</strong> : il ne sera plus affiché une fois cette page fermée.</p>
+
+      <h3>Où le coller ?</h3>
+      <ul class="small p-list">
+        <li><b>Site fait à la main (HTML)</b> : dans chaque fichier .html, juste avant <code>&lt;/body&gt;</code>.</li>
+        <li><b>WordPress</b> : extension « WPCode » (ou « Insert Headers and Footers ») → Pied de page (footer) → colle le code.</li>
+        <li><b>Wix</b> : Paramètres → Code personnalisé → Ajouter → « Body – fin » → toutes les pages.</li>
+        <li><b>Shopify</b> : Thème → Modifier le code → <code>theme.liquid</code> → avant <code>&lt;/body&gt;</code>.</li>
+        <li><b>Squarespace</b> : Paramètres → Avancé → Injection de code → Pied de page.</li>
+      </ul>
+
+      <h3>Personnaliser (facultatif)</h3>
+      <p class="small muted">Ajoute ces options dans la balise, par exemple
+        <code>data-color="#e67e22"</code> :</p>
+      <ul class="small p-list">
+        <li><code>data-color="#e67e22"</code> : la couleur de la bulle.</li>
+        <li><code>data-position="left"</code> : la bulle en bas à gauche.</li>
+        <li><code>data-theme="light"</code> : une fenêtre claire.</li>
+        <li><code>data-welcome="Bonjour ! Une question ?"</code> : le premier message.</li>
+      </ul>
+      <p id="p-limit2" class="small muted"></p>
+    </section>
+  </main>
+</body>
+</html>

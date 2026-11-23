@@ -246,9 +246,26 @@ async function renderFamily(account) {
 async function renderApiKeys() {
   const list = $("#api-list");
   try {
-    const { keys } = await api("/api/apikeys");
+    const { keys, invites } = await api("/api/apikeys");
     list.textContent = "";
-    if (!keys.length) {
+    for (const inv of invites || []) {
+      const li = document.createElement("li");
+      li.className = "diag";
+      const t = document.createElement("strong");
+      t.textContent = `Lien envoyé${inv.note ? " à " + inv.note : ""} · en attente`;
+      const d = document.createElement("span");
+      d.className = "small muted";
+      d.textContent = `Valable jusqu'au ${new Date(inv.expires * 1000).toLocaleDateString("fr-FR")} · ${inv.limit} messages/jour`;
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "ghost subtle"; del.textContent = "Annuler";
+      del.addEventListener("click", async () => {
+        try { await api(`/api/apikeys/invites/${encodeURIComponent(inv.id)}`, { method: "DELETE" }); renderApiKeys(); }
+        catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+      });
+      li.append(t, d, del);
+      list.append(li);
+    }
+    if (!keys.length && !(invites || []).length) {
       const li = document.createElement("li");
       li.className = "muted small"; li.textContent = "Aucune clé pour l'instant.";
       list.append(li);
@@ -290,6 +307,28 @@ $("#api-create")?.addEventListener("click", async () => {
     $("#api-name").value = ""; $("#api-origins").value = ""; $("#api-instr").value = "";
     renderApiKeys();
   } catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+});
+$("#api-invite")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = "";
+  try {
+    const r = await api("/api/apikeys/invites", { method: "POST", body: JSON.stringify({
+      name: $("#api-inv-note").value.trim(), limit: parseInt($("#api-inv-limit").value, 10) || 300 }) });
+    $("#api-inv-url").value = `${location.origin}/partenaire#${r.token}`;
+    $("#api-inv-box").classList.remove("hidden");
+    $("#api-inv-note").value = "";
+    renderApiKeys();
+  } catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+});
+$("#api-inv-copy")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = (await copyText($("#api-inv-url").value)) ? "✅ Lien copié." : "Sélectionne le lien et copie-le.";
+});
+$("#api-inv-share")?.addEventListener("click", async () => {
+  const url = $("#api-inv-url").value;
+  if (navigator.share) {
+    try { await navigator.share({ title: "Un assistant IA sur ton site", text: "Ouvre ce lien pour mettre un assistant IA sur ton site :", url }); return; }
+    catch (_) { /* annulé : on copie */ }
+  }
+  $("#api-msg").textContent = (await copyText(url)) ? "✅ Lien copié : colle-le dans un message." : "Sélectionne le lien et copie-le.";
 });
 $("#api-copy")?.addEventListener("click", async () => {
   $("#api-msg").textContent = (await copyText($("#api-snippet").value)) ? "✅ Code copié." : "Sélectionne le code et copie-le.";
