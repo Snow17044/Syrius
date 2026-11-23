@@ -192,6 +192,8 @@ async function renderFamily(account) {
   box.classList.toggle("hidden", !owner);
   $("#diag-box").classList.toggle("hidden", !owner);
   $("#discord-box").classList.toggle("hidden", !owner);
+  $("#api-box").classList.toggle("hidden", !owner);
+  if (owner) renderApiKeys();
   if (owner) api("/api/voicebot").then((v) => { $("#dc-id").value = (v.discord_ids || [])[0] || ""; }).catch(() => {});
   if (owner) refreshSpace();
   const guest = !!(account && account.guest);
@@ -239,6 +241,59 @@ async function renderFamily(account) {
     }
   } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
 }
+
+// ------------------------------------------------------------------ API publique (sites d'amis)
+async function renderApiKeys() {
+  const list = $("#api-list");
+  try {
+    const { keys } = await api("/api/apikeys");
+    list.textContent = "";
+    if (!keys.length) {
+      const li = document.createElement("li");
+      li.className = "muted small"; li.textContent = "Aucune clé pour l'instant.";
+      list.append(li);
+    }
+    for (const k of keys) {
+      const li = document.createElement("li");
+      li.className = "diag";
+      const t = document.createElement("strong");
+      t.textContent = `${k.name} · ${k.bot_name}`;
+      const d = document.createElement("span");
+      d.className = "small muted";
+      d.textContent = (k.kind === "site" ? k.origins.join(", ") : "Clé serveur (secrète)") +
+        ` · ${k.used_today}/${k.limit} messages aujourd'hui · ${k.hint}`;
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "ghost subtle"; del.textContent = "Supprimer";
+      del.addEventListener("click", async () => {
+        if (!confirm(`Supprimer la clé « ${k.name} » ? La bulle disparaîtra de ce site.`)) return;
+        try { await api(`/api/apikeys/${encodeURIComponent(k.id)}`, { method: "DELETE" }); renderApiKeys(); }
+        catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+      });
+      li.append(t, d, del);
+      list.append(li);
+    }
+  } catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+}
+
+$("#api-create")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = "";
+  const origins = $("#api-origins").value.split(/[\s,]+/).map((o) => o.trim()).filter(Boolean);
+  try {
+    const r = await api("/api/apikeys", { method: "POST", body: JSON.stringify({
+      name: $("#api-name").value.trim(), origins, bot_name: $("#api-botname").value.trim() || "Nova",
+      instructions: $("#api-instr").value.trim(), limit: parseInt($("#api-limit").value, 10) || 300 }) });
+    $("#api-snippet").value = origins.length
+      ? `<script src="${location.origin}/widget.js" data-key="${r.secret}" defer></script>`
+      : `Clé serveur (secrète) : ${r.secret}\n\ncurl -X POST ${location.origin}/api/v1/chat -H "Authorization: Bearer ${r.secret}" -H "Content-Type: application/json" -d '{"message": "Bonjour"}'`;
+    $("#api-new").classList.remove("hidden");
+    $("#api-form").open = false;
+    $("#api-name").value = ""; $("#api-origins").value = ""; $("#api-instr").value = "";
+    renderApiKeys();
+  } catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+});
+$("#api-copy")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = (await copyText($("#api-snippet").value)) ? "✅ Code copié." : "Sélectionne le code et copie-le.";
+});
 
 async function renderReports() {
   const list = $("#report-list");

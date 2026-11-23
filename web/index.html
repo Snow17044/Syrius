@@ -469,6 +469,33 @@
       </div>
 
       <div class="set-panel" data-panel="services" role="tabpanel">
+      <div id="api-box" class="set-card hidden">
+        <h4 data-icon="link"><span>API : Syrius sur d'autres sites</span></h4>
+        <p class="muted small">Crée une clé pour le site d'un ami : ses visiteurs parlent à ton assistant dans une bulle
+          de discussion. L'assistant de l'API ne voit rien de privé (ni tes discussions, ni ta mémoire, ni tes emails)
+          et chaque clé a une limite de messages par jour.</p>
+        <ul id="api-list" class="family-list"></ul>
+        <details id="api-form">
+          <summary>Nouvelle clé</summary>
+          <label>Nom du site<input id="api-name" type="text" maxlength="60" placeholder="Ex. : Garage de Léo"></label>
+          <label>Adresse du site (une par ligne)
+            <textarea id="api-origins" rows="2" maxlength="600" placeholder="https://garage-leo.fr"></textarea></label>
+          <p class="muted small">La clé ne marche que depuis ces adresses. Laisse vide pour une clé « serveur »
+            (à garder secrète, pour un développeur qui appelle l'API depuis son serveur).</p>
+          <label>Nom de l'assistant<input id="api-botname" type="text" maxlength="30" value="Nova"></label>
+          <label>Ce que l'assistant doit savoir sur le site
+            <textarea id="api-instr" rows="4" maxlength="4000" placeholder="Ex. : Garage à Lyon, ouvert du lundi au samedi 8h–18h, tél. 04…, vidange à partir de 59 €. Tutoie les visiteurs."></textarea></label>
+          <label>Messages par jour (au plus)<input id="api-limit" type="number" min="1" max="3000" value="300"></label>
+          <button type="button" id="api-create" class="primary wide" data-icon="plus"><span>Créer la clé</span></button>
+        </details>
+        <div id="api-new" class="hidden">
+          <p class="small"><strong>Clé créée.</strong> Copie-la maintenant : elle ne sera plus jamais affichée.
+            Envoie ce code à ton ami ; il le colle sur son site, juste avant &lt;/body&gt;.</p>
+          <textarea id="api-snippet" rows="4" readonly spellcheck="false" aria-label="Code à coller sur le site"></textarea>
+          <button type="button" id="api-copy" class="ghost wide" data-icon="link"><span>Copier le code</span></button>
+        </div>
+        <p id="api-msg" class="small"></p>
+      </div>
       <div id="discord-box" class="set-card hidden">
         <h4 data-icon="mic"><span>Syrius sur Discord</span></h4>
         <p class="muted small">Parle à Syrius dans un salon vocal Discord, même en jouant sur ta console. Il ne répond

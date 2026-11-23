@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import atelier, group, journal, mailsort, publish, transcribe, vision
+from . import atelier, group, journal, mailsort, publicapi, publish, transcribe, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -55,6 +55,14 @@ MODEL_MANIFEST_KEY = "syrius_model_manifest_v1"
 
 class SiteBody(BaseModel):
     domain: str = Field(min_length=3, max_length=253)
+
+
+class ApiKeyBody(BaseModel):
+    name: str = Field(default="", max_length=60)
+    origins: list[str] | None = Field(default=None, max_length=10)
+    instructions: str | None = Field(default=None, max_length=4000)
+    limit: int | None = Field(default=None, ge=1, le=3000)
+    bot_name: str | None = Field(default=None, max_length=30)
 
 
 class MemoryBody(BaseModel):
@@ -278,7 +286,9 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def security_headers(request: Request, call_next):
         # Anti-CSRF : toute requête qui modifie quelque chose doit porter l'en-tête X-Syrius
         # (un site malveillant ne peut pas l'ajouter sans autorisation CORS, qu'on ne donne jamais).
-        if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
+        # Exception : l'API publique (/api/v1/) n'utilise jamais le cookie de connexion, seulement une clé d'API.
+        if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/") \
+                and not request.url.path.startswith("/api/v1/"):
             if request.headers.get("x-syrius") != "1":
                 return JSONResponse({"detail": "Requête refusée"}, status_code=403)
         response: Response = await call_next(request)
@@ -364,6 +374,59 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if name not in STATIC_FILES:  # liste blanche : aucun accès à d'autres fichiers
             raise HTTPException(404)
         return FileResponse(WEB_DIR / name, media_type=STATIC_FILES[name])
+
+    # ------------------------------------------------------------------ API publique (sites d'amis)
+    # Aucune donnée privée : ni cookie, ni souvenirs, ni outils. Une clé par site, créée par le propriétaire.
+    def api_cors(request: Request) -> dict:
+        origin = request.headers.get("origin")
+        h = {"Vary": "Origin", "Cache-Control": "no-store"}
+        if origin:  # pas de cookie (credentials) : la sécurité repose sur la clé et la liste des sites
+            h.update({"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                      "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600"})
+        return h
+
+    @app.options("/api/v1/{rest:path}")
+    async def public_api_preflight(rest: str, request: Request):
+        return Response(status_code=204, headers=api_cors(request))
+
+    def api_key_of(request: Request) -> str:
+        auth_h = request.headers.get("authorization", "")
+        return auth_h[7:].strip() if auth_h.lower().startswith("bearer ") else ""
+
+    @app.get("/api/v1/info")
+    async def public_api_info(request: Request):
+        """Le widget demande le nom de l'assistant (et vérifie que la clé marche sur ce site)."""
+        try:
+            k = publicapi.check(db.base, api_key_of(request), request.headers.get("origin"))
+        except publicapi.ApiError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status, headers=api_cors(request))
+        return JSONResponse({"name": k.get("bot_name", "Nova"), "site": k.get("name", "")}, headers=api_cors(request))
+
+    @app.post("/api/v1/chat")
+    async def public_api_chat(request: Request):
+        cors = api_cors(request)
+        try:
+            k = publicapi.check(db.base, api_key_of(request), request.headers.get("origin"))
+            try:
+                body = await request.json()
+            except ValueError:
+                raise publicapi.ApiError(400, "Corps JSON invalide.") from None
+            if not isinstance(body, dict):
+                raise publicapi.ApiError(400, "Corps JSON invalide.")
+            messages = publicapi.clean_messages(body)
+            if safety.blocked(messages[-1]["content"]):
+                raise publicapi.ApiError(400, "Je ne peux pas aider pour cette demande.")
+            usage = publicapi.consume(db.base, k["id"], client_ip(request))
+            reply = await asyncio.to_thread(publicapi.answer, agent.llm.ordered(), k, messages)
+        except publicapi.ApiError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status, headers=cors)
+        return JSONResponse({"reply": reply, "name": k.get("bot_name", "Nova"), "usage": usage}, headers=cors)
+
+    @app.get("/widget.js")
+    async def public_widget():
+        """Bulle de discussion à coller sur le site d'un ami (voir docs/API.md)."""
+        return FileResponse(WEB_DIR / "widget.js", media_type="text/javascript",
+                            headers={"Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": "*"})
 
     @app.get("/sw.js")
     async def service_worker():
@@ -581,6 +644,34 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         resp = JSONResponse({"ok": True})
         set_session_cookie(resp, auth.new_session(db, uid, left / 86400), max_age=max(60, int(left)))
         return resp
+
+    # Clés de l'API publique : gérées par le propriétaire seulement.
+    @app.get("/api/apikeys", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_list():
+        return {"keys": publicapi.list_keys(db.base), "per_visitor": publicapi.PER_VISITOR}
+
+    @app.post("/api/apikeys", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_create(body: ApiKeyBody):
+        try:
+            k, raw = publicapi.create_key(db.base, body.name, body.origins or [], body.instructions or "",
+                                          body.limit or publicapi.DEFAULT_LIMIT, body.bot_name or "Nova")
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+        return {"key": k, "secret": raw}  # montrée UNE seule fois
+
+    @app.patch("/api/apikeys/{kid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_update(kid: str, body: ApiKeyBody):
+        try:
+            return publicapi.update_key(db.base, kid, name=body.name or None, origins=body.origins,
+                                        instructions=body.instructions, limit=body.limit, bot_name=body.bot_name)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+
+    @app.delete("/api/apikeys/{kid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_delete(kid: str):
+        if not publicapi.delete_key(db.base, kid):
+            raise HTTPException(404, "Clé introuvable")
+        return {"ok": True}
 
     @app.get("/api/family", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def family_info():
