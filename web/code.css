@@ -1,34 +1,11 @@
 /* =====================================================================
-   Syrius Code — deux thèmes :
-   - « syrius » (par défaut) : le design de Syrius Discussion (voir style.css) ;
-   - « nature » : papier clair, verts de forêt et de feuillage.
+   Syrius Code — même interface et mêmes thèmes que Syrius (voir style.css) :
+   « syrius » par défaut, « nature » = forêt la nuit.
    ===================================================================== */
 :root {
   --c0: #a9b5ff; --c1: #f2b8d8; --c2: #8fe3c6; --c3: #ffd08f; --c4: #91d2ff; --c5: #c8b6ff;
   --nav-h: 64px;
 }
-:root[data-theme="nature"] {
-  --bg: #eaf0df; --bg-soft: #f6f9ef; --surface: #ffffff; --surface-2: #e8efdc; --surface-3: #d8e4c6;
-  --line: rgba(38, 72, 44, .10); --line-2: rgba(38, 72, 44, .20);
-  --text: #1d3324; --text-2: #3b5642; --muted: #6a806d;
-  --accent: #2f7d4f; --accent-2: #5f9e44; --accent-3: #c79a3b; --accent-ink: #ffffff;
-  --grad: linear-gradient(135deg, #3f9a62 0%, #6faa45 58%, #c5d45a 100%);
-  --grad-soft: linear-gradient(135deg, rgba(63, 154, 98, .16), rgba(197, 212, 90, .14));
-  --mint: #2f9e6e; --amber: #c79a3b; --sky: #3a8fb7; --danger: #c0503d;
-  --sh: 0 10px 28px rgba(40, 70, 40, .12); --sh-lg: 0 24px 60px rgba(40, 70, 40, .18);
-  --c0: #2f7d4f; --c1: #c79a3b; --c2: #3a8fb7; --c3: #9a6bb0; --c4: #c0503d; --c5: #6f8f3a;
-  color-scheme: light;
-}
-:root[data-theme="nature"] body {
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke='%232f7d4f' stroke-opacity='.07' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M20 130c0-30 18-50 52-54 0 34-18 54-46 54-3 0-5-.4-6-1z'/%3E%3Cpath d='M20 130c8-16 20-28 34-36'/%3E%3Cpath d='M104 60c0-18 11-30 31-33 0 21-11 33-28 33-1.5 0-2.4-.2-3-.5z'/%3E%3Cpath d='M104 60c5-9 12-16 21-21'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 160px 160px,
-    radial-gradient(900px 520px at 100% -10%, rgba(111, 170, 69, .20), transparent 60%),
-    radial-gradient(700px 500px at -20% 110%, rgba(63, 154, 98, .16), transparent 60%),
-    var(--bg);
-}
-:root[data-theme="nature"] .bubble strong, :root[data-theme="nature"] .c-bubble strong { color: var(--text); }
-:root[data-theme="nature"] .primary { box-shadow: 0 8px 22px rgba(47, 125, 79, .28); }
-
 .code-body { overflow: hidden; }
 .c-offscreen { position: fixed; left: -9999px; top: 0; }
 
@@ -70,7 +47,7 @@
 #c-nav button.on { color: var(--text); background: var(--surface-3); border-color: rgba(242, 184, 216, .3); }
 #c-nav button.on .ic { color: var(--accent-3); }
 .drawer-sep { height: 1px; background: var(--line); margin: 6px 0; }
-.c-switch-app { justify-content: flex-start; color: var(--text-2); margin: 0; }
+.c-switch-app { justify-content: center; color: var(--text-2); margin: 0; }
 
 /* Couleur d'Aurora : rose (Nova : bleu) */
 .brand-mark.aurora { background: linear-gradient(135deg, #f2b8d8, #c8b6ff); }

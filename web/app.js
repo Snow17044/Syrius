@@ -108,6 +108,19 @@ const store = {
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_) { /* ignore */ } },
 };
 
+// ------------------------------------------------------------------ thème : « syrius » (par défaut) ou « nature » (forêt la nuit)
+// Réglage commun avec Syrius Code.
+function applyTheme(t) {
+  const theme = t === "nature" ? "nature" : "syrius";
+  document.documentElement.dataset.theme = theme;
+  $("#theme-color")?.setAttribute("content", theme === "nature" ? "#0a1714" : "#0d0f16");
+  const b = $("#theme-toggle");
+  if (b) Icons.set(b, theme === "nature" ? "palette" : "leaf", theme === "nature" ? "Thème Syrius" : "Thème Forêt");
+  store.set("syrius:theme", theme);
+}
+applyTheme(store.get("syrius:theme"));
+$("#theme-toggle")?.addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "nature" ? "syrius" : "nature"));
+
 // ------------------------------------------------------------------ écrans
 function showLogin() {
   $("#app").classList.add("hidden");

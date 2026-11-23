@@ -706,4 +706,49 @@ body.voice-split #voice .voice-hint { display: none; }
 @media (prefers-reduced-motion: reduce) { .face, .face svg { animation: none !important; transition: none; } }
 
 /* Lien entre les deux applications (même interface) */
-.drawer-foot .c-switch-app { justify-content: flex-start; margin: 0; color: var(--text-2); text-decoration: none; }
+.drawer-foot .c-switch-app { justify-content: center; margin: 0; color: var(--text-2); text-decoration: none; }
+
+/* =====================================================================
+   Thème « Forêt » (data-theme="nature") : forêt de sapins la nuit, lune,
+   lucioles. Commun à Syrius et Syrius Code. Fond fixe, aucune animation.
+   ===================================================================== */
+:root[data-theme="nature"] {
+  --bg: #08120e; --bg-soft: #0b1712; --surface: #0f1d17; --surface-2: #14261f; --surface-3: #1c3229;
+  --line: rgba(190, 235, 200, .08); --line-2: rgba(190, 235, 200, .15);
+  --text: #e9f4ea; --text-2: #b8cfbd; --muted: #84a08d;
+  --accent: #93d8a6; --accent-2: #c3e29b; --accent-3: #f2cf8a; --accent-ink: #0a1a10;
+  --grad: linear-gradient(135deg, #8fd6a4 0%, #bfe09a 55%, #f2cf8a 100%);
+  --grad-soft: linear-gradient(135deg, rgba(143, 214, 164, .16), rgba(242, 207, 138, .10));
+  --mint: #8fe3c6; --amber: #f2cf8a; --sky: #9cc9e6; --danger: #ff9b8f;
+  --c0: #93d8a6; --c1: #f2cf8a; --c2: #9cc9e6; --c3: #d6b4f0; --c4: #ff9b8f; --c5: #c3e29b;
+  color-scheme: dark;
+}
+:root[data-theme="nature"] body {
+  background:
+    url("/static/foret.svg") left bottom / 600px 260px repeat-x,
+    radial-gradient(2px 2px at 18% 62%, rgba(242, 230, 140, .9), transparent 70%),
+    radial-gradient(2px 2px at 72% 70%, rgba(242, 230, 140, .8), transparent 70%),
+    radial-gradient(2.5px 2.5px at 44% 78%, rgba(242, 230, 140, .7), transparent 70%),
+    radial-gradient(2px 2px at 88% 58%, rgba(242, 230, 140, .6), transparent 70%),
+    radial-gradient(1.5px 1.5px at 30% 12%, rgba(255, 255, 255, .7), transparent 70%),
+    radial-gradient(1.5px 1.5px at 62% 6%, rgba(255, 255, 255, .6), transparent 70%),
+    radial-gradient(1px 1px at 8% 22%, rgba(255, 255, 255, .6), transparent 70%),
+    radial-gradient(1px 1px at 52% 20%, rgba(255, 255, 255, .5), transparent 70%),
+    radial-gradient(13px 13px at calc(84% + 5px) calc(19% - 4px), #0b1915 92%, rgba(11, 25, 21, 0) 100%),
+    radial-gradient(17px 17px at 84% 19%, rgba(244, 241, 222, .92) 92%, rgba(244, 241, 222, 0) 100%),
+    radial-gradient(240px 200px at 84% 19%, rgba(214, 230, 200, .12), transparent 70%),
+    radial-gradient(900px 400px at 50% 100%, rgba(80, 150, 110, .16), transparent 70%),
+    linear-gradient(180deg, #0a1714 0%, #0b1a14 55%, #0d1f17 100%);
+}
+:root[data-theme="nature"] #drawer { background: rgba(9, 20, 15, .97); }
+:root[data-theme="nature"] .orb {
+  background: radial-gradient(circle at 34% 30%, #fff 0 5%, #e2f7dc 14%, #9fdcae 40%, #4f9e78 72%, #2c5f4c 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 10px 40px rgba(143, 214, 164, .35); }
+:root[data-theme="nature"] .orb span { border-color: rgba(195, 226, 155, .35); }
+:root[data-theme="nature"] .hero-orb::before { background: radial-gradient(circle, rgba(143, 214, 164, .2), transparent 66%); }
+:root[data-theme="nature"] .hero-orb.aurora .orb {
+  background: radial-gradient(circle at 34% 30%, #fff 0 5%, #fff3d6 14%, #f2cf8a 42%, #d98f6a 74%, #8a4f45 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 10px 40px rgba(242, 207, 138, .4); }
+:root[data-theme="nature"] .hero-orb.aurora::before { background: radial-gradient(circle, rgba(242, 207, 138, .2), transparent 66%); }
+:root[data-theme="nature"] .brand-mark.aurora { background: linear-gradient(135deg, #f2cf8a, #d98f6a); }
+:root[data-theme="nature"] ::selection { background: rgba(143, 214, 164, .3); }

@@ -34,6 +34,7 @@ STATIC_FILES = {
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
     "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "atelier-test.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
+    "foret.svg": "image/svg+xml",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
