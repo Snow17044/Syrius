@@ -18,7 +18,7 @@
     $("#c-theme-color").setAttribute("content", THEME_COLORS[theme]);
     const b = $("#c-theme");
     if (b) {
-      Icons.set(b, theme === "nature" ? "palette" : "leaf", "");
+      Icons.set(b, theme === "nature" ? "palette" : "leaf", theme === "nature" ? "Thème Syrius" : "Thème Nature");
       b.setAttribute("aria-label", theme === "nature" ? "Thème Syrius" : "Thème Nature");
       b.title = theme === "nature" ? "Passer au thème Syrius" : "Passer au thème Nature";
     }
@@ -83,7 +83,7 @@
   $("#c-logout").addEventListener("click", async () => {
     try { await api("/api/logout", { method: "POST" }); } catch (_) { /* */ }
     store.set("syrius:code:conv", null);
-    $("#c-convs").close();
+    closeDrawer();
     showLogin();
   });
 
@@ -100,12 +100,22 @@
     const last = store.get("syrius:code:conv");
     if (last && state.convs.some((c) => c.id === last)) await openConversation(last);
     renderStarters();
+    renderConvList();  // le menu est toujours visible sur grand écran
   }
 
   // ------------------------------------------------------------------ navigation
+  // Même menu latéral que Syrius (toujours ouvert sur grand écran)
+  const TITLES = { aurore: "Aurora", sites: "Sites", tableaux: "Tableaux de bord", emails: "Emails", code: "Code" };
+  function openDrawer() { $("#drawer").classList.add("open"); $("#backdrop").classList.remove("hidden"); }
+  function closeDrawer() { $("#drawer").classList.remove("open"); $("#backdrop").classList.add("hidden"); }
+  $("#close-drawer").addEventListener("click", closeDrawer);
+  $("#backdrop").addEventListener("click", closeDrawer);
+
   function go(tab) {
     document.querySelectorAll(".c-tab").forEach((s) => s.classList.toggle("on", s.dataset.tab === tab));
-    document.querySelectorAll("#c-nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
+    document.querySelectorAll("#c-nav button[data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
+    $("#c-title").textContent = TITLES[tab] || "Aurora";
+    closeDrawer();
     if (tab === "sites") renderSites();
     if (tab === "tableaux") renderDashboards();
     if (tab === "code") renderCodeTab();
@@ -113,15 +123,15 @@
     if (tab === "code") { renderFast(); renderMode(); }
     if (tab === "aurore") scrollDown(true);
   }
-  document.querySelectorAll("#c-nav button").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
+  document.querySelectorAll("#c-nav button[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
 
   // ------------------------------------------------------------------ suggestions
   const STARTERS = {
     "#c-starters": [
-      ["Scanne mon site", "Scanne mon site monsite.fr et dis-moi les points faibles par ordre de gravité."],
-      ["Trie mes emails", "Résume mes emails non lus et dis-moi lesquels sont urgents."],
-      ["Écris du code", "Écris en Python une fonction qui "],
-      ["Tableau de bord", "Voici mes chiffres. Fais-en un tableau de bord :\n"],
+      ["Scanne mon site", "Scanne mon site monsite.fr et dis-moi les points faibles par ordre de gravité.", "shield"],
+      ["Trie mes emails", "Résume mes emails non lus et dis-moi lesquels sont urgents.", "mail"],
+      ["Écris du code", "Écris en Python une fonction qui ", "code"],
+      ["Tableau de bord", "Voici mes chiffres. Fais-en un tableau de bord :\n", "chart"],
     ],
     "#c-dash-starters": [
       ["Ventes du mois", "Voici mes ventes par semaine : S1 1200, S2 1850, S3 1430, S4 2100. Fais-en un tableau de bord avec l'évolution et le total."],
@@ -144,8 +154,14 @@
     for (const [sel, items] of Object.entries(STARTERS)) {
       const box = $(sel);
       box.replaceChildren();
-      for (const [label, prompt] of items) {
-        const b = el("button", "c-chip", label);
+      for (const [label, prompt, icon] of items) {
+        let b;
+        if (icon) {  // même carte que les suggestions de Syrius
+          b = el("button", "chip");
+          const ic = document.createElement("b");
+          ic.append(Icons.svg(icon));
+          b.append(ic, el("span", "", label));
+        } else b = el("button", "c-chip", label);
         b.type = "button";
         b.addEventListener("click", () => {
           go("aurore");
@@ -178,8 +194,8 @@
 
   function addBubble(role, text) {
     $("#c-empty").classList.add("hidden");
-    const wrap = el("div", `c-msg ${role}`);
-    const bubble = el("div", "c-bubble");
+    const wrap = el("div", `c-msg msg ${role}`);  // mêmes bulles que Syrius
+    const bubble = el("div", "c-bubble bubble");
     const tools = el("div", "c-tools");
     const body = el("div", "c-body");
     bubble.append(tools, body);
@@ -482,29 +498,37 @@
     }
   });
 
-  // Mes discussions
-  $("#c-menu").addEventListener("click", async () => {
+  // Mes discussions (dans le menu, comme Syrius)
+  async function renderConvList() {
     try { state.convs = await api("/api/code/conversations"); } catch (_) { /* */ }
     const ul = $("#c-conv-list");
     ul.replaceChildren();
-    if (!state.convs.length) ul.appendChild(el("li", "c-card muted", "Aucune discussion pour l'instant."));
+    if (!state.convs.length) ul.appendChild(el("li", "muted small c-conv-empty", "Aucune discussion pour l'instant."));
     for (const c of state.convs) {
-      const li = el("li", "c-card c-row");
-      const open = el("button", "c-link", c.title || "Discussion");
+      const li = el("li");
+      if (c.id === state.convId) li.classList.add("active");
+      const open = el("button", "conv-open");
       open.type = "button";
-      open.addEventListener("click", async () => { $("#c-convs").close(); await openConversation(c.id); });
-      li.append(open, btn("", "trash", async () => {
+      Icons.set(open, "message", c.title || "Discussion");
+      open.addEventListener("click", async () => { closeDrawer(); await openConversation(c.id); renderConvList(); });
+      const del = el("button", "conv-more");
+      del.type = "button";
+      del.setAttribute("aria-label", "Supprimer cette discussion");
+      del.append(Icons.svg("trash"));
+      del.addEventListener("click", async () => {
         if (!confirm("Supprimer cette discussion ?")) return;
         await api(`/api/code/conversations/${c.id}`, { method: "DELETE" });
         if (state.convId === c.id) { state.convId = null; store.set("syrius:code:conv", null); messages.querySelectorAll(".c-msg").forEach((m) => m.remove()); $("#c-empty").classList.remove("hidden"); }
-        $("#c-menu").click();
-      }, "ghost subtle"));
+        renderConvList();
+      });
+      li.append(open, del);
       ul.appendChild(li);
     }
-    $("#c-convs").showModal();
-  });
-  $("#c-convs-close").addEventListener("click", () => $("#c-convs").close());
-  $("#c-new").addEventListener("click", async () => { $("#c-convs").close(); await newConversation(); go("aurore"); $("#c-input").focus(); });
+  }
+  $("#c-menu").addEventListener("click", () => { renderConvList(); openDrawer(); });
+  async function freshConversation() { closeDrawer(); await newConversation(); go("aurore"); renderConvList(); $("#c-input").focus(); }
+  $("#c-newchat").addEventListener("click", freshConversation);
+  $("#c-new").addEventListener("click", freshConversation);
 
   // ------------------------------------------------------------------ emails : brouillon à confirmer, connexion de la boîte
   function renderMailDraft(ev) {

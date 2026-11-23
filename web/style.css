@@ -704,3 +704,6 @@ body.voice-split #voice .voice-hint { display: none; }
 .face[data-mode="listen"] svg { animation: breathe 2.2s ease-in-out infinite; }
 .voice-aurora { padding: 6px 12px; font-size: .8rem; border-radius: 99px; }
 @media (prefers-reduced-motion: reduce) { .face, .face svg { animation: none !important; transition: none; } }
+
+/* Lien entre les deux applications (même interface) */
+.drawer-foot .c-switch-app { justify-content: flex-start; margin: 0; color: var(--text-2); text-decoration: none; }
