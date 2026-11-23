@@ -100,7 +100,7 @@ button { touch-action: manipulation; }
 .primary.btn-link { color: var(--accent-ink); margin: 0; }
 
 /* ---------- Champs ---------- */
-input[type=text], input[type=password], input[type=search], input[type=time], textarea, select {
+input[type=text], input[type=number], input[type=url], input[type=password], input[type=search], input[type=time], textarea, select {
   background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 14px; padding: 12px 14px;
   width: 100%; outline: none; transition: border-color .2s, box-shadow .2s; }
 input:focus, textarea:focus, select:focus { border-color: rgba(169, 181, 255, .6); box-shadow: 0 0 0 4px rgba(169, 181, 255, .12); }
@@ -752,3 +752,4 @@ body.voice-split #voice .voice-hint { display: none; }
 :root[data-theme="nature"] .hero-orb.aurora::before { background: radial-gradient(circle, rgba(242, 207, 138, .2), transparent 66%); }
 :root[data-theme="nature"] .brand-mark.aurora { background: linear-gradient(135deg, #f2cf8a, #d98f6a); }
 :root[data-theme="nature"] ::selection { background: rgba(143, 214, 164, .3); }
+#api-inv-limit { width: 96px; flex: none; }
