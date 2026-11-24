@@ -365,6 +365,13 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                         "Disallow: /reinitialiser\nDisallow: /rejoindre/\n\n"
                         f"Sitemap: {base}/sitemap.xml\n", media_type="text/plain")
 
+    # IndexNow (Bing, DuckDuckGo, Yahoo, Qwant, Ecosia…) : clé PUBLIQUE qui prouve que le site est à nous.
+    INDEXNOW_KEY = "e644d30a94a0663eb9522ad521a7cef7"
+
+    @app.get(f"/{INDEXNOW_KEY}.txt")
+    async def indexnow_key():
+        return Response(INDEXNOW_KEY, media_type="text/plain")
+
     @app.get("/sitemap.xml")
     async def sitemap(request: Request):
         base = html.escape(public_base(request))

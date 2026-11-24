@@ -43,3 +43,12 @@ def test_code_de_verification_google(make_client):
 def test_syrius_code_jamais_indexe(make_client):
     c = make_client()
     assert '<meta name="robots" content="noindex">' in c.get("/code").text
+
+
+def test_cle_indexnow(make_client):
+    import re
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "server/app.py").read_text(encoding="utf-8")
+    key = re.search(r'INDEXNOW_KEY = "([0-9a-f]{32})"', src).group(1)
+    r = make_client().get(f"/{key}.txt")
+    assert r.status_code == 200 and r.text == key
