@@ -7,7 +7,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Syrius">
-  <title>Syrius</title>
+  <title>Syrius — assistant IA personnel</title>
+  <meta name="description" content="Syrius, ton assistant IA personnel en français : discussion et voix avec Nova, images, photos, réveil du matin, journal, débats d'IA et Aurora qui code tes sites. Privé et sans publicité.">
+  <link rel="canonical" href="{{BASE}}/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Syrius">
+  <meta property="og:title" content="Syrius — ton assistant IA personnel">
+  <meta property="og:description" content="Nova parle, voit tes photos, crée des images et t'aide au quotidien. Aurora code tes sites.">
+  <meta property="og:url" content="{{BASE}}/">
+  <meta property="og:image" content="{{BASE}}/icons/icon-512.png">
+  {{GOOGLE_META}}
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -44,6 +53,7 @@
         <button type="submit" class="primary">Se connecter</button>
         <button type="button" id="join-open" class="ghost subtle">Rejoindre la famille avec un code</button>
         <a href="/reinitialiser" class="small muted">Mot de passe oublié ?</a>
+        <a href="/decouvrir" class="small muted">Découvrir Syrius</a>
       </form>
       <form id="join-form" class="hidden" autocomplete="off">
         <p class="small muted">Demande le code d'invitation à la personne qui t'a invité, puis choisis ton prénom et ton mot de passe.</p>

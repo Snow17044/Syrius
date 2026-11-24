@@ -72,6 +72,13 @@ class Config:
     cloudflare_models: list = field(default_factory=lambda: [
         m.strip() for m in _env("SYRIUS_CLOUDFLARE_MODELS", "@cf/zai-org/glm-4.7-flash,@cf/google/gemma-4-26b-a4b-it").split(",")
         if m.strip()][:3])
+    # IA de Cloudflare qui « voient » (photos seulement) : quota quotidien bien plus large qu'OpenRouter.
+    cloudflare_vision_models: list = field(default_factory=lambda: [
+        m.strip() for m in _env("SYRIUS_CLOUDFLARE_VISION_MODELS", "@cf/meta/llama-4-scout-17b-16e-instruct").split(",")
+        if m.strip()][:3])
+    # Création d'images par Cloudflare (FLUX.1 schnell), avec les mêmes clés : gratuit dans le quota quotidien.
+    cloudflare_image_model: str = field(default_factory=lambda: _env("SYRIUS_CLOUDFLARE_IMAGE_MODEL",
+                                                                     "@cf/black-forest-labs/flux-1-schnell"))
     # IA gratuites qui « voient », utilisées seulement pour les photos (relais si les autres échouent).
     openrouter_vision_models: list = field(default_factory=lambda: [
         m.strip() for m in _env("SYRIUS_OPENROUTER_VISION_MODELS",
@@ -113,6 +120,12 @@ class Config:
     # Cookies "Secure" : obligatoire en production (HTTPS). Désactivable seulement en local.
     cookie_secure: bool = field(default_factory=lambda: _bool("SYRIUS_COOKIE_SECURE", True))
     session_days: int = field(default_factory=lambda: int(_env("SYRIUS_SESSION_DAYS", "30")))
+    # Adresse publique de Syrius (pour Google : plan du site, adresse canonique). Par défaut : l'adresse de
+    # production donnée par Vercel.
+    public_url: str = field(default_factory=lambda: (_env("SYRIUS_PUBLIC_URL") or (
+        "https://" + _env("VERCEL_PROJECT_PRODUCTION_URL") if _env("VERCEL_PROJECT_PRODUCTION_URL") else "")).rstrip("/"))
+    # Code de vérification Google Search Console (méthode « balise HTML » : seulement la valeur de content="…").
+    google_verification: str = field(default_factory=lambda: _env("SYRIUS_GOOGLE_VERIFICATION"))
     behind_vercel: bool = field(default_factory=lambda: bool(os.environ.get("VERCEL")))
 
     # Emails (IMAP lecture / SMTP envoi)

@@ -1,0 +1,36 @@
+/* Page publique « Découvrir Syrius » (celle que Google montre). */
+.d-body { overflow-y: auto; height: auto; min-height: 100%; }
+.d-top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; background: rgba(13, 15, 22, .85); border-bottom: 1px solid var(--line); }
+.d-brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 700; font-size: 1.1rem; }
+.d-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px;
+  border-radius: 999px; text-decoration: none; font-weight: 600; }
+.d-btn.primary { background: var(--grad); color: var(--accent-ink); box-shadow: 0 10px 28px rgba(169, 181, 255, .25); }
+.d-btn.ghost { color: var(--text); border: 1px solid var(--line-2); background: var(--surface); }
+main { max-width: 1000px; margin: 0 auto; padding: 0 16px; }
+.d-hero { text-align: center; padding: 56px 0 30px; }
+.d-hero .orb.big { width: 128px; height: 128px; margin: 0 auto 22px; animation: breathe 6s ease-in-out infinite; }
+.d-hero h1 { font-size: clamp(1.8rem, 6vw, 3rem); line-height: 1.15; margin: 0 0 14px; letter-spacing: -.02em; }
+.d-lead { font-size: 1.1rem; color: var(--text-2); max-width: 620px; margin: 0 auto 26px; }
+.d-cta { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.d-section { padding: 30px 0; }
+.d-section h2 { font-size: 1.5rem; margin: 0 0 18px; text-align: center; }
+.d-duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.d-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 22px; }
+.d-card h3 { margin: 10px 0 6px; font-size: 1.2rem; }
+.d-card p { margin: 0 0 8px; color: var(--text-2); }
+.d-card .orb.small { width: 40px; height: 40px; }
+.orb.aurora { background: radial-gradient(circle at 34% 30%, #fff 0 6%, #ffe3f1 16%, #f2b8d8 44%, #c8b6ff 72%, #9fb0ff 100%); }
+.d-wide h2 { text-align: left; font-size: 1.3rem; }
+.d-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.d-feat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; }
+.d-feat b { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-3); color: var(--accent); }
+.d-feat b .ic { width: 22px; height: 22px; }
+.d-feat h3 { margin: 12px 0 4px; font-size: 1.02rem; }
+.d-feat p { margin: 0; color: var(--text-2); font-size: .94rem; }
+.d-list { max-width: 680px; margin: 0 auto; display: grid; gap: 8px; color: var(--text-2); }
+.d-faq { max-width: 680px; margin: 0 auto 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 18px; }
+.d-faq summary { cursor: pointer; font-weight: 600; }
+.d-faq p { color: var(--text-2); margin: 10px 0 0; }
+.d-foot { text-align: center; padding: 30px 16px 40px; color: var(--muted); }
+.d-foot a { color: var(--text-2); }

@@ -34,7 +34,7 @@ STATIC_FILES = {
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
     "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "atelier-test.js": "text/javascript", "code.css": "text/css", "reset.js": "text/javascript",
-    "foret.svg": "image/svg+xml", "partenaire.js": "text/javascript",
+    "foret.svg": "image/svg+xml", "partenaire.js": "text/javascript", "decouvrir.css": "text/css",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -331,9 +331,48 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                         secure=cfg.cookie_secure, samesite="strict", path="/")
 
     # ------------------------------------------------------------------ pages
-    @app.get("/")
-    async def index():
-        return FileResponse(WEB_DIR / "index.html", media_type="text/html")
+    # ------------------------------------------------------------------ Google (référencement)
+    # Pages publiques : l'accueil (connexion), « Découvrir Syrius » et la confidentialité. Tout le reste
+    # (API, Syrius Code, invitations, atelier) est exclu de Google.
+    def public_base(request: Request) -> str:
+        if cfg.public_url.startswith("https://"):
+            return cfg.public_url
+        return f"{request.url.scheme}://{request.url.netloc}"
+
+    def seo_page(name: str, request: Request) -> HTMLResponse:
+        page = (WEB_DIR / name).read_text(encoding="utf-8")
+        code = cfg.google_verification.strip()
+        meta = (f'<meta name="google-site-verification" content="{html.escape(code)}">'
+                if re.fullmatch(r"[A-Za-z0-9_-]{10,100}", code) else "")
+        return HTMLResponse(page.replace("{{BASE}}", html.escape(public_base(request))).replace("{{GOOGLE_META}}", meta))
+
+    @app.api_route("/", methods=["GET", "HEAD"])
+    async def index(request: Request):
+        return seo_page("index.html", request)
+
+    @app.api_route("/decouvrir", methods=["GET", "HEAD"])
+    async def discover(request: Request):
+        """Présentation publique de Syrius : la page que Google montre quand on cherche Syrius."""
+        return seo_page("decouvrir.html", request)
+
+    @app.get("/robots.txt")
+    async def robots(request: Request):
+        base = public_base(request)
+        if f"{request.url.scheme}://{request.url.netloc}" != base:  # copies de Vercel (adresses de déploiement)
+            return Response("User-agent: *\nDisallow: /\n", media_type="text/plain")
+        return Response("User-agent: *\nAllow: /$\nAllow: /decouvrir\nAllow: /confidentialite\nAllow: /static/\n"
+                        "Allow: /icons/\nDisallow: /api/\nDisallow: /code\nDisallow: /partenaire\nDisallow: /atelier/\n"
+                        "Disallow: /reinitialiser\nDisallow: /rejoindre/\n\n"
+                        f"Sitemap: {base}/sitemap.xml\n", media_type="text/plain")
+
+    @app.get("/sitemap.xml")
+    async def sitemap(request: Request):
+        base = html.escape(public_base(request))
+        urls = "".join(f"<url><loc>{base}{p}</loc><changefreq>weekly</changefreq><priority>{pr}</priority></url>"
+                       for p, pr in (("/decouvrir", "1.0"), ("/", "0.8"), ("/confidentialite", "0.3")))
+        return Response('<?xml version="1.0" encoding="UTF-8"?>'
+                        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+                        media_type="application/xml")
 
     @app.get("/code")
     async def code_page():
@@ -345,7 +384,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def reset_page():
         return FileResponse(WEB_DIR / "reset.html", media_type="text/html", headers={"Cache-Control": "no-store"})
 
-    @app.get("/confidentialite")
+    @app.api_route("/confidentialite", methods=["GET", "HEAD"])
     async def privacy():
         """Politique de confidentialité (exigée par Google Play) et marche à suivre pour supprimer son compte."""
         page = (WEB_DIR / "confidentialite.html").read_text(encoding="utf-8")
