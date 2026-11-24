@@ -120,6 +120,12 @@ class Config:
     # Cookies "Secure" : obligatoire en production (HTTPS). Désactivable seulement en local.
     cookie_secure: bool = field(default_factory=lambda: _bool("SYRIUS_COOKIE_SECURE", True))
     session_days: int = field(default_factory=lambda: int(_env("SYRIUS_SESSION_DAYS", "30")))
+    # Adresse publique de Syrius (pour Google : plan du site, adresse canonique). Par défaut : l'adresse de
+    # production donnée par Vercel.
+    public_url: str = field(default_factory=lambda: (_env("SYRIUS_PUBLIC_URL") or (
+        "https://" + _env("VERCEL_PROJECT_PRODUCTION_URL") if _env("VERCEL_PROJECT_PRODUCTION_URL") else "")).rstrip("/"))
+    # Code de vérification Google Search Console (méthode « balise HTML » : seulement la valeur de content="…").
+    google_verification: str = field(default_factory=lambda: _env("SYRIUS_GOOGLE_VERIFICATION"))
     behind_vercel: bool = field(default_factory=lambda: bool(os.environ.get("VERCEL")))
 
     # Emails (IMAP lecture / SMTP envoi)
