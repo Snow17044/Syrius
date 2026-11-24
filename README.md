@@ -1,5 +1,7 @@
 # SYRIUS — ton assistant IA personnel, 100 % gratuit
 
+**[Découvrir Syrius →](https://syriusprojet1.vercel.app/decouvrir)** · [Ouvrir l'application](https://syriusprojet1.vercel.app/)
+
 Syrius est un assistant IA dans l'esprit de J.A.R.V.I.S. : professionnel, drôle quand il faut, et toujours là.
 C'est une **vraie application Android**, et il est disponible 24h/24 sans rien à redémarrer.
 
