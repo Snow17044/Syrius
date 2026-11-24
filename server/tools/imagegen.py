@@ -62,7 +62,8 @@ def check_image(ctype: str, body: bytes) -> str:
     return ctype
 
 
-KEYS = {"pollinations": "", "hf": ""}  # renseignées au démarrage (variables Vercel), jamais envoyées ailleurs
+KEYS = {"pollinations": "", "hf": "", "cf_token": "", "cf_account": "", "cf_model": ""}  # variables Vercel, jamais envoyées ailleurs
+CF_HOST = "api.cloudflare.com"  # Cloudflare Workers AI : FLUX.1 schnell, gratuit dans le quota quotidien
 HF_HOST = "router.huggingface.co"
 HF_PATH = "/fal-ai/fal-ai/flux/schnell"  # FLUX.1 schnell via Hugging Face (fournisseur fal-ai)
 GEN_HOST = "gen.pollinations.ai"
@@ -74,6 +75,11 @@ _DATA_IMG = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+
 def configure(cfg) -> None:
     KEYS["pollinations"] = getattr(cfg, "pollinations_api_key", "") or ""
     KEYS["hf"] = getattr(cfg, "hf_token", "") or ""
+    account = getattr(cfg, "cloudflare_account_id", "") or ""
+    model = getattr(cfg, "cloudflare_image_model", "") or ""
+    ok = re.fullmatch(r"[0-9a-f]{32}", account) and re.fullmatch(r"@cf/[\w.-]+/[\w.-]+", model)
+    KEYS["cf_token"] = (getattr(cfg, "cloudflare_api_key", "") or "") if ok else ""
+    KEYS["cf_account"], KEYS["cf_model"] = (account, model) if ok else ("", "")
 
 
 def _fetch(host: str, method: str, path: str, headers: dict, body: bytes | None = None) -> tuple[int, str, bytes]:
@@ -140,6 +146,32 @@ def _json(name: str, status: int, body: bytes) -> dict:
     return data
 
 
+def _raw_image(raw: bytes) -> str:
+    for ctype, magic in _MAGIC.items():
+        if raw.startswith(magic):
+            return check_image(ctype, raw)
+    raise ImageGenError("le service n'a pas renvoyé d'image valide")
+
+
+def _cloudflare(prompt: str, seed: int) -> tuple[str, bytes]:
+    payload = json.dumps({"prompt": clean_prompt(prompt), "steps": 6, "seed": seed})
+    status, ctype, body = _fetch(CF_HOST, "POST", f"/client/v4/accounts/{KEYS['cf_account']}/ai/run/{KEYS['cf_model']}", {
+        **HEADERS, "Accept": "application/json", "Content-Type": "application/json",
+        "Authorization": f"Bearer {KEYS['cf_token']}"}, payload.encode())
+    if status == 200 and ctype.startswith("image/"):  # certains modèles renvoient l'image directement
+        return _raw_image(body), body
+    data = _json("Cloudflare", status, body)
+    img = (data.get("result") or {}).get("image") if isinstance(data.get("result"), dict) else None
+    if not isinstance(img, str) or not img:
+        raise ImageGenError("Cloudflare : pas d'image dans la réponse")
+    m = _DATA_IMG.match(img)
+    try:
+        raw = base64.b64decode(m.group(2) if m else img, validate=True)
+    except ValueError:
+        raise ImageGenError("Cloudflare : image illisible") from None
+    return _raw_image(raw), raw
+
+
 def _huggingface(prompt: str, seed: int) -> tuple[str, bytes]:
     payload = json.dumps({"prompt": clean_prompt(prompt), "image_size": {"width": SIZE, "height": SIZE},
                           "num_inference_steps": 4, "seed": seed, "sync_mode": True, "enable_safety_checker": True})
@@ -196,6 +228,8 @@ def _horde(prompt: str, seed: int) -> tuple[str, bytes]:
 
 def sources() -> list:
     out = []
+    if KEYS["cf_token"]:  # le plus fiable : clé déjà utilisée pour les IA de secours
+        out.append(_cloudflare)
     if KEYS["pollinations"]:
         out.append(_pollinations_key)
     out.append(_pollinations)

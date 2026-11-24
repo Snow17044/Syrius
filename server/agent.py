@@ -295,7 +295,7 @@ class Agent:
             providers = [p for p in providers if p.vision]
             if not providers:
                 yield {"type": "error", "message": "Aucune de tes IA ne sait regarder une photo pour l'instant "
-                                                   "(il faut Groq Llama 4, GitHub Models ou Mistral)."}
+                                                   "(il faut une clé Cloudflare, OpenRouter, GitHub Models ou Mistral)."}
                 return
         # Part équitable de l'IA la plus puissante (limite gratuite partagée par la famille).
         base = getattr(self.db, "base", self.db)
