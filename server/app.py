@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import auth, autogen, coderask, debate, diagnostic, family, github_oidc, hfspace, memory, safety, selfcode, sitescan, skills, training, voicebot
-from . import atelier, group, journal, mailsort, transcribe, uchronie, vision
+from . import atelier, group, journal, mailsort, publicapi, publish, transcribe, uchronie, vision
 from .agent import Agent, display_messages, sse
 from .config import Config, config as default_config
 from .db import Database
@@ -33,7 +33,8 @@ STATIC_FILES = {
     "maplibre-gl.css": "text/css", "diagram.js": "text/javascript",
     "three.min.js": "text/javascript", "model3d.js": "text/javascript", "templates3d.js": "text/javascript",
     "local.js": "text/javascript", "voice.js": "text/javascript", "icons.js": "text/javascript", "gltf-loader.js": "text/javascript",
-    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "uchronie.js": "text/javascript", "uchronie.css": "text/css", "uchronie-monde.json": "application/json", "code.css": "text/css", "reset.js": "text/javascript",
+    "legal.css": "text/css", "code.js": "text/javascript", "journal.js": "text/javascript", "debate.js": "text/javascript", "faces.js": "text/javascript", "atelier-test.js": "text/javascript", "uchronie.js": "text/javascript", "uchronie.css": "text/css", "uchronie-monde.json": "application/json", "code.css": "text/css", "reset.js": "text/javascript",
+    "foret.svg": "image/svg+xml", "partenaire.js": "text/javascript", "decouvrir.css": "text/css",
 }
 ICON_FILES = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 
@@ -54,6 +55,14 @@ MODEL_MANIFEST_KEY = "syrius_model_manifest_v1"
 
 class SiteBody(BaseModel):
     domain: str = Field(min_length=3, max_length=253)
+
+
+class ApiKeyBody(BaseModel):
+    name: str = Field(default="", max_length=60)
+    origins: list[str] | None = Field(default=None, max_length=10)
+    instructions: str | None = Field(default=None, max_length=4000)
+    limit: int | None = Field(default=None, ge=1, le=3000)
+    bot_name: str | None = Field(default=None, max_length=30)
 
 
 class MemoryBody(BaseModel):
@@ -149,6 +158,17 @@ class Model3DSearch(BaseModel):
 class Model3DCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=300)
     key: str = Field(default="", max_length=80)  # mots-clés de l'objet : maquette déjà créée réutilisée
+
+
+class InstantAskBody(BaseModel):
+    feedback: str = Field(default="", max_length=6000)
+
+
+class InstantResultBody(BaseModel):
+    ok: bool
+    final: bool = True
+    log: str = Field(default="", max_length=8000)
+    summary: str = Field(default="", max_length=600)
 
 
 class ToggleBody(BaseModel):
@@ -288,7 +308,9 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def security_headers(request: Request, call_next):
         # Anti-CSRF : toute requête qui modifie quelque chose doit porter l'en-tête X-Syrius
         # (un site malveillant ne peut pas l'ajouter sans autorisation CORS, qu'on ne donne jamais).
-        if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
+        # Exception : l'API publique (/api/v1/) n'utilise jamais le cookie de connexion, seulement une clé d'API.
+        if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/") \
+                and not request.url.path.startswith("/api/v1/"):
             if request.headers.get("x-syrius") != "1":
                 return JSONResponse({"detail": "Requête refusée"}, status_code=403)
         response: Response = await call_next(request)
@@ -296,7 +318,8 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if "content-security-policy" not in h:  # une page peut fixer une politique plus stricte
             h["Content-Security-Policy"] = CSP
         h["X-Content-Type-Options"] = "nosniff"
-        h["X-Frame-Options"] = "DENY"
+        # l'aperçu d'un site de l'atelier s'affiche DANS Syrius Code (même site) ; tout le reste : jamais dans un cadre
+        h["X-Frame-Options"] = "SAMEORIGIN" if request.url.path.startswith("/atelier/") else "DENY"
         h["Referrer-Policy"] = "no-referrer"
         h["Permissions-Policy"] = "camera=(), geolocation=(self), microphone=(self)"
         h["Cross-Origin-Opener-Policy"] = "same-origin"
@@ -330,9 +353,55 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                         secure=cfg.cookie_secure, samesite="strict", path="/")
 
     # ------------------------------------------------------------------ pages
-    @app.get("/")
-    async def index():
-        return FileResponse(WEB_DIR / "index.html", media_type="text/html")
+    # ------------------------------------------------------------------ Google (référencement)
+    # Pages publiques : l'accueil (connexion), « Découvrir Syrius » et la confidentialité. Tout le reste
+    # (API, Syrius Code, invitations, atelier) est exclu de Google.
+    def public_base(request: Request) -> str:
+        if cfg.public_url.startswith("https://"):
+            return cfg.public_url
+        return f"{request.url.scheme}://{request.url.netloc}"
+
+    def seo_page(name: str, request: Request) -> HTMLResponse:
+        page = (WEB_DIR / name).read_text(encoding="utf-8")
+        code = cfg.google_verification.strip()
+        meta = (f'<meta name="google-site-verification" content="{html.escape(code)}">'
+                if re.fullmatch(r"[A-Za-z0-9_-]{10,100}", code) else "")
+        return HTMLResponse(page.replace("{{BASE}}", html.escape(public_base(request))).replace("{{GOOGLE_META}}", meta))
+
+    @app.api_route("/", methods=["GET", "HEAD"])
+    async def index(request: Request):
+        return seo_page("index.html", request)
+
+    @app.api_route("/decouvrir", methods=["GET", "HEAD"])
+    async def discover(request: Request):
+        """Présentation publique de Syrius : la page que Google montre quand on cherche Syrius."""
+        return seo_page("decouvrir.html", request)
+
+    @app.get("/robots.txt")
+    async def robots(request: Request):
+        base = public_base(request)
+        if f"{request.url.scheme}://{request.url.netloc}" != base:  # copies de Vercel (adresses de déploiement)
+            return Response("User-agent: *\nDisallow: /\n", media_type="text/plain")
+        return Response("User-agent: *\nAllow: /$\nAllow: /decouvrir\nAllow: /confidentialite\nAllow: /static/\n"
+                        "Allow: /icons/\nDisallow: /api/\nDisallow: /code\nDisallow: /partenaire\nDisallow: /atelier/\n"
+                        "Disallow: /reinitialiser\nDisallow: /rejoindre/\n\n"
+                        f"Sitemap: {base}/sitemap.xml\n", media_type="text/plain")
+
+    # IndexNow (Bing, DuckDuckGo, Yahoo, Qwant, Ecosia…) : clé PUBLIQUE qui prouve que le site est à nous.
+    INDEXNOW_KEY = "e644d30a94a0663eb9522ad521a7cef7"
+
+    @app.get(f"/{INDEXNOW_KEY}.txt")
+    async def indexnow_key():
+        return Response(INDEXNOW_KEY, media_type="text/plain")
+
+    @app.get("/sitemap.xml")
+    async def sitemap(request: Request):
+        base = html.escape(public_base(request))
+        urls = "".join(f"<url><loc>{base}{p}</loc><changefreq>weekly</changefreq><priority>{pr}</priority></url>"
+                       for p, pr in (("/decouvrir", "1.0"), ("/", "0.8"), ("/confidentialite", "0.3")))
+        return Response('<?xml version="1.0" encoding="UTF-8"?>'
+                        f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>',
+                        media_type="application/xml")
 
     @app.get("/code")
     async def code_page():
@@ -349,7 +418,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def reset_page():
         return FileResponse(WEB_DIR / "reset.html", media_type="text/html", headers={"Cache-Control": "no-store"})
 
-    @app.get("/confidentialite")
+    @app.api_route("/confidentialite", methods=["GET", "HEAD"])
     async def privacy():
         """Politique de confidentialité (exigée par Google Play) et marche à suivre pour supprimer son compte."""
         page = (WEB_DIR / "confidentialite.html").read_text(encoding="utf-8")
@@ -378,6 +447,87 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if name not in STATIC_FILES:  # liste blanche : aucun accès à d'autres fichiers
             raise HTTPException(404)
         return FileResponse(WEB_DIR / name, media_type=STATIC_FILES[name])
+
+    # ------------------------------------------------------------------ API publique (sites d'amis)
+    # Aucune donnée privée : ni cookie, ni souvenirs, ni outils. Une clé par site, créée par le propriétaire.
+    def api_cors(request: Request) -> dict:
+        origin = request.headers.get("origin")
+        h = {"Vary": "Origin", "Cache-Control": "no-store"}
+        if origin:  # pas de cookie (credentials) : la sécurité repose sur la clé et la liste des sites
+            h.update({"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                      "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600"})
+        return h
+
+    @app.options("/api/v1/{rest:path}")
+    async def public_api_preflight(rest: str, request: Request):
+        return Response(status_code=204, headers=api_cors(request))
+
+    def api_key_of(request: Request) -> str:
+        auth_h = request.headers.get("authorization", "")
+        return auth_h[7:].strip() if auth_h.lower().startswith("bearer ") else ""
+
+    @app.get("/api/v1/info")
+    async def public_api_info(request: Request):
+        """Le widget demande le nom de l'assistant (et vérifie que la clé marche sur ce site)."""
+        try:
+            k = publicapi.check(db.base, api_key_of(request), request.headers.get("origin"))
+        except publicapi.ApiError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status, headers=api_cors(request))
+        return JSONResponse({"name": k.get("bot_name", "Nova"), "site": k.get("name", "")}, headers=api_cors(request))
+
+    @app.post("/api/v1/chat")
+    async def public_api_chat(request: Request):
+        cors = api_cors(request)
+        try:
+            k = publicapi.check(db.base, api_key_of(request), request.headers.get("origin"))
+            try:
+                body = await request.json()
+            except ValueError:
+                raise publicapi.ApiError(400, "Corps JSON invalide.") from None
+            if not isinstance(body, dict):
+                raise publicapi.ApiError(400, "Corps JSON invalide.")
+            messages = publicapi.clean_messages(body)
+            if safety.blocked(messages[-1]["content"]):
+                raise publicapi.ApiError(400, "Je ne peux pas aider pour cette demande.")
+            usage = publicapi.consume(db.base, k["id"], client_ip(request))
+            reply = await asyncio.to_thread(publicapi.answer, agent.llm.ordered(), k, messages)
+        except publicapi.ApiError as e:
+            return JSONResponse({"error": str(e)}, status_code=e.status, headers=cors)
+        return JSONResponse({"reply": reply, "name": k.get("bot_name", "Nova"), "usage": usage}, headers=cors)
+
+    class InviteBody(BaseModel):
+        token: str = Field(min_length=1, max_length=100)
+        name: str = Field(default="", max_length=60)
+        origins: list[str] = Field(default_factory=list, max_length=10)
+        instructions: str = Field(default="", max_length=4000)
+        bot_name: str = Field(default="Nova", max_length=30)
+
+    @app.post("/api/v1/invite/info")
+    async def public_invite_info(body: InviteBody):
+        try:
+            return publicapi.invite_info(db.base, body.token)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+
+    @app.post("/api/v1/invite/redeem")
+    async def public_invite_redeem(body: InviteBody):
+        try:
+            key, raw = publicapi.redeem_invite(db.base, body.token, body.name, body.origins, body.instructions,
+                                               body.bot_name)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+        return {"key": key, "secret": raw}
+
+    @app.get("/partenaire")
+    async def partner_page():
+        """Page ouverte par l'ami avec le lien d'invitation (le jeton est après # : jamais envoyé dans l'adresse)."""
+        return FileResponse(WEB_DIR / "partenaire.html", media_type="text/html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/widget.js")
+    async def public_widget():
+        """Bulle de discussion à coller sur le site d'un ami (voir docs/API.md)."""
+        return FileResponse(WEB_DIR / "widget.js", media_type="text/javascript",
+                            headers={"Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": "*"})
 
     @app.get("/sw.js")
     async def service_worker():
@@ -596,6 +746,50 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         set_session_cookie(resp, auth.new_session(db, uid, left / 86400), max_age=max(60, int(left)))
         return resp
 
+    # Clés de l'API publique : gérées par le propriétaire seulement.
+    @app.get("/api/apikeys", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_list():
+        return {"keys": publicapi.list_keys(db.base), "invites": publicapi.list_invites(db.base),
+                "per_visitor": publicapi.PER_VISITOR}
+
+    @app.post("/api/apikeys/invites", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_invite(body: ApiKeyBody):
+        """Lien à envoyer à un ami : il décrit lui-même son site et reçoit son code (une fois, 7 jours)."""
+        try:
+            inv, token = publicapi.create_invite(db.base, body.limit or publicapi.DEFAULT_LIMIT, body.name)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+        return {"invite": inv, "token": token}  # le lien complet est /partenaire#<token> (montré une fois)
+
+    @app.delete("/api/apikeys/invites/{iid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_invite_cancel(iid: str):
+        if not publicapi.cancel_invite(db.base, iid):
+            raise HTTPException(404, "Lien introuvable")
+        return {"ok": True}
+
+    @app.post("/api/apikeys", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_create(body: ApiKeyBody):
+        try:
+            k, raw = publicapi.create_key(db.base, body.name, body.origins or [], body.instructions or "",
+                                          body.limit or publicapi.DEFAULT_LIMIT, body.bot_name or "Nova")
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+        return {"key": k, "secret": raw}  # montrée UNE seule fois
+
+    @app.patch("/api/apikeys/{kid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_update(kid: str, body: ApiKeyBody):
+        try:
+            return publicapi.update_key(db.base, kid, name=body.name or None, origins=body.origins,
+                                        instructions=body.instructions, limit=body.limit, bot_name=body.bot_name)
+        except publicapi.ApiError as e:
+            raise HTTPException(e.status, str(e)) from None
+
+    @app.delete("/api/apikeys/{kid}", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def apikeys_delete(kid: str):
+        if not publicapi.delete_key(db.base, kid):
+            raise HTTPException(404, "Clé introuvable")
+        return {"ok": True}
+
     @app.get("/api/family", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def family_info():
         family.purge_expired(db.base, db.wipe)
@@ -662,6 +856,14 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         if given.count(".") == 2 and await asyncio.to_thread(github_oidc.verify, given, cfg.github_repo):
             return
         raise HTTPException(401, "Clé d'entraînement invalide")
+
+    async def require_atelier_worker(request: Request) -> None:
+        """L'atelier rapide (Hugging Face) a SA clé, qui n'ouvre que ses propres routes ; sinon, identité de GitHub."""
+        auth_h = request.headers.get("authorization", "")
+        given = auth_h[7:] if auth_h.lower().startswith("bearer ") else ""
+        if given.startswith("atl_") and atelier.check_worker(db.base, given):
+            return
+        await require_trainer(request)
 
     @app.get("/api/training", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def training_state():
@@ -732,7 +934,7 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
                 "reasons": res.get("reasons", {}), "judge": res.get("judge", ""), "error": res.get("error", ""),
                 "total": len(autogen.stored(db.base))}
 
-    @app.post("/api/training/worker/coder-ask", dependencies=[Depends(require_trainer)])
+    @app.post("/api/training/worker/coder-ask", dependencies=[Depends(require_atelier_worker)])
     async def training_worker_coder_ask(body: CoderAskBody):
         """Une grande IA gratuite écrit du code pour fabriquer les exemples de l'IA programmeuse (budget quotidien)."""
         try:
@@ -846,29 +1048,125 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return await _mail_sort_now()
 
     # ------------------------------------------------------------------ atelier d'Aurora (code lancé et testé)
-    @app.post("/api/training/worker/atelier-next", dependencies=[Depends(require_trainer)])
+    @app.post("/api/training/worker/atelier-next", dependencies=[Depends(require_atelier_worker)])
     async def atelier_next():
         return {"project": atelier.take_next(db.base)}
 
-    @app.post("/api/training/worker/atelier-report", dependencies=[Depends(require_trainer)])
+    @app.post("/api/training/worker/atelier-report", dependencies=[Depends(require_atelier_worker)])
     async def atelier_report(body: dict):
         try:
-            atelier.report(db.base, body)
+            cancelled = atelier.report(db.base, body)
         except atelier.AtelierError as e:
             raise HTTPException(400, str(e)) from None
-        return {"ok": True}
+        return {"ok": True, "cancelled": cancelled}
 
     @app.get("/api/code/atelier", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_list():
         return [{k: v for k, v in atelier.public(d).items() if k != "files"} | {"nfiles": len(d.get("files") or {})}
                 for d in atelier.items(db.base)]
 
+    @app.get("/api/code/atelier/fast", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_fast_state():
+        info = atelier.space(db.base)
+        st = {"exists": False}
+        if info.get("space"):
+            try:
+                st = await asyncio.to_thread(hfspace.atelier_status, cfg.hf_token, info["space"])
+            except hfspace.SpaceError as e:
+                st = {"exists": True, "stage": "UNKNOWN", "error": str(e)}
+        return {**st, "configured": bool(info.get("space")), "page": info.get("page", ""), "hf_token": bool(cfg.hf_token)}
+
+    @app.post("/api/code/atelier/fast", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_fast_setup(request: Request):
+        """Crée ou met à jour le serveur Hugging Face de l'atelier (nouvelle clé à chaque installation)."""
+        url = f"https://{(request.headers.get('x-forwarded-host') or request.headers.get('host') or '').split(',')[0].strip()}"
+        try:
+            info = await asyncio.to_thread(hfspace.setup_atelier, cfg.hf_token, atelier.worker_token(db.base, renew=True),
+                                           url, cfg.github_repo)
+        except hfspace.SpaceError as e:
+            raise HTTPException(400, str(e)) from None
+        atelier.set_space(db.base, info)
+        return {"ok": True, "page": info["page"]}
+
+    @app.get("/api/code/aurora-mode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def aurora_mode_get():
+        return {"mode": atelier.get_mode(db.base)}
+
+    @app.put("/api/code/aurora-mode", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def aurora_mode_set(body: dict):
+        try:
+            return {"mode": atelier.set_mode(db.base, str(body.get("mode", "")))}
+        except atelier.AtelierError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.post("/api/code/atelier/test-start", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_test_start():
+        """Essaie de démarrer l'atelier sur GitHub tout de suite (sans projet : il s'arrête aussitôt) et dit pourquoi
+        ça ne marche pas, le cas échéant."""
+        ok = await asyncio.to_thread(selfcode.dispatch, cfg.github_dispatch_token, cfg.github_repo, atelier.WORKFLOW)
+        return {"ok": ok, "reason": "" if ok else selfcode.last_dispatch_error}
+
+    @app.post("/api/code/atelier/{pid}/ask", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_instant_ask(pid: str, body: InstantAskBody):
+        """Atelier instantané : Aurora écrit (ou corrige) le site ; l'application le teste ensuite dans le navigateur."""
+        item = atelier.get(db.base, pid[:20])
+        if not item or item.get("mode") != "instant" or item["status"] not in ("pending", "running"):
+            raise HTTPException(404, "Projet introuvable ou déjà terminé")
+        writing = bool(item.get("todo")) and not body.feedback  # gros site : suite de l'écriture, pas un nouvel essai
+        steps = int(item.get("steps") or 0) + 1
+        attempt = int(item.get("attempt") or 0) + (0 if writing else 1)
+        if attempt > atelier.MAX_INSTANT_ATTEMPTS or steps > atelier.MAX_INSTANT_STEPS + atelier.MAX_INSTANT_ATTEMPTS:
+            raise HTTPException(409, "Nombre d'essais atteint")
+        doing = (f"Aurora écrit la suite du site ({', '.join(item['todo'][:4])}…)" if writing
+                 else f"Essai {attempt}/{atelier.MAX_INSTANT_ATTEMPTS} : Aurora écrit le site…")
+        atelier.instant_update(db.base, pid, status="running", attempt=attempt, steps=steps, summary=doing)
+        try:
+            res = await asyncio.to_thread(coderask.ask, db.base, agent.llm.ordered(), atelier.WEB_SYSTEM,
+                                          atelier.instant_prompt(item, body.feedback), 6000, "site")
+        except coderask.CoderAskError as e:
+            atelier.instant_update(db.base, pid, status="failed", summary=f"La grande IA ne répond pas ({e}).")
+            raise HTTPException(503, str(e)) from None
+        got = atelier.parse_reply(res.get("text", ""))
+        if not got["files"]:
+            atelier.instant_update(db.base, pid, summary="Réponse illisible : Aurora recommence.")
+            return {**atelier.public(atelier.get(db.base, pid)), "retry": True}
+        todo = got["todo"] if steps < atelier.MAX_INSTANT_STEPS else []  # sécurité : pas d'écriture sans fin
+        atelier.instant_update(db.base, pid, files=got["files"], todo=todo,
+                               summary=got["summary"] or ("Écriture en cours…" if todo else "Site écrit : test en cours…"))
+        return atelier.public(atelier.get(db.base, pid))
+
+    @app.post("/api/code/atelier/{pid}/publish", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_publish(pid: str):
+        """Le propriétaire publie un site terminé sur son Vercel (jamais Aurora toute seule)."""
+        item = atelier.get(db.base, pid[:20])
+        if not item:
+            raise HTTPException(404, "Projet introuvable")
+        try:
+            res = await asyncio.to_thread(publish.publish, item, cfg.vercel_token, cfg.vercel_team_id)
+        except publish.PublishError as e:
+            raise HTTPException(400, str(e)) from None
+        atelier.set_published(db.base, pid, res["url"])
+        return res
+
+    @app.post("/api/code/atelier/{pid}/result", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def atelier_instant_result(pid: str, body: InstantResultBody):
+        item = atelier.get(db.base, pid[:20])
+        if not item or item.get("mode") != "instant":
+            raise HTTPException(404, "Projet introuvable")
+        if body.final:
+            summary = item.get("summary", "") if body.ok else (
+                f"Le site a encore des erreurs après {item.get('attempt', 0)} essais." if not body.summary else body.summary)
+            atelier.instant_update(db.base, pid, status="done" if body.ok else "failed", log=body.log, summary=summary)
+        else:
+            atelier.instant_update(db.base, pid, log=body.log)
+        return atelier.public(atelier.get(db.base, pid))
+
     @app.get("/api/code/atelier/{pid}", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_get(pid: str):
         item = atelier.get(db.base, pid[:20])
         if not item:
             raise HTTPException(404, "Projet introuvable")
-        return atelier.public(item)
+        return {**atelier.public(item), "can_publish": bool(cfg.vercel_token)}
 
     @app.get("/api/code/atelier/{pid}/capture", dependencies=[Depends(require_auth), Depends(require_owner)])
     async def atelier_capture(pid: str):
@@ -881,7 +1179,22 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     # pages du site et Termux y accèdent). Le site s'ouvre dans un « bac à sable » : origine opaque, il ne peut
     # ni lire les cookies de Syrius ni appeler son API.
     SITE_CSP = ("sandbox allow-scripts allow-forms allow-popups allow-modals; default-src 'self' https: data: blob: "
-                "'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'; base-uri 'none'")
+                "'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'; base-uri 'none'")
+    TEST_HEAD = '<script src="/static/atelier-test.js"></script>'
+
+    def _with_tests(html_text: str, has_tests: bool) -> str:
+        """Mode test (atelier instantané) : le banc d'essai écoute les erreurs dès le début, puis les tests d'Aurora."""
+        # scripts chargés en « crossorigin » : sans ça, le navigateur cache le vrai message d'erreur (« Script error. »)
+        html_text = re.sub(r"<script(?![^>]*\bcrossorigin\b)(?=[^>]*\ssrc=)", '<script crossorigin="anonymous"', html_text,
+                           flags=re.I)
+        low = html_text.lower()
+        i = low.find("<head>")
+        html_text = (html_text[:i + 6] + TEST_HEAD + html_text[i + 6:]) if i >= 0 else TEST_HEAD + html_text
+        if has_tests:
+            j = html_text.lower().rfind("</body>")
+            tag = '<script src="tests.js"></script>'
+            html_text = (html_text[:j] + tag + html_text[j:]) if j >= 0 else html_text + tag
+        return html_text
 
     def _atelier_item(pid: str, token: str) -> dict:
         item = next((d for d in atelier.items(db.base) if d.get("id") == pid[:20]), None)
@@ -897,13 +1210,19 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
             "X-Robots-Tag": "noindex"})
 
     @app.get("/atelier/{pid}/{token}/site/{path:path}")
-    async def atelier_site(pid: str, token: str, path: str = ""):
-        found = atelier.site_file(_atelier_item(pid, token), path)
+    async def atelier_site(pid: str, token: str, path: str = "", test: int = 0):
+        item = _atelier_item(pid, token)
+        found = atelier.site_file(item, path)
         if not found:
             raise HTTPException(404, "Fichier introuvable dans le site")
         content, ctype = found
+        if test and ctype.startswith("text/html"):
+            root = atelier.site_root(item.get("files") or {}) or ""
+            content = _with_tests(content, (root + "tests.js") in (item.get("files") or {}))
         return Response(content, media_type=ctype, headers={
-            "Content-Security-Policy": SITE_CSP, "Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
+            "Content-Security-Policy": SITE_CSP, "Cache-Control": "no-store", "X-Robots-Tag": "noindex",
+            # le site s'ouvre dans une boîte fermée (origine opaque) : ses propres fichiers lui restent lisibles
+            "Access-Control-Allow-Origin": "*"})
 
     @app.post("/api/training/worker/code-next", dependencies=[Depends(require_trainer)])
     async def selfcode_next():

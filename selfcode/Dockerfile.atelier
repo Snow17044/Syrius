@@ -1,0 +1,21 @@
+# Atelier rapide d'Aurora (Hugging Face Space, offre gratuite « CPU basic ») : Python, Node.js et un vrai navigateur.
+FROM mcr.microsoft.com/playwright:v1.49.1-noble
+
+RUN apt-get update && apt-get install -y --no-install-recommends git python3-venv python3-pip ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+# Python : un environnement à part (pip y installe ce que les projets demandent), pytest déjà là
+RUN python3 -m venv /opt/py && /opt/py/bin/pip install --no-cache-dir pytest==9.1.1 && ln -sf /opt/py/bin/python /usr/local/bin/python
+# Playwright pour la capture d'écran des sites (même version que le navigateur de l'image)
+RUN mkdir -p /opt/kit && cd /opt/kit && npm init -y >/dev/null && npm install --no-audit --no-fund playwright@1.49.1
+
+ARG SYRIUS_REPO=Snow17044/Syrius
+ARG SYRIUS_REF=main
+RUN git clone --depth 1 --branch "$SYRIUS_REF" "https://github.com/${SYRIUS_REPO}.git" /opt/syrius \
+    && chown -R 1000:1000 /opt/py /opt/kit
+
+ENV PATH=/opt/py/bin:$PATH ATELIER_RUNNER=local ATELIER_KIT=/opt/kit RUNNER_TEMP=/tmp PORT=7860 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright PYTHONUNBUFFERED=1
+WORKDIR /opt/syrius
+USER 1000
+EXPOSE 7860
+CMD ["python3", "selfcode/atelier_space.py"]

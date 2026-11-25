@@ -176,7 +176,7 @@ def test_site_a_part_sans_compte():
     assert c.get("/static/uchronie-monde.json").status_code == 200
     assert c.get("/static/app.js").status_code == 404  # rien de Syrius n'est servi
     assert c.get("/api/conversations").status_code == 404
-    assert c.get("/api/uchronie/config").json() == {"standalone": True, "left": 3, "per_visitor": 3}
+    assert c.get("/api/uchronie/config").json() == {"standalone": True, "left": 3, "per_visitor": 3, "own_key": True}
     assert c.post("/api/uchronie/start", json={"year": 1936}).status_code == 403  # anti-CSRF
     ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=H).text)
     assert ev[0] == {"type": "quota", "left": 2}
@@ -191,7 +191,7 @@ def test_site_a_part_limite_par_joueur_et_par_jour():
     assert c.post("/api/uchronie/talk", json={"state": s, "nation": "gbr", "messages": [{"who": "me", "text": "Paix ?"}]},
                   headers=H).status_code == 200
     r = c.post("/api/uchronie/turn", json={"state": s}, headers=H)
-    assert r.status_code == 429 and "Reviens demain" in r.json()["detail"]
+    assert r.status_code == 429 and "ta propre clé" in r.json()["detail"]
     other = {**H, "X-Forwarded-For": "203.0.113.9"}  # un autre joueur, lui, peut jouer…
     assert c.get("/api/uchronie/config", headers=other).json()["left"] == 2
     c.app.state.quota.per_day = 2  # … sauf si le site entier a atteint sa limite du jour
@@ -212,3 +212,54 @@ def test_chaque_empire_liste_ses_territoires():
     assert s["owners"]["kaz"] == "sun" and s["owners"]["rus"] == "sun"
     assert s["owners"]["ind"] == "gbr"  # l'ancien format marche encore
     assert "territories" in uchronie.start_messages(1936, "")[0]["content"]
+
+
+def test_site_a_part_illimite_par_defaut(monkeypatch):
+    from server.uchronie_site import create_site
+    from tests.conftest import FakeLLM
+    monkeypatch.delenv("UCHRONIE_DEMANDES_PAR_JOUEUR", raising=False)
+    monkeypatch.delenv("UCHRONIE_DEMANDES_PAR_JOUR", raising=False)
+    from fastapi.testclient import TestClient
+    c = TestClient(create_site(llm=FakeLLM()))
+    cfg = c.get("/api/uchronie/config").json()
+    assert cfg["left"] is None and cfg["own_key"] is True
+    assert c.app.state.quota.take("1.2.3.4") is None  # rien n'est compté
+
+
+def test_site_a_part_cle_du_joueur(monkeypatch):
+    from server import uchronie_site
+    c = site_client([], per_visitor=1)
+    seen = []
+    real_own = uchronie_site.own_llm
+
+    def fake_own(key):
+        llm = real_own(key)
+        seen.append([p.model for p in llm.providers] if llm else None)
+        from tests.conftest import FakeLLM
+        return FakeLLM([reply(json.dumps(START))]) if llm else None
+
+    monkeypatch.setattr(uchronie_site, "own_llm", fake_own)
+    key = {**H, "X-Uchronie-Cle": "gsk_" + "a" * 40}
+    for _ in range(2):  # la limite du site ne compte pas : le joueur paie avec sa propre clé gratuite
+        ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=key).text)
+        assert ev[0] == {"type": "quota", "left": "own"} and any(e["type"] == "state" for e in ev)
+    assert seen[0] == ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+    assert c.get("/api/uchronie/config").json()["left"] == 1
+    bad = c.post("/api/uchronie/start", json={"year": 1936}, headers={**H, "X-Uchronie-Cle": "n'importe quoi"})
+    assert bad.status_code == 400 and "Groq" in bad.json()["detail"]
+    assert c.fake.requests == []  # l'IA partagée (celle du propriétaire) n'a pas servi
+
+
+def test_vraie_cle_gemini_et_refus():
+    from server.uchronie_site import own_llm
+    assert own_llm("AIza" + "b" * 35).providers[0].name == "gemini"
+    assert own_llm("sk-123") is None and own_llm("") is None and own_llm("gsk_court") is None
+
+
+def test_ia_a_court_signalee():
+    from server.llm import RetryableError
+    c = site_client([])
+    c.fake.fail["groq"] = RetryableError("Groq : limite gratuite atteinte pour le moment.")
+    c.fake.fail["gemini"] = RetryableError("Gemini : limite gratuite atteinte pour le moment.")
+    ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=H).text)
+    assert ev[-1]["type"] == "error" and ev[-1]["exhausted"] is True

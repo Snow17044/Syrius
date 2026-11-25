@@ -112,3 +112,93 @@ def status(hf_token: str) -> dict:
         return {"exists": True, "stage": "UNKNOWN", "url": f"https://huggingface.co/spaces/{space}"}
     return {"exists": True, "stage": str(data.get("stage", "")), "hardware": str((data.get("hardware") or {}).get(
         "current") or ""), "url": f"https://huggingface.co/spaces/{space}"}
+
+
+# ------------------------------------------------------------------ atelier rapide d'Aurora
+ATELIER_SPACE = "syrius-atelier"
+# Image Playwright : Node, Chromium et Python déjà dedans. Le code de l'atelier vient du dépôt GitHub de Syrius
+# (au moment de la construction seulement). Copie exacte de selfcode/Dockerfile.atelier (un test vérifie l'égalité).
+ATELIER_DOCKERFILE = '''# Atelier rapide d'Aurora (Hugging Face Space, offre gratuite « CPU basic ») : Python, Node.js et un vrai navigateur.
+FROM mcr.microsoft.com/playwright:v1.49.1-noble
+
+RUN apt-get update && apt-get install -y --no-install-recommends git python3-venv python3-pip ca-certificates \\
+    && rm -rf /var/lib/apt/lists/*
+# Python : un environnement à part (pip y installe ce que les projets demandent), pytest déjà là
+RUN python3 -m venv /opt/py && /opt/py/bin/pip install --no-cache-dir pytest==9.1.1 && ln -sf /opt/py/bin/python /usr/local/bin/python
+# Playwright pour la capture d'écran des sites (même version que le navigateur de l'image)
+RUN mkdir -p /opt/kit && cd /opt/kit && npm init -y >/dev/null && npm install --no-audit --no-fund playwright@1.49.1
+
+ARG SYRIUS_REPO=Snow17044/Syrius
+ARG SYRIUS_REF=main
+RUN git clone --depth 1 --branch "$SYRIUS_REF" "https://github.com/${SYRIUS_REPO}.git" /opt/syrius \\
+    && chown -R 1000:1000 /opt/py /opt/kit
+
+ENV PATH=/opt/py/bin:$PATH ATELIER_RUNNER=local ATELIER_KIT=/opt/kit RUNNER_TEMP=/tmp PORT=7860 \\
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright PYTHONUNBUFFERED=1
+WORKDIR /opt/syrius
+USER 1000
+EXPOSE 7860
+CMD ["python3", "selfcode/atelier_space.py"]
+'''
+ATELIER_README = """---
+title: Syrius Atelier
+emoji: 🛠️
+colorFrom: pink
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
+L'atelier rapide d'Aurora (Syrius Code) : elle y écrit, lance et teste son code. Code :
+https://github.com/{repo}/blob/main/selfcode/atelier_space.py
+"""
+
+
+def space_host(user: str, name: str) -> str:
+    """Adresse publique d'un Space : https://pseudo-nom.hf.space (minuscules, autres signes → « - »)."""
+    sub = re.sub(r"[^a-z0-9]+", "-", f"{user}-{name}".lower()).strip("-")
+    return f"https://{sub}.hf.space"
+
+
+def setup_atelier(hf_token: str, worker_key: str, syrius_url: str, repo: str) -> dict:
+    """Crée (ou met à jour) le Space de l'atelier, y range SA clé (pas HF_TOKEN) et le redémarre."""
+    if not hf_token:
+        raise SpaceError("Clé HF_TOKEN absente de ton Syrius (Vercel).")
+    user = owner(hf_token)
+    space = f"{user}/{ATELIER_SPACE}"
+    status, _ = _call(hf_token, "POST", "/api/repos/create", json.dumps(
+        {"name": ATELIER_SPACE, "type": "space", "sdk": "docker", "private": False}).encode())
+    if status == 403:
+        raise SpaceError("Ta clé Hugging Face ne permet pas de créer un Space : il faut une clé avec le droit "
+                         "« Write » (huggingface.co/settings/tokens), à mettre dans HF_TOKEN sur Vercel.")
+    if status == 402:
+        raise SpaceError("Hugging Face demande désormais l'abonnement PRO (environ 9 $ par mois) pour ce type de "
+                         "serveur. Sans lui, les sites se font dans l'atelier instantané et le reste sur GitHub.")
+    if status not in (200, 201, 409):
+        raise SpaceError(f"Création du Space impossible ({status}).")
+    files = {"Dockerfile": ATELIER_DOCKERFILE.encode(), "README.md": ATELIER_README.format(repo=repo).encode()}
+    lines = [{"key": "header", "value": {"summary": "Atelier d'Aurora", "description": ""}}]
+    lines += [{"key": "file", "value": {"path": p, "encoding": "base64", "content": base64.b64encode(c).decode()}}
+              for p, c in files.items()]
+    status, _ = _call(hf_token, "POST", f"/api/spaces/{space}/commit/main",
+                      "\n".join(json.dumps(x) for x in lines).encode(), "application/x-ndjson", timeout=60)
+    if status not in (200, 201):
+        raise SpaceError(f"Envoi des fichiers impossible ({status}).")
+    status, _ = _call(hf_token, "POST", f"/api/spaces/{space}/secrets",
+                      json.dumps({"key": "ATELIER_TOKEN", "value": worker_key}).encode())
+    if status not in (200, 201):
+        raise SpaceError(f"Enregistrement de la clé de l'atelier impossible ({status}).")
+    _call(hf_token, "POST", f"/api/spaces/{space}/variables", json.dumps({"key": "SYRIUS_URL", "value": syrius_url}).encode())
+    _call(hf_token, "POST", f"/api/spaces/{space}/restart", b"{}")
+    return {"space": space, "url": space_host(user, ATELIER_SPACE), "page": f"https://huggingface.co/spaces/{space}"}
+
+
+def atelier_status(hf_token: str, space: str) -> dict:
+    if not hf_token or not space:
+        return {"exists": False}
+    code, data = _call(hf_token, "GET", f"/api/spaces/{space}/runtime")
+    if code == 404:
+        return {"exists": False}
+    stage = str(data.get("stage", "")) if code == 200 and isinstance(data, dict) else "UNKNOWN"
+    return {"exists": True, "stage": stage}

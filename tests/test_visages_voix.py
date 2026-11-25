@@ -49,3 +49,20 @@ def test_visages_et_voix_cote_application():
     assert 'voiceFor("nova");  // après une réplique d\'Aurora' in java  # la voix de Nova revient toujours
     voice = (ROOT / "web/voice.js").read_text(encoding="utf-8")
     assert "askAll" in voice and 'speakAndWait(r.text, r.who)' in voice
+
+
+def test_aurora_vient_d_office_en_conversation_vocale():
+    """Demande : quand on parle à Syrius, Aurora est à côté de Nova sans avoir à l'inviter."""
+    voice = (ROOT / "web/voice.js").read_text(encoding="utf-8")
+    app = (ROOT / "web/app.js").read_text(encoding="utf-8")
+    assert "window.SyriusGroup.join().then(buildFaces)" in voice and "window.SyriusGroup = {" in app
+    assert "Laisser Nova seul" in voice  # on peut quand même la faire partir
+
+
+def test_aurora_reparle_si_sa_voix_echoue():
+    """Constat réel : Aurora ne parlait jamais sur le téléphone. Si sa voix échoue, elle reparle avec la voix de secours."""
+    java = (ROOT / "android/app/src/main/java/fr/syrius/app/MainActivity.java").read_text(encoding="utf-8")
+    assert 'id.startsWith("aurora")' in java and "tts.setPitch(1.18f)" in java and "auroraRetry" in java
+    assert "!v.isNetworkConnectionRequired()" in java  # par défaut, une voix installée sur le téléphone
+    app = (ROOT / "web/app.js").read_text(encoding="utf-8")
+    assert "v.name !== nova.name" in app  # web : vraiment une autre voix que Nova

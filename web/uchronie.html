@@ -27,6 +27,7 @@
   <div id="u-menu-box" class="u-pop hidden">
     <button type="button" id="u-new">Nouvelle partie</button>
     <button type="button" id="u-help">Comment jouer</button>
+    <button type="button" id="u-key" class="hidden">Ma clé d'IA (illimité)</button>
     <button type="button" id="u-export">Exporter ma partie (fichier)</button>
     <button type="button" id="u-import">Importer une partie</button>
     <p id="u-quota" class="u-quota hidden"></p>
@@ -147,6 +148,30 @@
   </section>
 
   <!-- Aide -->
+  <!-- Clé d'IA du joueur (site à part) -->
+  <section id="u-keybox" class="u-sheet hidden">
+    <div class="u-sheet-box">
+      <h2>Jouer sans limite</h2>
+      <p id="u-key-why" class="u-advice u-noprefix hidden">Les IA gratuites partagées du site sont à court pour aujourd'hui.
+        Avec ta propre clé gratuite, tu continues tout de suite, sans limite.</p>
+      <p>Crée une clé d'IA <b>gratuite</b> (2 minutes, sans carte bancaire), puis colle-la ici :</p>
+      <ol class="u-help">
+        <li><a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">console.groq.com/keys</a> :
+          connecte-toi avec Google, « Create API Key », copie la clé (gsk_…). <span class="u-muted">Conseillé : la plus rapide.</span></li>
+        <li>ou <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a> :
+          « Create API key », copie la clé (AIza…).</li>
+      </ol>
+      <form id="u-key-form">
+        <input id="u-key-input" type="password" autocomplete="off" spellcheck="false" maxlength="120" placeholder="gsk_… ou AIza…" aria-label="Ta clé d'IA">
+        <button type="submit" class="u-primary u-wide">Enregistrer ma clé</button>
+        <button type="button" id="u-key-forget" class="u-ghost u-wide hidden">Oublier ma clé</button>
+        <button type="button" id="u-key-close" class="u-ghost u-wide">Plus tard</button>
+      </form>
+      <p class="u-small u-muted">Ta clé reste dans ce navigateur. Elle passe par le serveur du jeu seulement le temps de chaque
+        demande et n'y est jamais enregistrée. Tu peux la supprimer à tout moment chez Groq ou Google.</p>
+    </div>
+  </section>
+
   <section id="u-helpbox" class="u-sheet hidden">
     <div class="u-sheet-box">
       <h2>Comment jouer</h2>

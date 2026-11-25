@@ -108,6 +108,19 @@ const store = {
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_) { /* ignore */ } },
 };
 
+// ------------------------------------------------------------------ thème : « syrius » (par défaut) ou « nature » (forêt la nuit)
+// Réglage commun avec Syrius Code.
+function applyTheme(t) {
+  const theme = t === "nature" ? "nature" : "syrius";
+  document.documentElement.dataset.theme = theme;
+  $("#theme-color")?.setAttribute("content", theme === "nature" ? "#0a1714" : "#0d0f16");
+  const b = $("#theme-toggle");
+  if (b) Icons.set(b, theme === "nature" ? "palette" : "leaf", theme === "nature" ? "Thème Syrius" : "Thème Forêt");
+  store.set("syrius:theme", theme);
+}
+applyTheme(store.get("syrius:theme"));
+$("#theme-toggle")?.addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "nature" ? "syrius" : "nature"));
+
 // ------------------------------------------------------------------ écrans
 function showLogin() {
   $("#app").classList.add("hidden");
@@ -121,6 +134,7 @@ async function showApp() {
   $("#app").classList.remove("hidden");
   await loadSettings();
   $("#open-training").classList.toggle("hidden", state.settings?.account?.owner === false);
+  $("#open-code").classList.toggle("hidden", state.settings?.account?.owner === false);  // Syrius Code : propriétaire
   refreshLocation();
   await loadConversations();
   newConversationView();  // à chaque ouverture : une nouvelle discussion (les anciennes restent dans le menu)
@@ -178,6 +192,8 @@ async function renderFamily(account) {
   box.classList.toggle("hidden", !owner);
   $("#diag-box").classList.toggle("hidden", !owner);
   $("#discord-box").classList.toggle("hidden", !owner);
+  $("#api-box").classList.toggle("hidden", !owner);
+  if (owner) renderApiKeys();
   if (owner) api("/api/voicebot").then((v) => { $("#dc-id").value = (v.discord_ids || [])[0] || ""; }).catch(() => {});
   if (owner) refreshSpace();
   const guest = !!(account && account.guest);
@@ -225,6 +241,98 @@ async function renderFamily(account) {
     }
   } catch (err) { $("#family-msg").textContent = "⚠ " + err.message; }
 }
+
+// ------------------------------------------------------------------ API publique (sites d'amis)
+async function renderApiKeys() {
+  const list = $("#api-list");
+  try {
+    const { keys, invites } = await api("/api/apikeys");
+    list.textContent = "";
+    for (const inv of invites || []) {
+      const li = document.createElement("li");
+      li.className = "diag";
+      const t = document.createElement("strong");
+      t.textContent = `Lien envoyé${inv.note ? " à " + inv.note : ""} · en attente`;
+      const d = document.createElement("span");
+      d.className = "small muted";
+      d.textContent = `Valable jusqu'au ${new Date(inv.expires * 1000).toLocaleDateString("fr-FR")} · ${inv.limit} messages/jour`;
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "ghost subtle"; del.textContent = "Annuler";
+      del.addEventListener("click", async () => {
+        try { await api(`/api/apikeys/invites/${encodeURIComponent(inv.id)}`, { method: "DELETE" }); renderApiKeys(); }
+        catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+      });
+      li.append(t, d, del);
+      list.append(li);
+    }
+    if (!keys.length && !(invites || []).length) {
+      const li = document.createElement("li");
+      li.className = "muted small"; li.textContent = "Aucune clé pour l'instant.";
+      list.append(li);
+    }
+    for (const k of keys) {
+      const li = document.createElement("li");
+      li.className = "diag";
+      const t = document.createElement("strong");
+      t.textContent = `${k.name} · ${k.bot_name}`;
+      const d = document.createElement("span");
+      d.className = "small muted";
+      d.textContent = (k.kind === "site" ? k.origins.join(", ") : "Clé serveur (secrète)") +
+        ` · ${k.used_today}/${k.limit} messages aujourd'hui · ${k.hint}`;
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "ghost subtle"; del.textContent = "Supprimer";
+      del.addEventListener("click", async () => {
+        if (!confirm(`Supprimer la clé « ${k.name} » ? La bulle disparaîtra de ce site.`)) return;
+        try { await api(`/api/apikeys/${encodeURIComponent(k.id)}`, { method: "DELETE" }); renderApiKeys(); }
+        catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+      });
+      li.append(t, d, del);
+      list.append(li);
+    }
+  } catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+}
+
+$("#api-create")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = "";
+  const origins = $("#api-origins").value.split(/[\s,]+/).map((o) => o.trim()).filter(Boolean);
+  try {
+    const r = await api("/api/apikeys", { method: "POST", body: JSON.stringify({
+      name: $("#api-name").value.trim(), origins, bot_name: $("#api-botname").value.trim() || "Nova",
+      instructions: $("#api-instr").value.trim(), limit: parseInt($("#api-limit").value, 10) || 300 }) });
+    $("#api-snippet").value = origins.length
+      ? `<script src="${location.origin}/widget.js" data-key="${r.secret}" defer></script>`
+      : `Clé serveur (secrète) : ${r.secret}\n\ncurl -X POST ${location.origin}/api/v1/chat -H "Authorization: Bearer ${r.secret}" -H "Content-Type: application/json" -d '{"message": "Bonjour"}'`;
+    $("#api-new").classList.remove("hidden");
+    $("#api-form").open = false;
+    $("#api-name").value = ""; $("#api-origins").value = ""; $("#api-instr").value = "";
+    renderApiKeys();
+  } catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+});
+$("#api-invite")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = "";
+  try {
+    const r = await api("/api/apikeys/invites", { method: "POST", body: JSON.stringify({
+      name: $("#api-inv-note").value.trim(), limit: parseInt($("#api-inv-limit").value, 10) || 300 }) });
+    $("#api-inv-url").value = `${location.origin}/partenaire#${r.token}`;
+    $("#api-inv-box").classList.remove("hidden");
+    $("#api-inv-note").value = "";
+    renderApiKeys();
+  } catch (err) { $("#api-msg").textContent = "⚠ " + err.message; }
+});
+$("#api-inv-copy")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = (await copyText($("#api-inv-url").value)) ? "✅ Lien copié." : "Sélectionne le lien et copie-le.";
+});
+$("#api-inv-share")?.addEventListener("click", async () => {
+  const url = $("#api-inv-url").value;
+  if (navigator.share) {
+    try { await navigator.share({ title: "Un assistant IA sur ton site", text: "Ouvre ce lien pour mettre un assistant IA sur ton site :", url }); return; }
+    catch (_) { /* annulé : on copie */ }
+  }
+  $("#api-msg").textContent = (await copyText(url)) ? "✅ Lien copié : colle-le dans un message." : "Sélectionne le lien et copie-le.";
+});
+$("#api-copy")?.addEventListener("click", async () => {
+  $("#api-msg").textContent = (await copyText($("#api-snippet").value)) ? "✅ Code copié." : "Sélectionne le code et copie-le.";
+});
 
 async function renderReports() {
   const list = $("#report-list");
@@ -526,17 +634,22 @@ function groupNote(text) {
   $("#messages").appendChild(node("div", "group-note", text));
   scrollDown(true);
 }
-$("#aurora-toggle").addEventListener("click", async () => {
-  if (state.streaming) return;
-  const on = !state.aurora;
+// Ajoute ou retire Aurora de la discussion. Renvoie true si c'est fait.
+async function setAuroraMember(on, quiet) {
+  if (state.streaming) return false;
   if (state.convId) {
     try { await api(`/api/conversations/${state.convId}/members`, { method: "PUT", body: JSON.stringify({ aurora: on }) }); }
-    catch (err) { alert(err.message); return; }
+    catch (err) { if (!quiet) alert(err.message); return false; }
   }
   setAurora(on);
-  groupNote(on ? "Aurora a rejoint la discussion. Nova répond d'abord, puis Aurora. Pour ne parler qu'à l'une, commence par « Aurora, … » ou « Nova, … »."
+  if (!quiet) groupNote(on ? "Aurora a rejoint la discussion. Nova répond d'abord, puis Aurora. Pour ne parler qu'à l'une, commence par « Aurora, … » ou « Nova, … »."
     : "Aurora a quitté la discussion.");
-});
+  return true;
+}
+$("#aurora-toggle").addEventListener("click", () => setAuroraMember(!state.aurora));
+// Mode conversation : Aurora vient d'office à côté de Nova (on peut la faire partir avec le bouton en haut).
+window.SyriusGroup = { join: () => (state.aurora ? Promise.resolve(true) : setAuroraMember(true, true)),
+  leave: () => setAuroraMember(false, true), get active() { return !!state.aurora; } };
 
 $("#new-chat").addEventListener("click", newConversationView);
 $("#new-chat-drawer").addEventListener("click", () => { newConversationView(); closeDrawer(); });
@@ -1990,7 +2103,7 @@ function speakAs(text, who, onEnd) {
   u.rate = 1.05;
   const fr = speechSynthesis.getVoices().filter((v) => v.lang && /^fr/i.test(v.lang));
   const nova = bestFrenchVoice();
-  const voice = who === "aurora" ? (fr.find((v) => v !== nova) || nova) : nova;
+  const voice = who === "aurora" ? (fr.find((v) => !nova || v.name !== nova.name) || nova) : nova;
   if (voice) u.voice = voice;
   u.pitch = who === "aurora" ? 1.15 : 0.92;
   u.onend = u.onerror = () => { if (onEnd) onEnd(); };

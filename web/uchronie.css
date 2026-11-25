@@ -173,3 +173,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .u-spinner { animation-duration: 3s; } .u-panel { transition: none; } }
+.u-noprefix::before { content: none; }
+.u-sheet-box a { color: var(--u-brass); }

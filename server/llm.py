@@ -68,6 +68,17 @@ SLOW_TTFT = 8.0      # secondes avant le premier mot : au-delà, l'IA passe derr
 FAIL_MEMORY = 300    # une IA en échec est mise derrière les autres pendant 5 minutes
 
 
+# Les IA gratuites les plus capables d'abord quand il faut de l'intelligence (Aurora, atelier) ;
+# les plus petites ne servent qu'en secours.
+STRONG_FIRST = ("nemotron-3-ultra", "gpt-oss-120b", "codestral", "gemini", "gpt-4.1", "gemma-4-31b", "glm-4.7",
+                "mistral", "llama-3.3-70b", "gpt-oss-20b", "gemma-4-26b")
+
+
+def strength(provider) -> int:
+    m = f"{provider.name} {provider.model}".lower()
+    return next((i for i, k in enumerate(STRONG_FIRST) if k in m), len(STRONG_FIRST))
+
+
 class ChatClient:
     # 25 s sans un seul octet = l'IA est bloquée : on passe tout de suite à la suivante (avant : 120 s d'attente).
     def __init__(self, providers: list[Provider], timeout: float = 25):
@@ -234,6 +245,11 @@ def openrouter_label(model: str) -> str:
     return "OpenRouter · " + name[:24]
 
 
+def _cf_vision(model: str) -> bool:
+    """Modèles de Cloudflare Workers AI qui savent regarder une photo."""
+    return any(k in model for k in ("gemma-4", "gemma-3", "llama-4", "vision"))
+
+
 def providers_from_config(cfg) -> list[Provider]:
     out = []
     if cfg.openrouter_api_key:  # IA gratuites les plus puissantes d'abord (limite ~50 messages/jour)
@@ -269,7 +285,13 @@ def providers_from_config(cfg) -> list[Provider]:
         for i, model in enumerate(cfg.cloudflare_models):
             out.append(Provider("cloudflare" if i == 0 else f"cloudflare{i + 1}", f"Cloudflare · {model.split('/')[-1][:24]}",
                                 f"https://api.cloudflare.com/client/v4/accounts/{cfg.cloudflare_account_id}/ai/v1", model,
-                                cfg.cloudflare_api_key, reasoning=False))
+                                cfg.cloudflare_api_key, reasoning=False, vision=_cf_vision(model)))
+        # IA de Cloudflare qui « voient », réservées aux photos : fiables (quota quotidien large), en relais
+        known = set(cfg.cloudflare_models)
+        for i, model in enumerate(m for m in getattr(cfg, "cloudflare_vision_models", []) if m not in known):
+            out.append(Provider(f"cloudflare-vue{i + 1}", f"Cloudflare · {model.split('/')[-1][:24]}",
+                                f"https://api.cloudflare.com/client/v4/accounts/{cfg.cloudflare_account_id}/ai/v1", model,
+                                cfg.cloudflare_api_key, reasoning=False, vision=True, photos_only=True))
     if cfg.openrouter_api_key:  # relais réservés aux photos, en dernier
         known = set(cfg.openrouter_models)
         for i, model in enumerate(m for m in getattr(cfg, "openrouter_vision_models", []) if m not in known):

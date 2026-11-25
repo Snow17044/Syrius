@@ -27,7 +27,7 @@ def test_branche_seulement_avec_cle_et_identifiant_valide(monkeypatch):
     assert names() == []  # identifiant invalide : jamais intégré dans une adresse
     monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", ACC)
     got = names()
-    assert [g[0] for g in got] == ["cloudflare", "cloudflare2"]
+    assert [g[0] for g in got] == ["cloudflare", "cloudflare2", "cloudflare-vue1"]  # + relais photos
     assert got[0][1] == f"https://api.cloudflare.com/client/v4/accounts/{ACC}/ai/v1" and got[0][2] == "@cf/zai-org/glm-4.7-flash"
 
 

@@ -20,7 +20,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .debate import stream_text
-from .llm import LLMError
+from .llm import LLMError, RetryableError
 
 log = logging.getLogger("syrius.uchronie")
 
@@ -368,7 +368,7 @@ async def start_game(llm, year: int, scenario: str, base=None, uid: str = "") ->
             else:
                 yield ev
     except (LLMError, GameError) as e:
-        yield {"type": "error", "message": str(e)}
+        yield error_event(e)
         return
     yield {"type": "done"}
 
@@ -384,7 +384,7 @@ async def play_turn(llm, state: dict, actions: str, span: str, diplomacy: list[d
             else:
                 yield ev
     except (LLMError, GameError) as e:
-        yield {"type": "error", "message": str(e)}
+        yield error_event(e)
         return
     yield {"type": "done"}
 
@@ -395,9 +395,15 @@ async def talk(llm, state: dict, nation: str, messages: list[dict], base=None, u
         async for text in stream_text(llm, talk_messages(state, nation, messages), TALK_TOKENS, base, uid):
             yield {"type": "text", "text": text}
     except LLMError as e:
-        yield {"type": "error", "message": str(e)}
+        yield error_event(e)
         return
     yield {"type": "done"}
+
+
+def error_event(e: Exception) -> dict:
+    """Erreur pour l'application. « exhausted » : toutes les IA gratuites sont à court (limite atteinte ou
+    indisponibles) ; le site à part propose alors au joueur d'utiliser sa propre clé gratuite."""
+    return {"type": "error", "message": str(e), "exhausted": isinstance(e, RetryableError)}
 
 
 def clean_talk(messages) -> list[dict]:

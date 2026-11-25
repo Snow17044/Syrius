@@ -9,10 +9,10 @@ from pathlib import Path
 
 from .config import Config
 from .db import Database
-from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config
+from .llm import ChatClient, LLMError, RetryableError, TooLargeError, providers_from_config, strength
 from . import skills
 from .tools import dashboard, diagram, model3d
-from . import family, vision
+from . import atelier, family, vision
 from .group import FACES_NOTE, NOVA_NOTE
 from .tools.registry import TIMEZONE, TOOL_LABELS, ToolExecutor, build_tools, select_tools
 
@@ -49,9 +49,33 @@ def build_aurore_system(settings: dict, skills_text: str = "") -> str:
         parts.append(f"Prénom de l'utilisateur : {settings['user_name']}")
     if settings.get("internet", True) is False:
         parts.append("Internet est DÉSACTIVÉ dans les réglages : tu n'as pas les outils web_search / web_read.")
+    if settings.get("aurora_mode", "termux") == "termux":
+        parts.append(TERMUX_MODE)
+    else:
+        parts.append("MODE ATELIER (choisi par l'utilisateur) : pour un programme ou un site qui doit marcher, utilise "
+                     "l'atelier (build_web_page pour un site statique, run_code_project pour le reste).")
     if skills_text:
         parts.append(skills_text)
     return "\n\n".join(parts)
+
+
+TERMUX_MODE = """MODE TERMUX (choisi par l'utilisateur, prioritaire sur les consignes d'atelier plus haut) : tu n'as PAS d'atelier. Tu donnes le code prêt à copier-coller dans
+Termux (Android), et c'est l'utilisateur qui le lance. Pour un programme ou un site :
+1. Une phrase sur ce que tu vas faire, puis UN SEUL bloc ```bash à copier en une fois, qui fait TOUT :
+   - installe ce qu'il faut (pkg install -y python nodejs… ; pip install … ; npm install …) ;
+   - crée le dossier (mkdir -p ~/nom-du-projet && cd ~/nom-du-projet) ;
+   - crée CHAQUE fichier en entier avec cat > fichier <<'EOF' … EOF (guillemets autour de EOF : le contenu est
+     copié tel quel ; jamais de « … » ni de « à compléter ») ;
+   - lance le programme (python main.py, node app.js) ; pour un site : python -m http.server 8080, puis dis d'ouvrir
+     http://localhost:8080 dans le navigateur du téléphone.
+2. Ensuite, en quelques lignes : comment s'en servir, et quoi faire en cas d'erreur courante.
+Termux n'est pas un PC : pas de sudo, pas d'apt-get (c'est pkg), pas d'interface graphique de bureau, pas de
+navigateur sans tête ; préfère les bibliothèques pures Python/JS. Avant d'envoyer, relis le bloc comme si tu le
+tapais : chaque fichier est complet, les noms concordent, les imports existent, le programme se lance sans erreur.
+Si l'utilisateur te colle une erreur Termux, trouve la cause et donne le bloc corrigé (seulement ce qui change).
+Pour un site ou une interface, applique le guide de design ci-dessous.
+
+""" + atelier.DESIGN_GUIDE
 
 
 def build_system(settings: dict, memories: list[dict]) -> str:
@@ -125,7 +149,7 @@ def display_messages(stored: list[dict]) -> list[dict]:
             if texts:
                 out.append({"role": "user", "text": "\n".join(texts), "tools": []})
             for b in m["content"]:  # projet de l'atelier d'Aurora : sa carte reste dans l'historique
-                if b.get("type") == "tool_result" and b.get("tool_name") in ("run_code_project", "check_code_project") \
+                if b.get("type") == "tool_result" and b.get("tool_name") in ("run_code_project", "check_code_project", "build_web_page") \
                         and not b.get("is_error") and out and out[-1]["role"] == "assistant":
                     found = re.search(r"Projet ([0-9a-f]{8})", str(b.get("content", "")))
                     if found and not any(d.get("id") == found.group(1) for d in out[-1].get("diagrams", [])):
@@ -176,6 +200,10 @@ def display_messages(stored: list[dict]) -> list[dict]:
 # Les offres gratuites limitent les jetons PAR MINUTE (demande + réponse réservée) : on reste sobre.
 MAX_TOKENS = 3000
 SMALL_TOKENS = 1600
+# Aurora (Syrius Code) : elle réfléchit vraiment (raisonnement poussé) et a la place d'écrire du vrai code.
+AURORA_TOKENS = 6000
+AURORA_SMALL_TOKENS = 3500
+
 _THINK_TAGS = re.compile(r"<think>.*?</think>", re.S)
 # Demande explicite de schéma : on oblige le modèle à passer par l'outil de dessin.
 _WANTS_DIAGRAM = re.compile(r"sch[ée]ma|carte mentale|mind ?map|diagramme|organigramme", re.I)
@@ -252,17 +280,22 @@ class Agent:
         to_save = [history[-1]]
         aurore = profile == "aurore"
         base_db = getattr(self.db, "base", self.db)
+        aurora_mode = atelier.get_mode(base_db) if aurore else ""  # termux : code à coller ; atelier : elle teste seule
         preferred = "" if aurore else settings.get("brain", "")
         if preferred == "codestral":
             preferred = ""  # l'IA spécialisée code appartient à Aurora (Syrius Code), plus à Syrius
         if aurore and not image and _WANTS_CODE.search(user_text):
             preferred = "codestral"  # Mistral Code : le cerveau spécialisé programmation, réservé à Aurora
-        providers = self.llm.ordered(preferred, photo=bool(image), fast=settings.get("effort") != "high")
+        providers = self.llm.ordered(preferred, photo=bool(image), fast=aurore is False and settings.get("effort") != "high")
+        if aurore and not image:  # Aurora : la plus capable d'abord (les IA en échec récent restent derrière)
+            recent = {p.name for p in providers if p.name in self.llm.stats and
+                      self.llm._rank(p, False) >= 2} if hasattr(self.llm, "stats") else set()
+            providers = sorted(providers, key=lambda p: (p.name in recent, p.name != preferred if preferred else 0, strength(p)))
         if image:  # seules les IA qui « voient » peuvent répondre
             providers = [p for p in providers if p.vision]
             if not providers:
                 yield {"type": "error", "message": "Aucune de tes IA ne sait regarder une photo pour l'instant "
-                                                   "(il faut Groq Llama 4, GitHub Models ou Mistral)."}
+                                                   "(il faut une clé Cloudflare, OpenRouter, GitHub Models ou Mistral)."}
                 return
         # Part équitable de l'IA la plus puissante (limite gratuite partagée par la famille).
         base = getattr(self.db, "base", self.db)
@@ -270,7 +303,7 @@ class Agent:
         if family.quota_left(base, "power", uid) <= 0:
             providers = [p for p in providers if not p.name.startswith("openrouter")] or providers
         power_counted = False
-        effort = "high" if settings.get("effort") == "high" else "low"
+        effort = "high" if (aurore or settings.get("effort") == "high") else "low"  # Aurora réfléchit toujours
         # Outils envoyés : seulement ceux que la demande évoque (+ la fin de la réponse précédente, pour « oui »…).
         last_reply = next((b.get("text", "") for m in reversed(history[:-1]) if m["role"] == "assistant"
                            for b in m["content"] if b.get("type") == "text"), "")
@@ -281,7 +314,7 @@ class Agent:
         site_calls = 0
 
         for _step in range(MAX_STEPS):
-            system = (build_aurore_system(settings, skills.prompt_list(base_db)) if aurore
+            system = (build_aurore_system({**settings, "aurora_mode": aurora_mode}, skills.prompt_list(base_db)) if aurore
                       else build_system(settings, self.db.list_memories()))  # les souvenirs peuvent changer
             if group:
                 system += "\n\n" + NOVA_NOTE
@@ -294,8 +327,9 @@ class Agent:
             msgs = to_openai(history, system)
             if image:
                 vision.attach(msgs, image)
-            body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, settings, profile), tool_context, keep_all),
-                    "max_tokens": MAX_TOKENS}
+            body = {"messages": msgs, "tools": select_tools(build_tools(self.cfg, {**settings, "aurora_mode": aurora_mode},
+                                                                         profile), tool_context, keep_all),
+                    "max_tokens": AURORA_TOKENS if aurore else MAX_TOKENS}
             state = {"text": "", "calls": [], "streamed": False}
             last_error: LLMError | None = None
             tool_retry = False
@@ -313,7 +347,7 @@ class Agent:
                         req["tool_choice"] = "any" if provider.name == "mistral" else \
                             {"type": "function", "function": {"name": forced}}
                 if shrink:
-                    req["max_tokens"] = SMALL_TOKENS
+                    req["max_tokens"] = AURORA_SMALL_TOKENS if aurore else SMALL_TOKENS
                 if "qwen3" in provider.model and "groq.com" in provider.base_url:
                     req["reasoning_format"] = "hidden"  # pas de « réflexions » affichées dans la réponse
                 if provider.reasoning:
@@ -396,7 +430,7 @@ class Agent:
                 else:
                     result, is_error, ui_event = await self.executor.run(call["name"], call["input"],
                                                                          {"location": location, "untrusted": untrusted_seen,
-                                                                          "profile": profile})
+                                                                          "profile": profile, "conv": conversation_id})
                 if call["name"] in UNTRUSTED_TOOLS and not is_error:
                     untrusted_seen = True
                 if ui_event and ui_event.get("type") == "device" and untrusted_seen:

@@ -1,8 +1,10 @@
 """Uchronie en site à part : le jeu seul, ouvert à tous, sans compte Syrius.
 
 Même code que Syrius : un deuxième projet Vercel branché sur ce dépôt, avec la variable UCHRONIE_SEUL=1, sert ce
-site-là au lieu de l'assistant. Les IA sont les IA gratuites du propriétaire (mêmes clés que Syrius) ; pour que des
-inconnus ne vident pas ses quotas, chaque visiteur a un nombre limité de demandes par jour, et le site entier aussi.
+site-là au lieu de l'assistant. Les IA sont les IA gratuites du propriétaire (mêmes clés que Syrius), sans limite par
+joueur par défaut (on peut en fixer une). Quand elles sont toutes épuisées pour la journée, le joueur peut coller SA
+propre clé gratuite (Groq ou Gemini) : il joue alors sans limite sur son propre quota. Cette clé reste dans son
+navigateur ; le serveur s'en sert pour la demande en cours et ne la garde jamais.
 
 Rien n'est gardé sur le serveur à part ces compteurs : les parties restent dans le navigateur des joueurs.
 Les adresses IP ne sont jamais enregistrées telles quelles (seulement une empreinte qui change chaque jour).
@@ -13,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +27,7 @@ from pydantic import BaseModel, Field
 from . import uchronie
 from .agent import sse
 from .config import Config
-from .llm import ChatClient, providers_from_config
+from .llm import ChatClient, Provider, providers_from_config
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 STATIC = {
@@ -34,6 +37,24 @@ STATIC = {
 ICONS = {"icon.svg": "image/svg+xml", "icon-192.png": "image/png", "icon-512.png": "image/png"}
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; "
        "font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+
+
+KEY_HEADER = "x-uchronie-cle"
+_GROQ_KEY = re.compile(r"^gsk_[A-Za-z0-9]{20,100}$")
+_GEMINI_KEY = re.compile(r"^AIza[0-9A-Za-z_-]{30,60}$")
+
+
+def own_llm(key: str) -> ChatClient | None:
+    """IA payée par personne : la clé gratuite du joueur (jamais gardée, jamais écrite dans les journaux)."""
+    key = (key or "").strip()
+    if _GROQ_KEY.match(key):
+        return ChatClient([
+            Provider("groq", "Groq (ta clé)", "https://api.groq.com/openai/v1", "openai/gpt-oss-120b", key),
+            Provider("groq2", "Groq (ta clé)", "https://api.groq.com/openai/v1", "openai/gpt-oss-20b", key)])
+    if _GEMINI_KEY.match(key):
+        return ChatClient([Provider("gemini", "Gemini (ta clé)", "https://generativelanguage.googleapis.com/v1beta/openai",
+                                    "gemini-flash-latest", key, vision=True)])
+    return None
 
 
 def _int_env(name: str, default: int) -> int:
@@ -65,7 +86,7 @@ class Quota:
     """Compteurs du jour : par visiteur et pour tout le site. Dans Upstash si configuré (partagé entre les
     serveurs de Vercel), sinon en mémoire."""
 
-    def __init__(self, db=None, per_visitor: int = 40, per_day: int = 800):
+    def __init__(self, db=None, per_visitor: int = 0, per_day: int = 0):  # 0 = pas de limite
         self.db, self.per_visitor, self.per_day = db, per_visitor, per_day
         self.mem: dict = {}
         self.lock = threading.Lock()
@@ -92,25 +113,40 @@ class Quota:
     def visitor(self, ip: str, day: str) -> str:
         return hashlib.sha256(f"{day}|{ip}".encode()).hexdigest()[:16]
 
-    def left(self, ip: str) -> int:
-        day = self.day()
-        data = self._load(day)
-        return max(0, min(self.per_visitor - data["v"].get(self.visitor(ip, day), 0), self.per_day - data["all"]))
+    @property
+    def unlimited(self) -> bool:
+        return not self.per_visitor and not self.per_day
 
-    def take(self, ip: str) -> int:
-        """Compte une demande. Renvoie ce qui reste au visiteur, ou lève HTTPException 429."""
+    def _rest(self, data: dict, who: str) -> int | None:
+        rests = ([self.per_visitor - data["v"].get(who, 0)] if self.per_visitor else []) + \
+                ([self.per_day - data["all"]] if self.per_day else [])
+        return max(0, min(rests)) if rests else None
+
+    def left(self, ip: str) -> int | None:
+        """Demandes restantes aujourd'hui (None = illimité)."""
+        if self.unlimited:
+            return None
+        day = self.day()
+        return self._rest(self._load(day), self.visitor(ip, day))
+
+    def take(self, ip: str) -> int | None:
+        """Compte une demande. Renvoie ce qui reste au visiteur (None = illimité), ou lève HTTPException 429."""
+        if self.unlimited:
+            return None
         with self.lock:
             day = self.day()
             data = self._load(day)
             who = self.visitor(ip, day)
-            if data["all"] >= self.per_day:
-                raise HTTPException(429, "Le site a atteint sa limite gratuite du jour. Reviens demain !")
-            if data["v"].get(who, 0) >= self.per_visitor:
-                raise HTTPException(429, "Tu as utilisé toutes tes demandes du jour. Reviens demain !")
+            if self.per_day and data["all"] >= self.per_day:
+                raise HTTPException(429, "Le site a atteint sa limite gratuite du jour. Ajoute ta propre clé gratuite "
+                                         "pour continuer sans limite !")
+            if self.per_visitor and data["v"].get(who, 0) >= self.per_visitor:
+                raise HTTPException(429, "Tu as utilisé tes demandes du jour. Ajoute ta propre clé gratuite pour "
+                                         "continuer sans limite !")
             data["v"][who] = data["v"].get(who, 0) + 1
             data["all"] += 1
             self._save(data)
-            return min(self.per_visitor - data["v"][who], self.per_day - data["all"])
+            return self._rest(data, who)
 
 
 def client_ip(request: Request) -> str:
@@ -125,7 +161,7 @@ def create_site(cfg: Config | None = None, llm=None, db=None) -> FastAPI:
         from .app import open_database
         db = open_database(cfg)
     llm = llm or ChatClient(providers_from_config(cfg))
-    quota = Quota(db, _int_env("UCHRONIE_DEMANDES_PAR_JOUEUR", 40), _int_env("UCHRONIE_DEMANDES_PAR_JOUR", 800))
+    quota = Quota(db, _int_env("UCHRONIE_DEMANDES_PAR_JOUEUR", 0), _int_env("UCHRONIE_DEMANDES_PAR_JOUR", 0))
     log = logging.getLogger("uchronie")
     app = FastAPI(title="Uchronie", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.quota = quota
@@ -161,9 +197,20 @@ def create_site(cfg: Config | None = None, llm=None, db=None) -> FastAPI:
 
     @app.get("/api/uchronie/config")
     async def config(request: Request):
-        return {"standalone": True, "left": quota.left(client_ip(request)), "per_visitor": quota.per_visitor}
+        return {"standalone": True, "left": quota.left(client_ip(request)), "per_visitor": quota.per_visitor,
+                "own_key": True}
 
-    def stream(events, what: str, left: int):
+    def brain(request: Request):
+        """(IA à utiliser, demandes restantes). La clé du joueur, si elle est là, passe avant tout : rien n'est compté."""
+        raw = request.headers.get(KEY_HEADER, "")
+        if raw:
+            mine = own_llm(raw)
+            if mine is None:
+                raise HTTPException(400, "Cette clé ne ressemble pas à une clé Groq (gsk_…) ou Gemini (AIza…).")
+            return mine, "own"
+        return llm, quota.take(client_ip(request))
+
+    def stream(events, what: str, left):
         async def gen():
             yield sse({"type": "quota", "left": left})
             try:
@@ -186,15 +233,15 @@ def create_site(cfg: Config | None = None, llm=None, db=None) -> FastAPI:
 
     @app.post("/api/uchronie/start")
     async def start(body: StartBody, request: Request):
-        left = quota.take(client_ip(request))
-        return stream(uchronie.start_game(llm, body.year, " ".join(body.scenario.split())), "une création", left)
+        ai, left = brain(request)
+        return stream(uchronie.start_game(ai, body.year, " ".join(body.scenario.split())), "une création", left)
 
     @app.post("/api/uchronie/turn")
     async def turn(body: TurnBody, request: Request):
         state = checked(body.state)
         diplomacy = uchronie.clean_diplomacy(body.diplomacy, state)
-        left = quota.take(client_ip(request))
-        return stream(uchronie.play_turn(llm, state, body.actions.strip(), body.span, diplomacy), "un tour", left)
+        ai, left = brain(request)
+        return stream(uchronie.play_turn(ai, state, body.actions.strip(), body.span, diplomacy), "un tour", left)
 
     @app.post("/api/uchronie/talk")
     async def talk(body: TalkBody, request: Request):
@@ -205,7 +252,7 @@ def create_site(cfg: Config | None = None, llm=None, db=None) -> FastAPI:
             messages = uchronie.clean_talk(body.messages)
         except uchronie.GameError as e:
             raise HTTPException(400, str(e)) from None
-        left = quota.take(client_ip(request))
-        return stream(uchronie.talk(llm, state, body.nation, messages), "la diplomatie", left)
+        ai, left = brain(request)
+        return stream(uchronie.talk(ai, state, body.nation, messages), "la diplomatie", left)
 
     return app

@@ -1,34 +1,11 @@
 /* =====================================================================
-   Syrius Code — deux thèmes :
-   - « syrius » (par défaut) : le design de Syrius Discussion (voir style.css) ;
-   - « nature » : papier clair, verts de forêt et de feuillage.
+   Syrius Code — même interface et mêmes thèmes que Syrius (voir style.css) :
+   « syrius » par défaut, « nature » = forêt la nuit.
    ===================================================================== */
 :root {
   --c0: #a9b5ff; --c1: #f2b8d8; --c2: #8fe3c6; --c3: #ffd08f; --c4: #91d2ff; --c5: #c8b6ff;
   --nav-h: 64px;
 }
-:root[data-theme="nature"] {
-  --bg: #eaf0df; --bg-soft: #f6f9ef; --surface: #ffffff; --surface-2: #e8efdc; --surface-3: #d8e4c6;
-  --line: rgba(38, 72, 44, .10); --line-2: rgba(38, 72, 44, .20);
-  --text: #1d3324; --text-2: #3b5642; --muted: #6a806d;
-  --accent: #2f7d4f; --accent-2: #5f9e44; --accent-3: #c79a3b; --accent-ink: #ffffff;
-  --grad: linear-gradient(135deg, #3f9a62 0%, #6faa45 58%, #c5d45a 100%);
-  --grad-soft: linear-gradient(135deg, rgba(63, 154, 98, .16), rgba(197, 212, 90, .14));
-  --mint: #2f9e6e; --amber: #c79a3b; --sky: #3a8fb7; --danger: #c0503d;
-  --sh: 0 10px 28px rgba(40, 70, 40, .12); --sh-lg: 0 24px 60px rgba(40, 70, 40, .18);
-  --c0: #2f7d4f; --c1: #c79a3b; --c2: #3a8fb7; --c3: #9a6bb0; --c4: #c0503d; --c5: #6f8f3a;
-  color-scheme: light;
-}
-:root[data-theme="nature"] body {
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke='%232f7d4f' stroke-opacity='.07' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M20 130c0-30 18-50 52-54 0 34-18 54-46 54-3 0-5-.4-6-1z'/%3E%3Cpath d='M20 130c8-16 20-28 34-36'/%3E%3Cpath d='M104 60c0-18 11-30 31-33 0 21-11 33-28 33-1.5 0-2.4-.2-3-.5z'/%3E%3Cpath d='M104 60c5-9 12-16 21-21'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 160px 160px,
-    radial-gradient(900px 520px at 100% -10%, rgba(111, 170, 69, .20), transparent 60%),
-    radial-gradient(700px 500px at -20% 110%, rgba(63, 154, 98, .16), transparent 60%),
-    var(--bg);
-}
-:root[data-theme="nature"] .bubble strong, :root[data-theme="nature"] .c-bubble strong { color: var(--text); }
-:root[data-theme="nature"] .primary { box-shadow: 0 8px 22px rgba(47, 125, 79, .28); }
-
 .code-body { overflow: hidden; }
 .c-offscreen { position: fixed; left: -9999px; top: 0; }
 
@@ -38,47 +15,57 @@
   background: var(--surface); border: 1px solid var(--line); box-shadow: var(--sh); }
 .c-login-card h1 { margin: 4px 0 0; font-size: 1.5rem; }
 .c-login-card input { width: 100%; }
-.c-logo, .c-mark, .c-empty-mark { display: grid; place-items: center; color: var(--accent-ink); background: var(--grad); border-radius: 16px; }
+.c-logo { display: grid; place-items: center; color: var(--accent-ink); background: var(--grad); border-radius: 16px; }
 .c-logo { width: 56px; height: 56px; margin: 0 auto; font-size: 1.6rem; }
 
-/* ---------- Structure ---------- */
-.c-app { display: grid; grid-template-rows: auto 1fr auto; grid-template-columns: minmax(0, 1fr); height: 100dvh; max-width: 820px; margin: 0 auto; }
+/* ---------- Structure : la MÊME interface que Syrius (menu, barre du haut, bulles, saisie) ---------- */
+.c-app { display: flex; height: 100dvh; }
 /* Rien ne doit élargir la page au-delà de l'écran (sinon le téléphone « dézoome » et le bouton Envoyer sort de l'écran) :
    un long code défile DANS son cadre. */
-.c-app > *, .c-tab > * { min-width: 0; }
-.c-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 14px 8px; }
-.c-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.c-brand > div { display: grid; line-height: 1.2; min-width: 0; }
-.c-mark { width: 38px; height: 38px; border-radius: 12px; flex: none; }
-.c-head-actions { display: flex; gap: 6px; }
-.c-main { position: relative; min-height: 0; min-width: 0; }
+.c-app > *, .c-tab > *, #main > * { min-width: 0; }
+.c-main { flex: 1; position: relative; min-height: 0; min-width: 0; }
 .c-tab { display: none; height: 100%; min-height: 0; }
 .c-tab.on { display: flex; flex-direction: column; }
-.c-page { padding: 6px 16px 24px; overflow-y: auto; height: 100%; overscroll-behavior: contain; }
+.c-page { padding: 6px 16px 24px; overflow-y: auto; height: 100%; overscroll-behavior: contain; width: 100%; max-width: 800px; margin: 0 auto; }
 .c-page h2 { display: flex; align-items: center; gap: .5em; margin: 8px 0; font-size: 1.25rem; }
 .c-page h2 .ic { color: var(--accent); }
+@media (min-width: 900px) { #c-menu { display: none; } }
 
-.c-nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 6px 8px calc(env(safe-area-inset-bottom) + 6px);
-  background: var(--bg-soft); border-top: 1px solid var(--line); }
-.c-nav button { display: grid; justify-items: center; gap: 2px; min-height: 48px; padding: 6px 2px; border: 0; border-radius: 14px;
-  background: none; color: var(--muted); font-size: .72rem; font-weight: 600; cursor: pointer; transition: background .2s, color .2s; }
-.c-nav button .ic { width: 22px; height: 22px; }
-.c-nav button.on { color: var(--accent); background: var(--grad-soft); }
+/* Menu : comme celui de Syrius */
+#c-conv-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; overscroll-behavior: contain; }
+#c-conv-list li { display: flex; align-items: center; border-radius: 14px; margin-bottom: 2px; transition: background .2s; }
+#c-conv-list li.active { background: var(--surface-2); }
+#c-conv-list .conv-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; background: none;
+  border: 0; padding: 11px 10px; cursor: pointer; color: var(--text-2); }
+#c-conv-list li.active .conv-open { color: var(--text); }
+#c-conv-list .conv-open .ic { color: var(--muted); }
+#c-conv-list li.active .conv-open .ic { color: var(--accent-3); }
+#c-conv-list .conv-open span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#c-conv-list .conv-more { background: none; border: 0; width: 38px; height: 38px; color: var(--muted); cursor: pointer; border-radius: 12px; display: grid; place-items: center; }
+.c-conv-empty { padding: 8px 10px; }
+#c-nav .ghost.wide { justify-content: flex-start; }
+#c-nav button.on { color: var(--text); background: var(--surface-3); border-color: rgba(242, 184, 216, .3); }
+#c-nav button.on .ic { color: var(--accent-3); }
+.drawer-sep { height: 1px; background: var(--line); margin: 6px 0; }
+.c-switch-app { justify-content: center; color: var(--text-2); margin: 0; }
+
+/* Couleur d'Aurora : rose (Nova : bleu) */
+.brand-mark.aurora { background: linear-gradient(135deg, #f2b8d8, #c8b6ff); }
+.hero-orb.aurora::before { background: radial-gradient(circle, rgba(242, 184, 216, .22), transparent 66%); }
+.hero-orb.aurora .orb { background: radial-gradient(circle at 34% 30%, #fff 0 6%, #ffe3f1 16%, #f2b8d8 44%, #c8b6ff 72%, #9fb0ff 100%); }
+.code-body .msg.assistant::before { background: radial-gradient(circle at 34% 30%, #fff 0 6%, #ffe3f1 16%, #f2b8d8 45%, #c8b6ff 75%, #9fb0ff 100%);
+  box-shadow: 0 4px 14px rgba(242, 184, 216, .3); }
 
 /* ---------- Discussion ---------- */
-.c-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 14px 12px; overscroll-behavior: contain; }
-.c-empty { text-align: center; padding: 28px 8px 8px; }
-.c-empty-mark { width: 60px; height: 60px; margin: 0 auto 10px; border-radius: 20px; font-size: 1.7rem; }
-.c-empty h2 { margin: 6px 0; font-size: 1.35rem; }
+.c-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 14px 12px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .c-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 14px 0; }
 .c-page .c-chips { justify-content: flex-start; }
 .c-chip { padding: 9px 14px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line-2); color: var(--text-2);
   font-size: .88rem; font-weight: 600; cursor: pointer; }
 .c-chip:active { transform: scale(.97); }
-.c-msg { display: flex; margin: 0 0 14px; animation: rise .28s var(--ease); }
-.c-msg.user { justify-content: flex-end; }
-.c-msg.user .c-bubble { max-width: 86%; padding: 10px 15px; border-radius: 20px 20px 6px 20px; background: var(--surface-3); white-space: pre-wrap; }
-.c-msg.assistant .c-bubble { max-width: 100%; min-width: 0; padding: 2px 2px 2px 0; flex: 1; overflow-wrap: anywhere; }
+/* Suggestions de l'accueil : les mêmes cartes que Syrius */
+#c-starters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 460px; margin: 0 auto; }
+#c-starters .c-chip { border-radius: var(--r); padding: 14px; text-align: left; color: var(--text); background: var(--surface); border-color: var(--line); }
 .c-msg.typing .c-body:empty::after { content: "Aurora réfléchit…"; color: var(--muted); }
 .c-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .c-tools:not(:empty) { margin-bottom: 6px; }
@@ -92,11 +79,13 @@
 .c-body pre code { background: none; padding: 0; font-size: .84rem; }
 .c-copy { position: sticky; float: right; top: 0; margin: -4px -4px 0 8px; padding: 3px 9px; font-size: .74rem; border-radius: 10px; }
 .c-error { color: var(--danger); margin-top: 6px; }
-.c-composer { display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 8px; padding: 8px 8px 8px 14px; border-radius: 24px;
-  background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--sh); }
-.c-composer textarea { flex: 1; min-height: 36px; max-height: 180px; padding: 8px 0; border: 0; outline: 0; background: none; resize: none; }
-.c-send { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--grad); color: var(--accent-ink); cursor: pointer; }
-.c-send:disabled { opacity: .5; }
+/* Saisie : la même barre que Syrius */
+.c-composer { display: flex; align-items: flex-end; gap: 8px; padding: 6px 12px calc(env(safe-area-inset-bottom) + 12px);
+  max-width: 800px; width: 100%; margin: 0 auto; }
+#c-input { flex: 1; resize: none; max-height: 160px; min-height: 42px; border: 0; background: transparent; padding: 10px 6px 10px 12px;
+  box-shadow: none; border-radius: 0; color: var(--text); }
+#c-input:focus { box-shadow: none; outline: none; }
+#c-send:disabled { opacity: .5; }
 
 /* ---------- Cartes, listes, formulaires ---------- */
 .c-cards { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 10px; }
@@ -157,7 +146,6 @@
 .c-status.running { color: var(--amber); }
 .c-skill-body { white-space: pre-wrap; font-size: .82rem; background: var(--surface-2); padding: 10px 12px; border-radius: 12px; margin: 6px 0 0; }
 
-@media (min-width: 820px) { .c-app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }
 
 /* ---------- Atelier d'Aurora ---------- */
 .c-atelier { margin-top: 10px; }
@@ -192,3 +180,32 @@
 .c-ms-item { padding: 8px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; }
 .c-ms-cat > summary + .c-ms-item { border-top: 0; margin-top: 4px; }
 .c-ms-item p { margin: 2px 0 0; color: var(--text-2); }
+/* Atelier instantané : test invisible et aperçu en direct */
+.c-test-frame { position: fixed; left: -10000px; top: 0; width: 390px; height: 760px; border: 0; visibility: hidden; }
+.c-atelier-live { display: block; width: 100%; height: 440px; margin: 10px 0 4px; border: 1px solid var(--line-2); border-radius: 14px; background: #fff; }
+.c-atelier-publish { margin: 10px 0 2px; display: grid; gap: 6px; }
+.c-atelier-publish button { width: 100%; }
+.c-atelier-online { color: var(--mint); font-weight: 600; overflow-wrap: anywhere; }
+.c-atelier-state.cancelled { color: var(--muted); text-decoration: line-through; }
+/* Façon de coder d'Aurora */
+.c-mode { display: grid; gap: 8px; margin-top: 8px; }
+.c-mode-opt { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 14px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text); font: inherit; }
+.c-mode-opt span { font-size: .84rem; color: var(--text-2); }
+.c-mode-opt.on { border-color: var(--accent); background: var(--grad-soft); box-shadow: 0 0 0 1px var(--accent) inset; }
+
+/* ---------- Page « partenaire » (ami qui met Syrius sur son site) ---------- */
+.p-body { overflow-y: auto; }
+.p-wrap { max-width: 620px; margin: 0 auto; padding: 32px 16px 60px; display: grid; gap: 18px; }
+.p-hero { text-align: center; }
+.p-hero .orb.big { margin: 0 auto 14px; }
+.p-hero h1 { margin: 0 0 6px; font-size: 1.6rem; }
+.p-card { display: grid; gap: 10px; padding: 22px 18px; border-radius: var(--r-lg); background: var(--surface);
+  border: 1px solid var(--line); box-shadow: var(--sh); }
+.p-card h2 { margin: 0 0 4px; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; }
+.p-card h3 { margin: 12px 0 0; font-size: 1rem; }
+.p-card label { display: grid; gap: 6px; font-size: .92rem; color: var(--text-2); }
+.p-card input, .p-card textarea { width: 100%; }
+.p-card code { background: var(--surface-2); padding: 1px 5px; border-radius: 6px; font-size: .86em; overflow-wrap: anywhere; }
+.p-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--text-2); }
+#p-snippet { font-family: ui-monospace, monospace; font-size: .85rem; }

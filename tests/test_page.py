@@ -14,7 +14,7 @@ def test_identifiants_uniques():
 def test_elements_cherches_par_le_code_existent():
     # Créés par le code lui-même (pas dans index.html)
     dynamic = set()
-    for js in ("app.js", "voice.js", "local.js", "hud.js", "diagram.js", "model3d.js", "journal.js", "debate.js", "faces.js"):
+    for js in ("app.js", "voice.js", "local.js", "hud.js", "diagram.js", "model3d.js", "journal.js", "debate.js", "faces.js", "atelier-test.js"):
         dynamic |= set(re.findall(r'\.id\s*=\s*["\']([\w-]+)["\']', (WEB / js).read_text(encoding="utf-8")))
     missing = {}
     for js in ("app.js", "voice.js", "local.js", "journal.js", "debate.js", "faces.js"):
@@ -34,4 +34,16 @@ def test_chaque_onglet_a_son_panneau():
 def test_syrius_code_ne_deborde_pas_de_l_ecran():
     """Bug réel : un long code élargissait la page (×4) ; le téléphone dézoomait et le bouton Envoyer sortait de l'écran."""
     css = (WEB / "code.css").read_text(encoding="utf-8")
-    assert "grid-template-columns: minmax(0, 1fr)" in css and ".c-app > *, .c-tab > * { min-width: 0; }" in css
+    assert ".c-app > *, .c-tab > *, #main > * { min-width: 0; }" in css and ".c-main { flex: 1; position: relative; min-height: 0; min-width: 0; }" in css
+
+
+def test_theme_foret_commun_aux_deux_applis(make_client):
+    """Thème « Forêt » (forêt la nuit) : même réglage dans Syrius et Syrius Code, image servie."""
+    from pathlib import Path
+    web = Path(__file__).resolve().parents[1] / "web"
+    r = make_client().get("/static/foret.svg")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
+    assert 'id="theme-toggle"' in (web / "index.html").read_text(encoding="utf-8")
+    for f in ("app.js", "code.js"):
+        assert 'store.set("syrius:theme", theme)' in (web / f).read_text(encoding="utf-8")
+    assert '/static/foret.svg' in (web / "style.css").read_text(encoding="utf-8")

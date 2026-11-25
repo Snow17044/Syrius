@@ -3,11 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#0d0f16">
+  <meta name="theme-color" content="#0d0f16" id="theme-color">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Syrius">
-  <title>Syrius</title>
+  <title>Syrius — assistant IA personnel</title>
+  <meta name="description" content="Syrius, ton assistant IA personnel en français : discussion et voix avec Nova, images, photos, réveil du matin, journal, débats d'IA et Aurora qui code tes sites. Privé et sans publicité.">
+  <link rel="canonical" href="{{BASE}}/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Syrius">
+  <meta property="og:title" content="Syrius — ton assistant IA personnel">
+  <meta property="og:description" content="Nova parle, voit tes photos, crée des images et t'aide au quotidien. Aurora code tes sites.">
+  <meta property="og:url" content="{{BASE}}/">
+  <meta property="og:image" content="{{BASE}}/icons/icon-512.png">
+  {{GOOGLE_META}}
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -44,6 +53,7 @@
         <button type="submit" class="primary">Se connecter</button>
         <button type="button" id="join-open" class="ghost subtle">Rejoindre la famille avec un code</button>
         <a href="/reinitialiser" class="small muted">Mot de passe oublié ?</a>
+        <a href="/decouvrir" class="small muted">Découvrir Syrius</a>
       </form>
       <form id="join-form" class="hidden" autocomplete="off">
         <p class="small muted">Demande le code d'invitation à la personne qui t'a invité, puis choisis ton prénom et ton mot de passe.</p>
@@ -79,8 +89,10 @@
         <button id="open-journal" class="ghost wide" data-icon="book"><span>Journal intime</span></button>
         <button id="open-debate" class="ghost wide" data-icon="message"><span>Débat d'IA</span></button>
         <a id="open-uchronie" href="/uchronie" class="ghost wide" data-icon="map"><span>Uchronie (jeu)</span></a>
+        <a id="open-code" href="/code" class="ghost wide btn-link c-switch-app hidden" data-icon="code"><span>Syrius Code (Aurora)</span></a>
         <button id="open-training" class="ghost wide hidden" data-icon="chart"><span>Entraînement de Syrius</span></button>
         <button id="open-settings" class="ghost wide" data-icon="settings"><span>Réglages</span></button>
+        <button id="theme-toggle" class="ghost wide" data-icon="leaf"><span>Thème Forêt</span></button>
         <button id="logout" class="ghost wide subtle" data-icon="logout"><span>Déconnexion</span></button>
       </div>
     </aside>
@@ -469,6 +481,49 @@
       </div>
 
       <div class="set-panel" data-panel="services" role="tabpanel">
+      <div id="api-box" class="set-card hidden">
+        <h4 data-icon="link"><span>API : Syrius sur d'autres sites</span></h4>
+        <p class="muted small">Crée une clé pour le site d'un ami : ses visiteurs parlent à ton assistant dans une bulle
+          de discussion. L'assistant de l'API ne voit rien de privé (ni tes discussions, ni ta mémoire, ni tes emails)
+          et chaque clé a une limite de messages par jour.</p>
+        <h5 data-icon="link"><span>Envoyer un lien à un ami</span></h5>
+        <p class="muted small">Ton ami ouvre le lien, décrit son site et reçoit tout seul le code à coller.
+          Un lien = un site, valable 7 jours.</p>
+        <div class="inline-form">
+          <input id="api-inv-note" type="text" maxlength="60" placeholder="Pour qui ? (ex. : Léo)" autocomplete="off">
+          <input id="api-inv-limit" type="number" min="1" max="3000" value="300" aria-label="Messages par jour (au plus)" title="Messages par jour (au plus)">
+        </div>
+        <button type="button" id="api-invite" class="primary wide" data-icon="link"><span>Créer le lien</span></button>
+        <div id="api-inv-box" class="hidden">
+          <input id="api-inv-url" type="text" readonly spellcheck="false" aria-label="Lien pour ton ami">
+          <div class="local-actions">
+            <button type="button" id="api-inv-share" class="ghost" data-icon="send"><span>Envoyer</span></button>
+            <button type="button" id="api-inv-copy" class="ghost" data-icon="link"><span>Copier</span></button>
+          </div>
+          <p class="small muted">Ce lien n'est affiché qu'une fois.</p>
+        </div>
+        <ul id="api-list" class="family-list"></ul>
+        <details id="api-form">
+          <summary>Créer une clé moi-même</summary>
+          <label>Nom du site<input id="api-name" type="text" maxlength="60" placeholder="Ex. : Garage de Léo"></label>
+          <label>Adresse du site (une par ligne)
+            <textarea id="api-origins" rows="2" maxlength="600" placeholder="https://garage-leo.fr"></textarea></label>
+          <p class="muted small">La clé ne marche que depuis ces adresses. Laisse vide pour une clé « serveur »
+            (à garder secrète, pour un développeur qui appelle l'API depuis son serveur).</p>
+          <label>Nom de l'assistant<input id="api-botname" type="text" maxlength="30" value="Nova"></label>
+          <label>Ce que l'assistant doit savoir sur le site
+            <textarea id="api-instr" rows="4" maxlength="4000" placeholder="Ex. : Garage à Lyon, ouvert du lundi au samedi 8h–18h, tél. 04…, vidange à partir de 59 €. Tutoie les visiteurs."></textarea></label>
+          <label>Messages par jour (au plus)<input id="api-limit" type="number" min="1" max="3000" value="300"></label>
+          <button type="button" id="api-create" class="primary wide" data-icon="plus"><span>Créer la clé</span></button>
+        </details>
+        <div id="api-new" class="hidden">
+          <p class="small"><strong>Clé créée.</strong> Copie-la maintenant : elle ne sera plus jamais affichée.
+            Envoie ce code à ton ami ; il le colle sur son site, juste avant &lt;/body&gt;.</p>
+          <textarea id="api-snippet" rows="4" readonly spellcheck="false" aria-label="Code à coller sur le site"></textarea>
+          <button type="button" id="api-copy" class="ghost wide" data-icon="link"><span>Copier le code</span></button>
+        </div>
+        <p id="api-msg" class="small"></p>
+      </div>
       <div id="discord-box" class="set-card hidden">
         <h4 data-icon="mic"><span>Syrius sur Discord</span></h4>
         <p class="muted small">Parle à Syrius dans un salon vocal Discord, même en jouant sur ta console. Il ne répond

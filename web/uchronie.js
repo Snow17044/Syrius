@@ -12,6 +12,8 @@
     return el;
   };
   const LOCAL = "uchronie_cache_v1";
+  const KEY = "uchronie_cle_v1";  // clé d'IA gratuite du joueur (site à part) : reste dans ce navigateur
+  const ownKey = () => { try { return localStorage.getItem(KEY) || ""; } catch (_) { return ""; } };
   const ERAS = [["−50", -50], ["1492", 1492], ["1789", 1789], ["1914", 1914], ["1936", 1936], ["1962", 1962], ["2025", 2025]];
   const LABEL_MIN_AREA = { 1: 500, 2: 150, 3: 35, 4: 8, 5: 1, 6: 0 };
 
@@ -30,16 +32,19 @@
 
   // ------------------------------------------------------------------ réseau
   async function api(path, opts = {}) {
+    const headers = { "Content-Type": "application/json", "X-Syrius": "1" };
+    if (G.standalone && ownKey()) headers["X-Uchronie-Cle"] = ownKey();
     const res = await fetch(path, {
-      method: opts.method || "GET", credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-Syrius": "1" },
+      method: opts.method || "GET", credentials: "same-origin", headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     if (res.status === 401) { needLogin(); throw new Error("Non connecté"); }
     if (!res.ok) {
       let msg = `Erreur ${res.status}`;
       try { const d = await res.json(); msg = typeof d.detail === "string" ? d.detail : msg; } catch (_) { /* */ }
-      throw new Error(msg);
+      const err = new Error(msg);
+      err.exhausted = res.status === 429;  // limite du site : proposer la clé du joueur
+      throw err;
     }
     return res;
   }
@@ -61,7 +66,11 @@
         if (!chunk.startsWith("data: ")) continue;
         let ev;
         try { ev = JSON.parse(chunk.slice(6)); } catch (_) { continue; }
-        if (ev.type === "error") throw new Error(ev.message || "Erreur.");
+        if (ev.type === "error") {
+          const err = new Error(ev.message || "Erreur.");
+          err.exhausted = !!ev.exhausted;
+          throw err;
+        }
         if (ev.type === "quota") { showQuota(ev.left); continue; }
         onEvent(ev);
       }
@@ -70,9 +79,42 @@
 
   function showQuota(left) {
     const q = $("#u-quota");
-    q.classList.toggle("hidden", left == null);
-    q.textContent = `Demandes à l'IA restantes aujourd'hui : ${left}`;
-    if (left === 5 || left === 1) toast(`Attention : plus que ${left} demande(s) à l'IA aujourd'hui.`);
+    q.classList.toggle("hidden", !G.standalone);
+    if (left === "own" || (G.standalone && ownKey())) q.textContent = "IA : ta propre clé · illimité";
+    else if (left == null) q.textContent = "IA gratuite · sans limite par joueur";
+    else {
+      q.textContent = `Demandes à l'IA restantes aujourd'hui : ${left}`;
+      if (left === 5 || left === 1) toast(`Attention : plus que ${left} demande(s) à l'IA aujourd'hui.`);
+    }
+  }
+
+  // Erreur d'une demande à l'IA. Sur le site à part, quand les IA gratuites partagées sont à court,
+  // on propose au joueur sa propre clé gratuite au lieu de le bloquer.
+  function failed(err) {
+    if (err.message === "Non connecté") return;
+    if (G.standalone && err.exhausted) { openKeyBox(true); return; }
+    if (G.standalone && ownKey() && /clé|refus/i.test(err.message || ""))
+      toast("Ta clé d'IA a été refusée : vérifie-la dans le menu ⋯ → « Ma clé d'IA ».");
+    else toast(err.message || "Connexion perdue.");
+  }
+
+  function openKeyBox(exhausted) {
+    $("#u-key-why").classList.toggle("hidden", !exhausted);
+    $("#u-key-input").value = ownKey();
+    $("#u-key-forget").classList.toggle("hidden", !ownKey());
+    $("#u-keybox").classList.remove("hidden");
+  }
+
+  function saveKey(value) {
+    const v = value.trim();
+    if (v && !/^(gsk_[A-Za-z0-9]{20,100}|AIza[0-9A-Za-z_-]{30,60})$/.test(v)) {
+      toast("Ce n'est pas une clé Groq (gsk_…) ni Gemini (AIza…).");
+      return false;
+    }
+    try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch (_) { toast("Impossible d'enregistrer la clé dans ce navigateur."); return false; }
+    showQuota(null);
+    toast(v ? "Clé enregistrée : tu joues maintenant sans limite. Relance ta dernière action." : "Clé oubliée.");
+    return true;
   }
 
   function needLogin() {
@@ -352,7 +394,7 @@
       else msgs.pop();
     } catch (err) {
       msgs.pop();
-      if (err.message !== "Non connecté") toast(err.message || "Connexion perdue.");
+      failed(err);
     } finally {
       G.busy = false;
       renderTalk();
@@ -384,7 +426,7 @@
       saveRemote();
       startChoosing();
     } catch (err) {
-      if (err.message !== "Non connecté") toast(err.message || "Connexion perdue.");
+      failed(err);
     } finally {
       G.busy = false;
       wait(null);
@@ -417,7 +459,7 @@
       showNews(result.events);
       saveRemote();
     } catch (err) {
-      if (err.message !== "Non connecté") toast(err.message || "Connexion perdue.");
+      failed(err);
     } finally {
       G.busy = false;
       $("#u-end").disabled = false;
@@ -495,6 +537,13 @@
     document.addEventListener("click", () => $("#u-menu-box").classList.add("hidden"));
     $("#u-help").addEventListener("click", () => $("#u-helpbox").classList.remove("hidden"));
     $("#u-export").addEventListener("click", exportGame);
+    $("#u-key").addEventListener("click", () => openKeyBox(false));
+    $("#u-key-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (saveKey($("#u-key-input").value)) $("#u-keybox").classList.add("hidden");
+    });
+    $("#u-key-forget").addEventListener("click", () => { saveKey(""); $("#u-keybox").classList.add("hidden"); });
+    $("#u-key-close").addEventListener("click", () => $("#u-keybox").classList.add("hidden"));
     $("#u-import").addEventListener("click", () => $("#u-import-file").click());
     $("#u-setup-import").addEventListener("click", () => $("#u-import-file").click());
     $("#u-import-file").addEventListener("change", (e) => { if (e.target.files[0]) importGame(e.target.files[0]); e.target.value = ""; });
@@ -555,6 +604,7 @@
         const back = $("#u-back");
         back.replaceWith(node("span", "u-spacer"));
         showQuota(cfg.left);
+        $("#u-key").classList.remove("hidden");
         $("#u-save-note").textContent = "Ta partie est gardée dans ce navigateur. Menu ⋯ → « Exporter » pour la garder en fichier.";
       }
     } catch (_) { /* Syrius : la route n'existe pas */ }

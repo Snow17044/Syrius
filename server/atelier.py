@@ -25,10 +25,10 @@ SHOT_KEY = "family_atelier_shot_"  # + id : capture d'écran du site (rangée à
 MAX_SHOT_BYTES = 600_000
 WORKFLOW = "atelier.yml"
 MAX_ITEMS = 20
-MAX_FILES = 40
+MAX_FILES = 60
 MAX_FILE_CHARS = 60_000
-MAX_TOTAL_CHARS = 200_000
-STATUSES = ("pending", "running", "done", "failed")
+MAX_TOTAL_CHARS = 450_000  # gros sites : plusieurs pages, scripts et styles
+STATUSES = ("pending", "running", "done", "failed", "cancelled")
 _ID = re.compile(r"^[0-9a-f]{8}$")
 _PATH = re.compile(r"^(?!/)(?!.*\.\.)[\w.\-/ ]{1,120}$")
 _CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
@@ -36,6 +36,70 @@ _CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 class AtelierError(ValueError):
     pass
+
+
+# ------------------------------------------------------------------ façon de coder d'Aurora (choisie par le propriétaire)
+MODE_KEY = "family_aurora_mode_v1"
+MODES = ("termux", "atelier")  # termux : elle donne le code prêt à coller ; atelier : elle code et teste toute seule
+
+
+def get_mode(base) -> str:
+    m = base.get_secret(MODE_KEY) or "termux"
+    return m if m in MODES else "termux"
+
+
+def set_mode(base, mode: str) -> str:
+    if mode not in MODES:
+        raise AtelierError("mode inconnu")
+    base.set_secret(MODE_KEY, mode)
+    return mode
+
+
+# ------------------------------------------------------------------ atelier rapide (serveur Hugging Face)
+WORKER_KEY = "family_atelier_worker_v1"  # clé propre à l'atelier : ne sert QU'À prendre et rendre les projets
+SPACE_KEY = "family_atelier_space_v1"    # {"space": "pseudo/syrius-atelier", "url": "https://….hf.space"}
+
+
+def worker_token(base, renew: bool = False) -> str:
+    t = base.get_secret(WORKER_KEY)
+    if renew or not t:
+        t = "atl_" + secrets.token_urlsafe(32)
+        base.set_secret(WORKER_KEY, t)
+    return t
+
+
+def check_worker(base, given: str) -> bool:
+    t = base.get_secret(WORKER_KEY) or ""
+    return bool(t and given) and hmac.compare_digest(t.encode(), str(given).encode())
+
+
+def space(base) -> dict:
+    try:
+        d = json.loads(base.get_secret(SPACE_KEY) or "{}")
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+def set_space(base, info: dict) -> None:
+    base.set_secret(SPACE_KEY, json.dumps({k: info.get(k, "") for k in ("space", "url", "page")}))
+
+
+def wake(base) -> bool:
+    """Réveille l'atelier rapide : le projet démarre en quelques secondes. False s'il n'existe pas ou ne répond pas."""
+    import urllib.error
+    import urllib.request
+    url = str(space(base).get("url") or "")
+    if not re.fullmatch(r"https://[a-z0-9-]+\.hf\.space", url):
+        return False
+    req = urllib.request.Request(url + "/wake", data=b"{}", method="POST", headers={
+        "X-Atelier-Key": worker_token(base), "User-Agent": "Syrius/1.0", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:  # nosec B310 (adresse de ton atelier, vérifiée ci-dessus)
+            # « ok » : c'est bien l'atelier qui répond (pas la page d'attente d'un serveur endormi)
+            return r.status == 202 and r.read(20).strip() == b"ok"
+    except (urllib.error.URLError, OSError, ValueError):
+        return False  # endormi ou en construction : GitHub prend le relais
 
 
 def _load(base) -> list[dict]:
@@ -69,22 +133,31 @@ def get(base, pid: str) -> dict | None:
     return next((d for d in items(base) if d.get("id") == pid), None)
 
 
-def add(base, text: str) -> dict:
+def add(base, text: str, conv: str = "") -> dict:
+    """Nouveau projet. Dans une même discussion, il REMPLACE le projet encore en cours (annulé)."""
     t = str(text).strip()
     if not 10 <= len(t) <= 4000:
         raise AtelierError("Décris le programme en 10 à 4000 caractères.")
     if safety.blocked(t):
         raise AtelierError("Projet refusé : pas de contenu sexuel ni violent.")
     data = _load(base)
-    if sum(1 for d in data if _fresh(d, time.time()).get("status") in ("pending", "running")) >= 2:
+    now_ts = time.time()
+    replaced = []
+    if conv:
+        for d in data:
+            if d.get("conv") == conv and _fresh(d, now_ts).get("status") in ("pending", "running"):
+                d["status"], d["updated"] = "cancelled", int(now_ts)
+                d["summary"] = "Annulé : remplacé par un nouveau projet dans la même discussion."
+                replaced.append(d["id"])
+    if sum(1 for d in data if _fresh(d, now_ts).get("status") in ("pending", "running")) >= 2:
         raise AtelierError("2 projets sont déjà en cours dans l'atelier : attends qu'ils soient finis.")
     now = int(time.time())
     item = {"id": secrets.token_hex(4), "token": secrets.token_urlsafe(18), "text": t, "status": "pending",
             "created": now, "updated": now,
-            "summary": "", "attempt": 0, "files": {}, "log": "", "setup": "", "test": "", "env": ""}
+            "summary": "", "attempt": 0, "files": {}, "log": "", "setup": "", "test": "", "env": "", "conv": conv[:64]}
     data.append(item)
     _save(base, data)
-    return item
+    return {**item, "replaced": replaced}
 
 
 def note(base, pid: str, text: str) -> None:
@@ -97,11 +170,20 @@ def note(base, pid: str, text: str) -> None:
             return
 
 
+def set_published(base, pid: str, url: str) -> None:
+    data = _load(base)
+    for d in data:
+        if d.get("id") == pid and re.fullmatch(r"https://[a-z0-9.-]+\.vercel\.app", url):
+            d["published"] = url
+            _save(base, data)
+            return
+
+
 def take_next(base) -> dict | None:
     """Pour le serveur de GitHub : le plus ancien projet en attente (marqué « en cours »)."""
     data = _load(base)
     for d in data:
-        if d.get("status") == "pending":
+        if d.get("status") == "pending" and d.get("mode") != "instant":  # les sites instantanés se font dans l'appli
             d["status"], d["updated"], d["summary"] = "running", int(time.time()), "L'atelier démarre…"
             _save(base, data)
             return {"id": d["id"], "text": d["text"]}
@@ -123,8 +205,9 @@ def _files(raw) -> dict[str, str]:
     return out
 
 
-def report(base, body: dict) -> None:
-    """Avancement envoyé par le serveur de GitHub (à chaque essai, puis le résultat final)."""
+def report(base, body: dict) -> bool:
+    """Avancement envoyé par le serveur de GitHub (à chaque essai, puis le résultat final).
+    Renvoie True si le projet a été annulé entre-temps : l'atelier arrête alors de travailler dessus."""
     if not isinstance(body, dict):
         raise AtelierError("résultat invalide")
     pid, status = str(body.get("id", "")), body.get("status")
@@ -134,6 +217,8 @@ def report(base, body: dict) -> None:
     for d in data:
         if d.get("id") != pid:
             continue
+        if d.get("status") == "cancelled":
+            return True  # remplacé par un nouveau projet : on ne touche plus à rien
         d["status"] = status
         d["updated"] = int(time.time())
         d["summary"] = _CTRL.sub("", str(body.get("summary") or ""))[:1500]
@@ -158,7 +243,7 @@ def report(base, body: dict) -> None:
                 base.set_secret(SHOT_KEY + pid, shot)
                 d["has_shot"] = True
         _save(base, data)
-        return
+        return False
     raise AtelierError("projet inconnu")
 
 
@@ -235,3 +320,165 @@ def for_aurora(item: dict) -> str:
     if item.get("log"):
         parts.append("Dernière sortie des tests :\n```\n" + item["log"][-1500:] + "\n```")
     return "\n\n".join(parts)[:20000]
+
+
+# ------------------------------------------------------------------ atelier INSTANTANÉ (sites web, dans l'appli)
+# Pour un site statique (HTML/CSS/JS), pas besoin de serveur : l'application ouvre le site dans une boîte fermée
+# (iframe « sandbox »), lance les tests d'Aurora, et renvoie les erreurs ici pour qu'elle corrige. Instantané.
+MAX_INSTANT_ATTEMPTS = 4   # tests + corrections
+MAX_INSTANT_STEPS = 10     # passages d'écriture d'un gros site (fichiers écrits en plusieurs fois)
+PROMPT_FILES_CHARS = 22_000  # contenu des fichiers renvoyé à l'IA à chaque passage (le reste : seulement le nom)
+# Guide de design d'Aurora : pour TOUS ses sites (atelier instantané, atelier GitHub, mode Termux).
+DESIGN_GUIDE = """DESIGN (aussi important que le code : le site doit avoir l'air fait par une agence) :
+- Identité : choisis une palette adaptée au sujet (1 couleur principale, 1 accent, des neutres), en variables CSS
+  (:root { --bg, --surface, --text, --muted, --primary, --accent, --radius, --shadow }). Jamais les couleurs ni la
+  police par défaut du navigateur (Times, liens bleus soulignés).
+- Typographie : police moderne (font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif ; ou une
+  police Google adaptée au thème) ; texte 16-18 px, interligne 1.5-1.7, lignes de 65 caractères maximum ; titres gras,
+  serrés (letter-spacing négatif), échelle nette (h1 clamp(2rem, 6vw, 3.5rem), h2 ≈ 1.75rem, h3 ≈ 1.25rem).
+- Espace : échelle de 8 px (8, 16, 24, 32, 48, 64, 96) ; sections bien aérées (padding 64-96 px sur grand écran,
+  40-56 px sur téléphone) ; conteneur centré max-width ~1100 px avec marges de 16-24 px.
+- Mise en page : mobile d'abord, grid/flex, aucun débordement horizontal ; un vrai en-tête (logo/nom + navigation) ;
+  une section d'accueil forte (titre, sous-titre, bouton d'action) ; puis des sections claires (cartes, colonnes).
+- Composants : boutons d'au moins 44 px de haut, coins arrondis cohérents (10-16 px), un bouton principal plein et un
+  secondaire discret, états survol / focus visible / appui ; cartes avec bordure fine et ombre douce ; champs avec
+  étiquette et focus visible.
+- Lisibilité : contraste d'au moins 4.5:1 pour le texte (WCAG AA) ; jamais de texte gris clair sur blanc.
+- Images : pas d'image externe qui peut disparaître ; utilise du SVG en ligne, des dégradés, des formes CSS ou des
+  emoji pour illustrer ; toute image a un texte alternatif (alt).
+- Finitions : thème sombre automatique (@media (prefers-color-scheme: dark)) si c'est cohérent, transitions douces de
+  150-250 ms (et rien si prefers-reduced-motion), favicon (emoji en SVG), pied de page soigné, alignements parfaits.
+Le banc d'essai vérifie aussi le design (texte trop petit, boutons trop petits, contraste faible, police par défaut,
+pas de titre h1, pas de balise viewport) : ce sont des erreurs à corriger comme les autres."""
+
+WEB_SYSTEM = """Tu es Aurora, une développeuse web experte, soignée et exigeante. Tu fais un site STATIQUE (HTML, CSS,
+JavaScript, sans serveur ni étape de compilation), beau, moderne et adapté au téléphone (responsive). Il est ouvert
+dans un vrai navigateur puis testé automatiquement ; tu reçois les erreurs et tu corriges.
+
+Réponds EXACTEMENT dans ce format, sans rien d'autre :
+RÉSUMÉ: 1 à 3 phrases en français (ce que fait le site, ou ce que tu as corrigé)
+### FICHIER: index.html
+```
+contenu COMPLET
+```
+### FICHIER: style.css
+```
+…
+```
+### FICHIER: script.js
+```
+…
+```
+### FICHIER: tests.js
+```
+window.__tests = [
+  { nom: "le titre s'affiche", test: async (t) => { t.assert(t.text("h1").length > 0, "titre vide"); } },
+  { nom: "le bouton compte", test: async (t) => { t.click("#plus"); await t.wait(100); t.assert(t.text("#n") === "1", "compteur"); } },
+];
+```
+Règles :
+- index.html à la racine, qui charge style.css et script.js (chemins relatifs) ; ajoute d'autres fichiers si utile.
+- tests.js est OBLIGATOIRE : 2 à 6 tests réels de ce que l'utilisateur a demandé. Outils de t : t.q(sélecteur) → élément,
+  t.click(sélecteur), t.type(sélecteur, texte), t.text(sélecteur) → texte, t.assert(condition, message), t.wait(ms).
+  Les tests ne doivent jamais modifier le site pour réussir.
+- Aucune erreur dans la console, aucune ressource introuvable. Pas de localStorage obligatoire (il peut être bloqué) :
+  entoure-le de try/catch. Pas de clé d'API, pas de mot de passe, rien de sexuel ni de violent.
+- À chaque correction, renvoie le format complet avec le contenu ENTIER de chaque fichier modifié.
+- GROS SITE (plusieurs pages, beaucoup de contenu) : c'est possible. Si tout ne tient pas dans une seule réponse, écris
+  d'abord index.html, style.css, script.js et tests.js, puis termine par une ligne
+  SUITE: autre-page.html, autre.css, …
+  qui liste les fichiers qu'il te reste à écrire : on te les redemandera, en plusieurs fois s'il le faut. Pas de ligne
+  SUITE quand le site est complet. Les pages se relient par des liens relatifs et partagent style.css.
+
+""" + DESIGN_GUIDE
+
+_FILE_RX = re.compile(r"^#{2,4}\s*FICHIER\s*:\s*`?([^\n`]+?)`?\s*\n+```[^\n]*\n(.*?)\n```", re.S | re.M)
+_SUMMARY_RX = re.compile(r"^\s*\**R[ÉE]SUM[ÉE]\**\s*:\s*\**\s*(.*)$", re.I | re.M)
+
+
+def parse_reply(reply: str) -> dict:
+    files = {}
+    for path, content in _FILE_RX.findall(reply or ""):
+        path = path.strip()
+        while path.startswith("./"):
+            path = path[2:]
+        if _PATH.match(path) and not path.startswith("node_modules"):
+            files[path] = content + "\n"
+    m = _SUMMARY_RX.search(reply or "")
+    todo = []
+    s = re.search(r"^\s*\**SUITE\**\s*:\s*(.+)$", reply or "", re.I | re.M)
+    if s:
+        todo = [p.strip(" `.") for p in s.group(1).split(",")]
+        todo = [p for p in todo if _PATH.match(p) and p not in files][:20]
+    return {"files": files, "summary": _CTRL.sub(" ", m.group(1)).strip()[:600] if m else "", "todo": todo}
+
+
+def add_instant(base, text: str, conv: str = "") -> dict:
+    item = add(base, text, conv)
+    data = _load(base)
+    for d in data:
+        if d["id"] == item["id"]:
+            d["mode"] = "instant"
+            d["env"] = "web"
+            d["summary"] = "Aurora prépare le site…"
+    _save(base, data)
+    return {**item, "mode": "instant"}
+
+
+def _files_for_prompt(files: dict, focus: str = "") -> str:
+    """Contenu des fichiers pour l'IA, dans la limite d'une demande : d'abord ceux cités dans les erreurs, puis les
+    principaux ; les autres sont seulement nommés (gros sites)."""
+    order = sorted(files, key=lambda p: (p not in focus, p not in ("index.html", "script.js", "style.css", "tests.js"), p))
+    out, room, named = [], PROMPT_FILES_CHARS, []
+    for p in order:
+        c = files[p]
+        if len(c) <= room:
+            out.append(f"### FICHIER: {p}\n```\n{c}\n```")
+            room -= len(c)
+        else:
+            named.append(f"{p} ({len(c)} caractères)")
+    if named:
+        out.append("Autres fichiers déjà écrits (non montrés ici) : " + ", ".join(named))
+    return "\n\n".join(out)
+
+
+def instant_prompt(item: dict, feedback: str = "") -> str:
+    if not item.get("files"):
+        return f"Site demandé :\n{item['text']}\n\nÉcris le site complet avec ses tests."
+    files = _files_for_prompt(item["files"], feedback)
+    if item.get("todo") and not feedback:  # gros site : on continue l'écriture
+        return (f"Site demandé :\n{item['text']}\n\nDéjà écrit :\n{files}\n\nÉcris maintenant ces fichiers : "
+                f"{', '.join(item['todo'])}. Même format ; termine par SUITE: … s'il en reste encore.")
+    return (f"Site demandé :\n{item['text']}\n\nFichiers actuels :\n{files}\n\nRésultat RÉEL dans le navigateur :\n"
+            f"{feedback[:3500]}\n\nCorrige la cause (le code du site, pas les tests sauf s'ils sont faux). "
+            "Renvoie le format complet avec les fichiers modifiés.")
+
+
+def instant_update(base, pid: str, *, files: dict | None = None, summary: str | None = None, status: str | None = None,
+                   log: str | None = None, attempt: int | None = None, todo: list | None = None,
+                   steps: int | None = None) -> dict | None:
+    data = _load(base)
+    for d in data:
+        if d.get("id") != pid or d.get("mode") != "instant":
+            continue
+        if d.get("status") == "cancelled":
+            return d  # remplacé par un nouveau projet : plus aucune modification
+        if files:
+            merged = {**(d.get("files") or {}), **files}
+            d["files"] = _files(merged)
+        if summary is not None:
+            d["summary"] = _CTRL.sub(" ", summary)[:1500]
+        if status in STATUSES:
+            d["status"] = status
+        if log is not None:
+            d["log"] = str(log)[-6000:]
+        if attempt is not None:
+            d["attempt"] = max(0, min(int(attempt), 20))
+        if todo is not None:
+            d["todo"] = [p for p in todo if isinstance(p, str)][:20]
+        if steps is not None:
+            d["steps"] = max(0, min(int(steps), 50))
+        d["updated"] = int(time.time())
+        _save(base, data)
+        return d
+    return None

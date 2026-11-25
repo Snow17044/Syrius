@@ -10,21 +10,23 @@
   };
   const state = { convId: null, streaming: false, convs: [] };
 
-  // ------------------------------------------------------------------ thème : « syrius » (par défaut) ou « nature »
-  const THEME_COLORS = { syrius: "#0d0f16", nature: "#eef3e6" };
+  // ------------------------------------------------------------------ thème : « syrius » (par défaut) ou « nature » (forêt la nuit)
+  // Même réglage que Syrius : changer de thème dans une appli le change dans l'autre.
+  const THEME_COLORS = { syrius: "#0d0f16", nature: "#0a1714" };
   function applyTheme(t) {
     const theme = t === "nature" ? "nature" : "syrius";
     document.documentElement.dataset.theme = theme;
     $("#c-theme-color").setAttribute("content", THEME_COLORS[theme]);
     const b = $("#c-theme");
     if (b) {
-      Icons.set(b, theme === "nature" ? "palette" : "leaf", "");
-      b.setAttribute("aria-label", theme === "nature" ? "Thème Syrius" : "Thème Nature");
-      b.title = theme === "nature" ? "Passer au thème Syrius" : "Passer au thème Nature";
+      const label = theme === "nature" ? "Thème Syrius" : "Thème Forêt";
+      Icons.set(b, theme === "nature" ? "palette" : "leaf", label);
+      b.setAttribute("aria-label", label);
+      b.title = theme === "nature" ? "Revenir au thème Syrius" : "Passer au thème Forêt";
     }
-    store.set("syrius:code:theme", theme);
+    store.set("syrius:theme", theme);
   }
-  applyTheme(store.get("syrius:code:theme"));
+  applyTheme(store.get("syrius:theme") || store.get("syrius:code:theme"));
   $("#c-theme").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "nature" ? "syrius" : "nature"));
 
   // ------------------------------------------------------------------ réseau
@@ -83,7 +85,7 @@
   $("#c-logout").addEventListener("click", async () => {
     try { await api("/api/logout", { method: "POST" }); } catch (_) { /* */ }
     store.set("syrius:code:conv", null);
-    $("#c-convs").close();
+    closeDrawer();
     showLogin();
   });
 
@@ -100,27 +102,38 @@
     const last = store.get("syrius:code:conv");
     if (last && state.convs.some((c) => c.id === last)) await openConversation(last);
     renderStarters();
+    renderConvList();  // le menu est toujours visible sur grand écran
   }
 
   // ------------------------------------------------------------------ navigation
+  // Même menu latéral que Syrius (toujours ouvert sur grand écran)
+  const TITLES = { aurore: "Aurora", sites: "Sites", tableaux: "Tableaux de bord", emails: "Emails", code: "Code" };
+  function openDrawer() { $("#drawer").classList.add("open"); $("#backdrop").classList.remove("hidden"); }
+  function closeDrawer() { $("#drawer").classList.remove("open"); $("#backdrop").classList.add("hidden"); }
+  $("#close-drawer").addEventListener("click", closeDrawer);
+  $("#backdrop").addEventListener("click", closeDrawer);
+
   function go(tab) {
     document.querySelectorAll(".c-tab").forEach((s) => s.classList.toggle("on", s.dataset.tab === tab));
-    document.querySelectorAll("#c-nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
+    document.querySelectorAll("#c-nav button[data-go]").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
+    $("#c-title").textContent = TITLES[tab] || "Aurora";
+    closeDrawer();
     if (tab === "sites") renderSites();
     if (tab === "tableaux") renderDashboards();
     if (tab === "code") renderCodeTab();
     if (tab === "emails") renderEmailTab();
+    if (tab === "code") { renderFast(); renderMode(); }
     if (tab === "aurore") scrollDown(true);
   }
-  document.querySelectorAll("#c-nav button").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
+  document.querySelectorAll("#c-nav button[data-go]").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
 
   // ------------------------------------------------------------------ suggestions
   const STARTERS = {
     "#c-starters": [
-      ["Scanne mon site", "Scanne mon site monsite.fr et dis-moi les points faibles par ordre de gravité."],
-      ["Trie mes emails", "Résume mes emails non lus et dis-moi lesquels sont urgents."],
-      ["Écris du code", "Écris en Python une fonction qui "],
-      ["Tableau de bord", "Voici mes chiffres. Fais-en un tableau de bord :\n"],
+      ["Scanne mon site", "Scanne mon site monsite.fr et dis-moi les points faibles par ordre de gravité.", "shield"],
+      ["Trie mes emails", "Résume mes emails non lus et dis-moi lesquels sont urgents.", "mail"],
+      ["Écris du code", "Écris en Python une fonction qui ", "code"],
+      ["Tableau de bord", "Voici mes chiffres. Fais-en un tableau de bord :\n", "chart"],
     ],
     "#c-dash-starters": [
       ["Ventes du mois", "Voici mes ventes par semaine : S1 1200, S2 1850, S3 1430, S4 2100. Fais-en un tableau de bord avec l'évolution et le total."],
@@ -143,8 +156,14 @@
     for (const [sel, items] of Object.entries(STARTERS)) {
       const box = $(sel);
       box.replaceChildren();
-      for (const [label, prompt] of items) {
-        const b = el("button", "c-chip", label);
+      for (const [label, prompt, icon] of items) {
+        let b;
+        if (icon) {  // même carte que les suggestions de Syrius
+          b = el("button", "chip");
+          const ic = document.createElement("b");
+          ic.append(Icons.svg(icon));
+          b.append(ic, el("span", "", label));
+        } else b = el("button", "c-chip", label);
         b.type = "button";
         b.addEventListener("click", () => {
           go("aurore");
@@ -177,8 +196,8 @@
 
   function addBubble(role, text) {
     $("#c-empty").classList.add("hidden");
-    const wrap = el("div", `c-msg ${role}`);
-    const bubble = el("div", "c-bubble");
+    const wrap = el("div", `c-msg msg ${role}`);  // mêmes bulles que Syrius
+    const bubble = el("div", "c-bubble bubble");
     const tools = el("div", "c-tools");
     const body = el("div", "c-body");
     bubble.append(tools, body);
@@ -249,7 +268,7 @@
   }
 
   // ------------------------------------------------------------------ atelier d'Aurora : avancement en direct
-  const ATELIER_STATES = { pending: ["clock", "En attente de l'atelier"], running: ["refresh", "Aurora travaille"],
+  const ATELIER_STATES = { cancelled: ["close", "Annulé (remplacé)"], pending: ["clock", "En attente de l'atelier"], running: ["refresh", "Aurora travaille"],
     done: ["ok", "Ça marche : tests réussis"], failed: ["alert", "Pas réussi"] };
   function codeBlock(text, label) {
     const pre = el("pre", "c-atelier-pre");
@@ -262,6 +281,58 @@
     pre.appendChild(b);
     return pre;
   }
+  // ------------------------------------------------------------------ atelier INSTANTANÉ (sites web, dans l'appli)
+  // Aurora écrit le site → on l'ouvre dans une boîte fermée (iframe « sandbox », sans accès à Syrius) → le banc d'essai
+  // renvoie erreurs et résultats des tests → s'il y a un problème, Aurora corrige. Jusqu'à 4 essais, en quelques secondes.
+  const instantRuns = new Set();
+  function testInBrowser(url) {
+    return new Promise((resolve) => {
+      const frame = el("iframe", "c-test-frame");
+      frame.setAttribute("sandbox", "allow-scripts allow-forms allow-modals");
+      frame.title = "Test du site";
+      let done = false;
+      const finish = (r) => { if (done) return; done = true; clearTimeout(timer); window.removeEventListener("message", onMsg); frame.remove(); resolve(r); };
+      const onMsg = (e) => { if (e.source === frame.contentWindow && e.data && e.data.syriusAtelierTest) finish(e.data); };
+      const timer = setTimeout(() => finish({ errors: ["Le site ne s'est pas chargé ou le banc d'essai n'a pas pu tourner (erreur de script bloquante ?)."], results: [] }), 20000);
+      window.addEventListener("message", onMsg);
+      frame.src = url + "?test=1";
+      document.body.appendChild(frame);
+    });
+  }
+  function testReport(r) {
+    const lines = [];
+    for (const x of r.results || []) lines.push(`${x.ok ? "✔" : "✘"} ${x.nom}${x.ok ? "" : " → " + x.erreur}`);
+    for (const e of r.errors || []) lines.push("Erreur : " + e);
+    const passed = (r.results || []).filter((x) => x.ok).length;
+    lines.push(`Tests : ${passed}/${(r.results || []).length} réussis, ${(r.errors || []).length} erreur(s).`);
+    return lines.join("\n");
+  }
+  async function runInstant(id, update) {
+    if (instantRuns.has(id)) return;
+    instantRuns.add(id);
+    let feedback = "";
+    try {
+      for (let guard = 0; guard < 16; guard++) {
+        let p;
+        try { p = await api(`/api/code/atelier/${id}/ask`, { method: "POST", body: JSON.stringify({ feedback }) }); }
+        catch (err) { update(); return; }  // essais épuisés, IA indisponible… : la carte affiche la raison
+        update();
+        if (p.retry || !p.site_url) { feedback = ""; continue; }
+        if ((p.todo || []).length) { feedback = ""; continue; }  // gros site : Aurora écrit la suite avant le test
+        const r = await testInBrowser(p.site_url);
+        const log = testReport(r);
+        const ok = !(r.errors || []).length && (r.results || []).length > 0 && (r.results || []).every((x) => x.ok);
+        if (ok || (p.attempt || 0) >= 4) {
+          await api(`/api/code/atelier/${id}/result`, { method: "POST", body: JSON.stringify({ ok, final: true, log }) });
+          update();
+          return;
+        }
+        await api(`/api/code/atelier/${id}/result`, { method: "POST", body: JSON.stringify({ ok: false, final: false, log }) });
+        feedback = log;
+      }
+    } finally { instantRuns.delete(id); update(); }
+  }
+
   function renderAtelier(id) {
     const card = el("div", "c-card c-atelier");
     card.dataset.id = id;
@@ -280,6 +351,9 @@
         if (err.status === 404 && timer) clearInterval(timer);
         return;
       }
+      if (p.mode === "instant" && (p.status === "pending" || p.status === "running") && !instantRuns.has(id)) {
+        runInstant(id, refresh);  // l'atelier instantané tourne ici, dans l'appli
+      }
       const [icon, label] = ATELIER_STATES[p.status] || ATELIER_STATES.pending;
       Icons.set(badge, icon, p.status === "running" && p.attempt ? `${label} · essai ${p.attempt}/5` : label);
       badge.className = "c-atelier-state " + p.status;
@@ -289,6 +363,13 @@
         shown = key;
         details.replaceChildren();
         const files = Object.entries(p.files || {});
+        if (p.mode === "instant" && p.site_url && p.status === "done") {  // le site, en vrai, dans la discussion
+          const live = el("iframe", "c-atelier-live");
+          live.setAttribute("sandbox", "allow-scripts allow-forms allow-modals allow-popups");
+          live.title = "Aperçu du site";
+          live.src = p.site_url;
+          details.appendChild(live);
+        }
         if (p.has_shot) {  // le site, vu au format téléphone par Aurora
           const img = el("img", "c-atelier-shot");
           img.alt = "Capture du site au format téléphone";
@@ -307,6 +388,31 @@
           if (p.site_url) bar.appendChild(link(p.site_url, "Voir le site", "eye"));
           if (p.zip_url) bar.appendChild(link(p.zip_url, "Télécharger (.zip)", "download", true));
           details.appendChild(bar);
+        }
+        if (p.site_url && p.status === "done" && p.can_publish) {  // publier : toujours sur TON appui, jamais tout seul
+          const pub = el("div", "c-atelier-publish");
+          if (p.published) {
+            const a = el("a", "c-atelier-online", p.published.replace("https://", ""));
+            a.href = p.published; a.target = "_blank"; a.rel = "noopener";
+            pub.append(el("span", "small muted", "En ligne : "), a);
+          }
+          const msg = el("p", "small");
+          const btn = el("button", p.published ? "ghost" : "primary");
+          btn.type = "button";
+          Icons.set(btn, "send", p.published ? "Republier la dernière version" : "Publier sur Internet");
+          btn.addEventListener("click", async () => {
+            if (!p.published && !confirm("Publier ce site sur Internet ? Tout le monde pourra le voir avec son adresse.")) return;
+            btn.disabled = true;
+            msg.textContent = "Publication sur Vercel…";
+            try {
+              const r = await api(`/api/code/atelier/${id}/publish`, { method: "POST" });
+              msg.textContent = "✅ En ligne : " + r.url;
+              shown = "";
+              refresh();
+            } catch (err) { msg.textContent = "⚠ " + err.message; btn.disabled = false; }
+          });
+          pub.append(btn, msg);
+          details.appendChild(pub);
         }
         if (p.setup || p.test || p.zip_url) {
           const lines = [];
@@ -331,9 +437,9 @@
           details.appendChild(d);
         }
       }
-      if ((p.status === "done" || p.status === "failed") && timer) { clearInterval(timer); timer = null; }
+      if (["done", "failed", "cancelled"].includes(p.status) && timer) { clearInterval(timer); timer = null; }
     }
-    refresh().then(() => { if (!timer && !/(done|failed)/.test(badge.className)) timer = setInterval(refresh, 6000); });
+    refresh().then(() => { if (!timer && !/(done|failed|cancelled)/.test(badge.className)) timer = setInterval(refresh, 6000); });
     return card;
   }
 
@@ -394,29 +500,37 @@
     }
   });
 
-  // Mes discussions
-  $("#c-menu").addEventListener("click", async () => {
+  // Mes discussions (dans le menu, comme Syrius)
+  async function renderConvList() {
     try { state.convs = await api("/api/code/conversations"); } catch (_) { /* */ }
     const ul = $("#c-conv-list");
     ul.replaceChildren();
-    if (!state.convs.length) ul.appendChild(el("li", "c-card muted", "Aucune discussion pour l'instant."));
+    if (!state.convs.length) ul.appendChild(el("li", "muted small c-conv-empty", "Aucune discussion pour l'instant."));
     for (const c of state.convs) {
-      const li = el("li", "c-card c-row");
-      const open = el("button", "c-link", c.title || "Discussion");
+      const li = el("li");
+      if (c.id === state.convId) li.classList.add("active");
+      const open = el("button", "conv-open");
       open.type = "button";
-      open.addEventListener("click", async () => { $("#c-convs").close(); await openConversation(c.id); });
-      li.append(open, btn("", "trash", async () => {
+      Icons.set(open, "message", c.title || "Discussion");
+      open.addEventListener("click", async () => { closeDrawer(); await openConversation(c.id); renderConvList(); });
+      const del = el("button", "conv-more");
+      del.type = "button";
+      del.setAttribute("aria-label", "Supprimer cette discussion");
+      del.append(Icons.svg("trash"));
+      del.addEventListener("click", async () => {
         if (!confirm("Supprimer cette discussion ?")) return;
         await api(`/api/code/conversations/${c.id}`, { method: "DELETE" });
         if (state.convId === c.id) { state.convId = null; store.set("syrius:code:conv", null); messages.querySelectorAll(".c-msg").forEach((m) => m.remove()); $("#c-empty").classList.remove("hidden"); }
-        $("#c-menu").click();
-      }, "ghost subtle"));
+        renderConvList();
+      });
+      li.append(open, del);
       ul.appendChild(li);
     }
-    $("#c-convs").showModal();
-  });
-  $("#c-convs-close").addEventListener("click", () => $("#c-convs").close());
-  $("#c-new").addEventListener("click", async () => { $("#c-convs").close(); await newConversation(); go("aurore"); $("#c-input").focus(); });
+  }
+  $("#c-menu").addEventListener("click", () => { renderConvList(); openDrawer(); });
+  async function freshConversation() { closeDrawer(); await newConversation(); go("aurore"); renderConvList(); $("#c-input").focus(); }
+  $("#c-newchat").addEventListener("click", freshConversation);
+  $("#c-new").addEventListener("click", freshConversation);
 
   // ------------------------------------------------------------------ emails : brouillon à confirmer, connexion de la boîte
   function renderMailDraft(ev) {
@@ -479,6 +593,62 @@
     } catch (err) { $("#c-ms-status").textContent = "⚠ " + err.message; }
     b.disabled = false;
     renderMailSort();
+  });
+
+  // ------------------------------------------------------------------ atelier rapide (Hugging Face)
+  const FAST_STAGES = { RUNNING: "✅ Prêt : les projets démarrent en quelques secondes.", BUILDING: "Construction en cours (5 à 10 min la première fois)…",
+    RUNNING_BUILDING: "Mise à jour en cours…", SLEEPING: "Endormi : il se réveille tout seul au prochain projet (environ 1 min).",
+    PAUSED: "⚠ En pause sur Hugging Face.", RUNTIME_ERROR: "⚠ Erreur au démarrage : réinstalle-le.", BUILD_ERROR: "⚠ Erreur de construction : réinstalle-le." };
+  async function renderFast() {
+    const el = $("#c-fast-status");
+    if (!el) return;
+    let s;
+    try { s = await api("/api/code/atelier/fast"); } catch (_) { return; }
+    const b = $("#c-fast-setup");
+    if (!s.hf_token) { el.textContent = "⚠ La clé HF_TOKEN n'est pas dans Vercel."; b.disabled = true; return; }
+    Icons.set(b, "bolt", s.configured ? "Réinstaller / mettre à jour" : "Installer l'atelier rapide");
+    el.textContent = !s.configured ? "Pas encore installé." : (FAST_STAGES[s.stage] || `État : ${s.stage || "inconnu"}`);
+    if (s.stage === "BUILDING" || s.stage === "RUNNING_BUILDING") setTimeout(renderFast, 20000);
+  }
+  // ------------------------------------------------------------------ façon de coder d'Aurora
+  async function renderMode(mode) {
+    if (!mode) { try { mode = (await api("/api/code/aurora-mode")).mode; } catch (_) { return; } }
+    document.querySelectorAll(".c-mode-opt").forEach((b) => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-checked", String(on));
+    });
+  }
+  document.querySelectorAll(".c-mode-opt").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      const r = await api("/api/code/aurora-mode", { method: "PUT", body: JSON.stringify({ mode: b.dataset.mode }) });
+      renderMode(r.mode);
+      $("#c-mode-msg").textContent = r.mode === "termux" ? "✅ Aurora te donnera le code prêt à coller dans Termux."
+        : "✅ Aurora codera et testera toute seule dans son atelier.";
+    } catch (err) { $("#c-mode-msg").textContent = "⚠ " + err.message; }
+  }));
+
+  $("#c-start-test")?.addEventListener("click", async () => {
+    const b = $("#c-start-test"), out = $("#c-start-status");
+    b.disabled = true;
+    out.textContent = "Je demande à GitHub de démarrer…";
+    try {
+      const r = await api("/api/code/atelier/test-start", { method: "POST" });
+      out.textContent = r.ok ? "✅ GitHub accepte : les projets démarrent tout de suite (environ 30 s à 1 min)."
+        : "⚠ Refusé : " + (r.reason || "raison inconnue") + ".";
+    } catch (err) { out.textContent = "⚠ " + err.message; }
+    b.disabled = false;
+  });
+  $("#c-fast-setup")?.addEventListener("click", async () => {
+    const b = $("#c-fast-setup");
+    b.disabled = true;
+    $("#c-fast-status").textContent = "Installation sur Hugging Face…";
+    try {
+      await api("/api/code/atelier/fast", { method: "POST" });
+      $("#c-fast-status").textContent = "Installé : construction en cours (5 à 10 min la première fois)…";
+      setTimeout(renderFast, 15000);
+    } catch (err) { $("#c-fast-status").textContent = "⚠ " + err.message; }
+    b.disabled = false;
   });
 
   async function renderEmailTab() {

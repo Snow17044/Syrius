@@ -1,5 +1,7 @@
 # SYRIUS — ton assistant IA personnel, 100 % gratuit
 
+**[Découvrir Syrius →](https://syriusprojet1.vercel.app/decouvrir)** · [Ouvrir l'application](https://syriusprojet1.vercel.app/)
+
 Syrius est un assistant IA dans l'esprit de J.A.R.V.I.S. : professionnel, drôle quand il faut, et toujours là.
 C'est une **vraie application Android**, et il est disponible 24h/24 sans rien à redémarrer.
 
@@ -110,14 +112,16 @@ Les variables s'ajoutent dans Vercel (**Settings → Environment Variables**), p
 
 ## Uchronie en site à part (pour tes amis, sans compte)
 Le jeu Uchronie peut aussi vivre seul, sur sa propre adresse, ouvert à tous sans mot de passe.
-Il utilise **tes** IA gratuites (les mêmes clés), avec une limite de demandes par joueur et par jour pour protéger tes quotas.
+Il utilise **tes** IA gratuites (les mêmes clés), sans limite par joueur. Quand elles sont toutes à court pour la journée,
+le jeu propose au joueur de coller **sa propre clé gratuite** (Groq ou Gemini) : il continue alors sans limite, sur son quota à lui.
+Plus tu ajoutes de clés au projet (Groq, Gemini, Mistral, Cloudflare, OpenRouter), plus tes amis jouent longtemps sur les tiennes.
 Les parties restent dans le navigateur de chaque joueur (menu ⋯ → *Exporter* pour les garder en fichier).
 1. Sur Vercel : **Add New… → Project** → choisis encore le dépôt **Syrius** → dans *Project Name*, mets par exemple `uchronie`.
 2. **Environment Variables** : `UCHRONIE_SEUL` = `1`, plus `GROQ_API_KEY` (et si tu veux `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`).
 3. Conseillé : relie une base Upstash (onglet **Storage**), sinon les limites du jour repartent à zéro à chaque redémarrage.
 4. **Deploy** : ton jeu est sur `https://uchronie-xxxx.vercel.app`. Envoie le lien à tes amis.
 
-Limites (facultatif) : `UCHRONIE_DEMANDES_PAR_JOUEUR` (40 par défaut) et `UCHRONIE_DEMANDES_PAR_JOUR` (800 pour tout le site).
+Limites (facultatif, aucune par défaut) : `UCHRONIE_DEMANDES_PAR_JOUEUR` et `UCHRONIE_DEMANDES_PAR_JOUR` (tout le site).
 Un tour, une création de monde ou un message diplomatique comptent chacun pour une demande.
 
 ## Recherche web (optionnelle)
