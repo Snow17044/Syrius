@@ -753,3 +753,4 @@ body.voice-split #voice .voice-hint { display: none; }
 :root[data-theme="nature"] .brand-mark.aurora { background: linear-gradient(135deg, #f2cf8a, #d98f6a); }
 :root[data-theme="nature"] ::selection { background: rgba(143, 214, 164, .3); }
 #api-inv-limit { width: 96px; flex: none; }
+a.ghost, a.chip { text-decoration: none; color: inherit; }
