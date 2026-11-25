@@ -1701,6 +1701,15 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
     async def uchronie_config():
         return {"standalone": False}  # dans Syrius : compte, sauvegarde en ligne, pas de limite propre au jeu
 
+    @app.post("/api/uchronie/envoyer-cles", dependencies=[Depends(require_auth), Depends(require_owner)])
+    async def uchronie_send_keys():
+        """Copie les clés d'IA de Syrius vers le site public Uchronie (seuls les noms reviennent)."""
+        from . import uchronie_cles
+        try:
+            return await asyncio.to_thread(uchronie_cles.send, cfg)
+        except publish.PublishError as e:
+            raise HTTPException(502, str(e)) from None
+
     @app.get("/api/uchronie/save", dependencies=[Depends(require_auth)])
     async def uchronie_load():
         return {"state": uchronie.load(db)}

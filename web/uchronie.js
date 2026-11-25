@@ -538,6 +538,15 @@
     $("#u-help").addEventListener("click", () => $("#u-helpbox").classList.remove("hidden"));
     $("#u-export").addEventListener("click", exportGame);
     $("#u-key").addEventListener("click", () => openKeyBox(false));
+    $("#u-send-keys").addEventListener("click", async () => {
+      if (!confirm("Envoyer les clés d'IA de ton Syrius au site public uchronie.vercel.app ? Elles restent cachées (« sensibles ») chez Vercel.")) return;
+      try {
+        const r = await (await api("/api/uchronie/envoyer-cles", { method: "POST" })).json();
+        toast(`Clés envoyées : ${r.sent.join(", ")}.` + (r.redeployed ? " Le site redémarre (1 à 2 minutes)." : " Relance le site depuis Vercel."));
+      } catch (err) {
+        toast(/propriétaire/.test(err.message) ? "Réservé au propriétaire de Syrius." : err.message);
+      }
+    });
     $("#u-key-form").addEventListener("submit", (e) => {
       e.preventDefault();
       if (saveKey($("#u-key-input").value)) $("#u-keybox").classList.add("hidden");
@@ -607,6 +616,7 @@
         $("#u-key").classList.remove("hidden");
         $("#u-save-note").textContent = "Ta partie est gardée dans ce navigateur. Menu ⋯ → « Exporter » pour la garder en fichier.";
       }
+      else $("#u-send-keys").classList.remove("hidden");  // dans Syrius (le serveur vérifie que c'est le propriétaire)
     } catch (_) { /* Syrius : la route n'existe pas */ }
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(LOCAL) || "null"); } catch (_) { /* */ }

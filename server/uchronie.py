@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator
 from functools import lru_cache
 from pathlib import Path
 
+from . import uchronie_cartes as cartes
 from .debate import stream_text
 from .llm import LLMError, RetryableError
 
@@ -307,7 +308,7 @@ def _spread_colors(nations: dict, owners: dict) -> None:
         used[nid] = nations[nid]["color"]
 
 
-def apply_turn(state: dict, data: dict) -> tuple[dict, list[dict], str]:
+def apply_turn(state: dict, data: dict, need_events: bool = True) -> tuple[dict, list[dict], str]:
     """Applique la réponse du maître du jeu à la partie. Renvoie (nouvel état, événements du tour, conseil)."""
     terr = territories()
     nations = {k: dict(v) for k, v in state["nations"].items()}
@@ -332,7 +333,7 @@ def apply_turn(state: dict, data: dict) -> tuple[dict, list[dict], str]:
         if isinstance(e, dict) and str(e.get("title") or "").strip():
             events.append({"date": date, "title": _text(e["title"], 120), "text": _text(e.get("text"), 700),
                            "mine": bool(e.get("mine"))})
-    if not events:
+    if not events and need_events:
         raise GameError("Le maître du jeu n'a raconté aucun événement.")
     _spread_colors(nations, owners)
     new = clean_state({**state, "nations": nations, "owners": owners, "date": date, "turn": state["turn"] + 1,
@@ -359,9 +360,52 @@ async def _ask_json(llm, msgs: list[dict], max_tokens: int, base, uid: str) -> A
                 raise
 
 
+def preset_state(year: int) -> dict:
+    """Monde exact d'une grande date (carte écrite à la main, voir uchronie_cartes.py)."""
+    return build_start(year, "", cartes.PRESETS[year])
+
+
+def adjust_messages(base: dict, year: int, scenario: str) -> list[dict]:
+    """L'IA part d'une carte exacte et ne fait que l'ajuster (autre année proche, ou point de divergence)."""
+    when = f"{-year} av. J.-C." if year < 0 else str(year)
+    task = (f"Fais évoluer ce monde EXACT jusqu'au 1er janvier {when}, selon l'histoire réelle"
+            if year != base["year"] else f"Garde ce monde tel qu'il est au {base['date']}")
+    if scenario:
+        task += f", puis applique ce point de divergence voulu par le joueur : « {scenario} »"
+    system = "\n\n".join([_RULES, (
+        "Tu prépares le début d'une partie. Le monde ci-dessous est EXACT : ne change que ce que la consigne impose "
+        "(traités, indépendances, annexions, changements de dirigeants), rien d'autre.\n"
+        "Format exact :\n"
+        '{"date": "1er janvier ' + when + '", "summary": "situation du monde en 6 à 10 phrases", '
+        '"changes": [{"territory": "aut", "to": "deu"}], '
+        '"nations": [{"id": "code", "name": "...", "color": "#rrggbb", "leader": "...", "regime": "...", "desc": "..."}]}\n'
+        "changes : seulement les territoires qui changent de nation (un pays qui devient indépendant : \"to\" = son "
+        "propre code). nations : seulement les nations nouvelles ou dont le nom, le dirigeant ou le régime change. "
+        + _FORMAT_NOTE)])
+    user = (f"Monde exact au {base['date']} :\n{base['summary']}\n\nNations et territoires (code = nom) :\n"
+            f"{world_text(base)}\n\nConsigne : {task}.")
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
 async def start_game(llm, year: int, scenario: str, base=None, uid: str = "") -> AsyncIterator[dict]:
+    ref = cartes.nearest(year)
+    if ref == year and not scenario:  # grande date : carte exacte, tout de suite, sans IA
+        yield {"type": "state", "state": preset_state(year)}
+        yield {"type": "done"}
+        return
     yield {"type": "status", "text": "Le maître du jeu prépare le monde…"}
     try:
+        if ref is not None:  # on part de la carte exacte la plus proche
+            world = preset_state(ref)
+            async for ev in _ask_json(llm, adjust_messages(world, year, scenario), TURN_TOKENS, base, uid):
+                if ev["type"] == "json":
+                    new, _, _ = apply_turn(world, ev["data"], need_events=False)
+                    yield {"type": "state", "state": {**new, "year": year, "turn": 0, "log": [],
+                                                      "scenario": _text(scenario, 300)}}
+                else:
+                    yield ev
+            yield {"type": "done"}
+            return
         async for ev in _ask_json(llm, start_messages(year, scenario), START_TOKENS, base, uid):
             if ev["type"] == "json":
                 yield {"type": "state", "state": build_start(year, scenario, ev["data"])}

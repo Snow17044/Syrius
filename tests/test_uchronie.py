@@ -99,7 +99,7 @@ def test_ce_que_lit_le_maitre_du_jeu():
 def test_nouvelle_partie_de_bout_en_bout(make_client):
     c = make_client([reply(json.dumps(START, ensure_ascii=False))])
     login(c)
-    ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=H).text)
+    ev = events_of(c.post("/api/uchronie/start", json={"year": 1800}, headers=H).text)
     assert ev[-1]["type"] == "done"
     state = next(e["state"] for e in ev if e["type"] == "state")
     assert state["owners"]["ind"] == "gbr"
@@ -109,7 +109,7 @@ def test_nouvelle_partie_de_bout_en_bout(make_client):
 def test_maitre_du_jeu_illisible_on_redemande(make_client):
     c = make_client([reply("Désolé, je ne sais pas."), reply(json.dumps(START))])
     login(c)
-    ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=H).text)
+    ev = events_of(c.post("/api/uchronie/start", json={"year": 1800}, headers=H).text)
     assert any(e["type"] == "state" for e in ev) and len(c.fake.requests) == 2
 
 
@@ -261,5 +261,71 @@ def test_ia_a_court_signalee():
     c = site_client([])
     c.fake.fail["groq"] = RetryableError("Groq : limite gratuite atteinte pour le moment.")
     c.fake.fail["gemini"] = RetryableError("Gemini : limite gratuite atteinte pour le moment.")
-    ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=H).text)
+    ev = events_of(c.post("/api/uchronie/start", json={"year": 1800}, headers=H).text)
     assert ev[-1]["type"] == "error" and ev[-1]["exhausted"] is True
+
+
+def test_grandes_dates_cartes_exactes_sans_ia(make_client):
+    from server import uchronie_cartes as cartes
+    terr = uchronie.territories()
+    for year, preset in cartes.PRESETS.items():
+        seen = set()
+        for n in preset["nations"]:
+            for t in n["territories"]:
+                assert t in terr and t not in seen, (year, t)
+                seen.add(t)
+    c = make_client([])
+    login(c)
+    ev = events_of(c.post("/api/uchronie/start", json={"year": 1936}, headers=H).text)
+    s = next(e["state"] for e in ev if e["type"] == "state")
+    assert c.fake.requests == []  # aucune IA utilisée
+    o = s["owners"]
+    assert o["ind"] == o["ken"] == o["nga"] == "gbr" and o["dza"] == o["syr"] == o["cmr"] == "fra"
+    assert o["kaz"] == o["ukr"] == "rus" and o["lby"] == "ita" and o["cod"] == "bel" and o["aut"] == "aut"
+    assert o["bra"] == "bra" and o["can"] == "can" and o["svk"] == "cze" and s["nations"]["deu"]["leader"] == "Adolf Hitler"
+    one = uchronie.preset_state(1914)["owners"]
+    assert one["pol"] == "rus" and one["tza"] == "deu" and one["bih"] == "aut" and one["irq"] == "tur"
+    last = uchronie.preset_state(2025)
+    assert last["owners"]["grl"] == "dnk" and last["owners"]["ukr"] == "ukr" and last["owners"]["ind"] == "ind"
+
+
+def test_annee_proche_ajustee_a_partir_de_la_carte_exacte(make_client):
+    adjust = {"date": "1er janvier 1939", "summary": "L'Autriche et les Sudètes sont allemandes.",
+              "changes": [{"territory": "aut", "to": "deu"}, {"territory": "cze", "to": "deu"}],
+              "nations": [{"id": "esp", "name": "État espagnol", "leader": "Francisco Franco"}]}
+    c = make_client([reply(json.dumps(adjust, ensure_ascii=False))])
+    login(c)
+    ev = events_of(c.post("/api/uchronie/start", json={"year": 1939}, headers=H).text)
+    s = next(e["state"] for e in ev if e["type"] == "state")
+    assert s["year"] == 1939 and s["turn"] == 0 and s["log"] == []
+    assert s["owners"]["aut"] == "deu" and s["owners"]["ind"] == "gbr"  # le reste de la carte exacte est gardé
+    assert s["nations"]["esp"]["leader"] == "Francisco Franco"
+    prompt = c.fake.requests[0]["messages"][1]["content"]
+    assert "Monde exact au 1er janvier 1936" in prompt and "1939" in prompt
+
+
+def test_envoyer_les_cles_au_site_public(make_client, monkeypatch):
+    from server import uchronie_cles
+    calls = []
+
+    def fake_call(token, method, path, team, body=None):
+        calls.append((method, path, body))
+        if path == "/v9/projects/uchronie":
+            return 200, {"id": "prj_x", "link": {"type": "github", "repoId": 7, "productionBranch": "main"}}
+        return 200, {"id": "ok"}
+
+    monkeypatch.setattr(uchronie_cles, "_call", fake_call)
+    c = make_client([])
+    cfg = c.app.state.cfg
+    monkeypatch.setattr(cfg, "vercel_token", "tok", raising=False)
+    monkeypatch.setattr(cfg, "groq_api_key", "gsk_secret1", raising=False)
+    monkeypatch.setattr(cfg, "gemini_api_key", "AIza_secret2", raising=False)
+    assert c.post("/api/uchronie/envoyer-cles", headers=H).status_code == 401
+    login(c)
+    r = c.post("/api/uchronie/envoyer-cles", headers=H)
+    assert r.status_code == 200 and "secret" not in r.text  # seuls les noms reviennent
+    assert {"GROQ_API_KEY", "GEMINI_API_KEY"} <= set(r.json()["sent"]) and r.json()["redeployed"]
+    envs = [b for m, p, b in calls if "/env" in p]
+    assert all(b["type"] == "sensitive" for b in envs)
+    assert any(b["key"] == "GROQ_API_KEY" and b["value"] == "gsk_secret1" for b in envs)
+    assert calls[-1][2]["gitSource"] == {"type": "github", "repoId": 7, "ref": "main"}
