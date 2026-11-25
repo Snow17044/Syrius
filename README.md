@@ -17,6 +17,7 @@ C'est une **vraie application Android**, et il est disponible 24h/24 sans rien �
 | 🎙 **Voix** | Dictée au micro et lecture des réponses à voix haute |
 | ☀️ **Réveil Jarvis** | Le matin, Nova te réveille à voix haute : heure, météo, rappels, anniversaires, actus, et un mot sur ton journal d'hier |
 | 🌙 **Journal intime** | Le soir, Nova te pose 3 questions sur ta journée et range un résumé dans ton journal privé (Menu → Journal intime) |
+| 🗺 **Uchronie (jeu)** | Lien vers le jeu de stratégie historique <https://uchronie.vercel.app> (projet à part : dépôt « Uchronie ») |
 | 🗣 **Débat d'IA** | Nova (pour) contre Aurora (contre) sur le sujet de ton choix ; tu regardes, et tu interviens seulement si tu veux |
 | ⚙ **Réglages** | Prénom, mode Rapide / Réfléchi, cerveau préféré, web, voix, mot de passe |
 
