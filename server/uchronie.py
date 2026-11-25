@@ -213,7 +213,7 @@ def turn_messages(state: dict, actions: str, span: str, diplomacy: list[dict]) -
         "concernent pas le joueur). Change le contrôle d'un territoire seulement quand c'est justifié (traité, conquête "
         "achevée, indépendance, révolution).\n"
         "Format exact :\n"
-        '{"date": "nouvelle date", '
+        '{"date": "nouvelle date écrite en français, ex. 1er février 1936", '
         '"events": [{"title": "titre court comme un journal", "text": "2 à 4 phrases", "mine": true}], '
         '"changes": [{"territory": "aut", "to": "deu"}], '
         '"nations": [{"id": "code", "name": "...", "color": "#rrggbb", "leader": "...", "regime": "...", "desc": "..."}], '
