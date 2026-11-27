@@ -233,6 +233,43 @@ def test_carte3d_refuse_les_demandes_suspectes(make_client, fake3d):
     assert fake3d == []
 
 
+def test_relief_exige_une_connexion(make_client):
+    assert make_client().get("/map3d/dem/10/530/365.png").status_code == 401
+
+
+def test_relief_relaye(make_client, monkeypatch):
+    from server.tools import tiles, web
+    from tests.conftest import login
+    calls = []
+    monkeypatch.setattr(web, "resolve_public", lambda h, p: "203.0.113.7")
+    monkeypatch.setattr(web, "_open", _fake_open(calls))
+    c = make_client()
+    login(c)
+    r = c.get("/map3d/dem/10/530/365.png")
+    assert r.status_code == 200 and r.content == PNG and r.headers["content-type"] == "image/png"
+    assert calls[0][:5] == ("https", tiles.HOST_DEM, "203.0.113.7", 443,
+                            "/elevation-tiles-prod/terrarium/10/530/365.png")
+    assert "Cookie" not in calls[0][5]
+
+
+def test_relief_refuse_les_demandes_suspectes(make_client, monkeypatch):
+    from server.tools import tiles, web
+    from tests.conftest import login
+    calls = []
+    monkeypatch.setattr(web, "resolve_public", lambda h, p: "203.0.113.7")
+    monkeypatch.setattr(web, "_open", _fake_open(calls))
+    c = make_client()
+    login(c)
+    for bad in ("/map3d/dem/16/0/0.png", "/map3d/dem/2/4/0.png", "/map3d/dem/2/0/-1.png",
+                "/map3d/dem/2/0/0.png/../../x", "/map3d/dem/2/0/0%2F..%2F.png"):
+        assert c.get(bad).status_code in (404, 422), bad
+    assert calls == []
+    for kw in ({"body": b"<html>pas une image</html>"}, {"status": 403},
+               {"body": tiles.PNG_MAGIC + b"x" * tiles.MAX_DEM_BYTES}):
+        monkeypatch.setattr(web, "_open", _fake_open([], **kw))
+        assert c.get("/map3d/dem/1/0/0.png").status_code == 404
+
+
 def test_carte3d_version_douteuse_refusee(monkeypatch):
     from server.tools import tiles, web
     monkeypatch.setattr(web, "resolve_public", lambda h, p: "203.0.113.9")

@@ -1408,6 +1408,17 @@ async function sendMessage(text) {
   const photo = state.photo;
   if (photo && !text) text = "Que vois-tu sur cette photo ?";
   if (!text || state.streaming) return;
+  // Carte ouverte : « tourne », « zoome », « relief »… sont traités tout de suite, sans appeler l'IA.
+  const mapReply = !photo && window.SyriusHUD && window.SyriusHUD.command(text);
+  if (mapReply) {
+    $("#input").value = "";
+    autoGrow();
+    const r = { who: "nova", text: mapReply, expr: "" };
+    state.lastReplies = [r];
+    state.lastReply = mapReply;
+    if (state.settings.voice_reply && !window.SyriusVoice?.active) speakAll([r]);
+    return;
+  }
   const hybridOnly = !state.offline && navigator.onLine && !(L() && L().prefs.force);
   if (localWanted(photo ? "" : text) || (photo && offlineVisionWanted())) {
     if (photo) {

@@ -609,6 +609,16 @@ def create_app(cfg: Config | None = None, agent: Agent | None = None, db=None) -
         return Response(data, media_type="application/x-protobuf",
                         headers={"Cache-Control": "private, max-age=604800"})
 
+    @app.get("/map3d/dem/{z}/{x}/{y}.png", dependencies=[Depends(require_auth)])
+    def dem_3d(z: int, x: int, y: int):
+        """Carte 3D : altitudes (relief des montagnes) relayées (voir tools/tiles.py)."""
+        try:
+            data = tiles.fetch_dem(z, x, y)
+        except tiles.TileError:
+            raise HTTPException(404) from None
+        return Response(data, media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=2592000"})
+
     @app.get("/map3d/fonts/{fontstack}/{rng}.pbf", dependencies=[Depends(require_auth)])
     def glyphs_3d(fontstack: str, rng: str):
         try:

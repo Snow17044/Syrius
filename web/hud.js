@@ -11,6 +11,7 @@
   let layer = null;     // repères 2D
   let markers = [];     // repères 3D
   let spin = 0;         // rotation lente façon hologramme
+  const NATURE = /^(peak|volcano|mountain_range|ridge|glacier|valley|massif|saddle|cliff|island|archipelago)$/;
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -54,9 +55,16 @@
       sources: {
         omt: { type: "vector", tiles: [o + "/map3d/t/{z}/{x}/{y}.pbf"], minzoom: 0, maxzoom: 14,
           attribution: "© OpenStreetMap · OpenFreeMap" },
+        // Relief : altitudes « Terrarium » relayées par le serveur (montagnes en 3D).
+        relief: { type: "raster-dem", tiles: [o + "/map3d/dem/{z}/{x}/{y}.png"], encoding: "terrarium",
+          tileSize: 256, maxzoom: 14, attribution: "Relief © Mapzen, AWS Open Data" },
       },
+      terrain: { source: "relief", exaggeration: 1.3 },
       layers: [
         { id: "fond", type: "background", paint: { "background-color": "#11141e" } },
+        { id: "ombrage", type: "hillshade", source: "relief",
+          paint: { "hillshade-exaggeration": 0.45, "hillshade-shadow-color": "#05060a",
+            "hillshade-highlight-color": "#3b4068", "hillshade-accent-color": "#11141e" } },
         { id: "parcs", type: "fill", source: "omt", "source-layer": "park",
           paint: { "fill-color": "#17242a", "fill-opacity": 0.7 } },
         { id: "eau", type: "fill", source: "omt", "source-layer": "water",
@@ -120,6 +128,73 @@
     mode = "3d";
   }
 
+  // ------------------------------------------------------------------ relief et commandes de la carte
+  let reliefOn = true;
+  function setRelief(on) {
+    reliefOn = on;
+    // (isStyleLoaded() reste faux tant que des tuiles chargent : on vérifie seulement la source.)
+    if (!map || mode !== "3d" || !map.getSource("relief")) return;
+    try {
+      map.setTerrain(on ? { source: "relief", exaggeration: 1.3 } : null);
+      map.setLayoutProperty("ombrage", "visibility", on ? "visible" : "none");
+    } catch (e) { /* relief indisponible : la carte reste utilisable à plat */ }
+  }
+  function setBuildings(on) {
+    if (map && mode === "3d" && map.getLayer("batiments")) map.setLayoutProperty("batiments", "visibility", on ? "visible" : "none");
+  }
+
+  function isOpen() {
+    const hud = document.getElementById("hud");
+    return !!(map && hud && !hud.classList.contains("hidden"));
+  }
+
+  // Petites commandes (écrites ou dites) quand la carte est ouverte : traitées sur place,
+  // sans appeler l'IA. Renvoie la phrase de réponse, ou "" si ce n'est pas une commande de carte.
+  // Les demandes de lieu (« montre-moi la tour Eiffel ») continuent d'aller à l'IA (outil show_places).
+  function command(text) {
+    const reply = runCommand(text);
+    if (reply) flash(reply);
+    return reply;
+  }
+
+  // Affiche brièvement la réponse dans l'en-tête de la carte, puis remet le titre.
+  let flashTimer = 0;
+  function flash(msg) {
+    const q = document.getElementById("hud-query");
+    if (!q) return;
+    if (!flashTimer) q.dataset.title = q.textContent;
+    clearTimeout(flashTimer);
+    q.textContent = "🎙 " + msg;
+    flashTimer = setTimeout(() => { q.textContent = q.dataset.title || ""; flashTimer = 0; }, 2500);
+  }
+
+  function runCommand(text) {
+    if (!isOpen()) return "";
+    const c = String(text || "").toLowerCase().replace(/^\s*(syrius|nova|aurora)[\s,]*/, "")
+      .replace(/[.!?…\s]+$/, "").trim();
+    if (!c || c.split(/\s+/).length > 6) return "";
+    const flat = mode !== "3d";
+    if (/^(tourne|fais (le|un) tour|rotation|pivote)/.test(c)) {
+      if (flat) return "La carte en 2D ne peut pas tourner.";
+      startSpin(); return "Je tourne autour.";
+    }
+    if (/^(stop|arr[eê]te|ne bouge plus|immobile)/.test(c)) { stopSpin(); return "D'accord, j'arrête."; }
+    if (/^(zoome|rapproche|plus pr[eè]s|zoom avant|agrandis)/.test(c)) { stopSpin(); map.zoomIn(); return "Je me rapproche."; }
+    if (/^(d[eé]zoome|[eé]loigne|recule|plus loin|zoom arri[eè]re)/.test(c)) { stopSpin(); map.zoomOut(); return "Je m'éloigne."; }
+    if (flat) return /^(relief|montagnes|b[aâ]timents|vue)/.test(c) ? "Ce téléphone affiche la carte en 2D seulement." : "";
+    if (/^(enl[eè]ve|cache|coupe|sans|d[eé]sactive) (le )?relief/.test(c)) { setRelief(false); return "Relief coupé."; }
+    if (/^((affiche|montre|montre-moi|mets|active|remets) (le )?relief|relief|montagnes)$/.test(c)) {
+      setRelief(c === "relief" || c === "montagnes" ? !reliefOn : true);
+      return reliefOn ? "Voici le relief." : "Relief coupé.";
+    }
+    if (/^(enl[eè]ve|cache|sans) (les )?b[aâ]timents/.test(c)) { setBuildings(false); return "Bâtiments masqués."; }
+    if (/^((affiche|montre|remets) (les )?b[aâ]timents|b[aâ]timents)$/.test(c)) { setBuildings(true); return "Voici les bâtiments."; }
+    if (/^(vue (de|du) dessus|vue à plat|2d|en 2d)$/.test(c)) { stopSpin(); map.easeTo({ pitch: 0, bearing: 0, duration: 900 }); return "Vue de dessus."; }
+    if (/^(vue (en )?3d|vue inclin[eé]e|3d|en 3d|incline)$/.test(c)) { map.easeTo({ pitch: 62, duration: 900 }); return "Vue en 3D."; }
+    if (/^(ferme|cache) (la )?carte$/.test(c)) { close(); return "Je ferme la carte."; }
+    return "";
+  }
+
   function init2d() {
     map = L.map("hud-map", { zoomControl: false, attributionControl: true });
     L.tileLayer(TILES_2D, { maxZoom: 19, attribution: ATTRIBUTION }).addTo(map);
@@ -146,7 +221,9 @@
     setTimeout(() => {
       map.resize();
       if (points.length === 1) {
-        map.jumpTo({ center: [points[0].lon, points[0].lat], zoom: 16.5, pitch: 60 });
+        // Montagne, sommet, volcan… : on reste plus haut pour voir le relief autour.
+        const zoom = NATURE.test(String(places[0] && places[0].kind || "")) ? 12 : 16.5;
+        map.jumpTo({ center: [points[0].lon, points[0].lat], zoom, pitch: 60 });
       } else {
         const b = new maplibregl.LngLatBounds();
         points.forEach((pt) => b.extend([pt.lon, pt.lat]));
@@ -253,5 +330,5 @@
     document.getElementById("hud-close").addEventListener("click", close);
   });
 
-  window.SyriusHUD = { show, close };
+  window.SyriusHUD = { show, close, command, isOpen };
 })();

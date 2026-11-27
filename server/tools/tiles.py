@@ -109,6 +109,30 @@ def fetch_vector(z: int, x: int, y: int) -> bytes:
     return body
 
 
+# ---------------------------------------------------------------- carte 3D : relief (altitudes)
+# Données d'altitude publiques « Terrarium » (AWS Open Data, Mapzen) : gratuites, sans clé.
+# Chaque pixel d'une image PNG code une altitude ; MapLibre s'en sert pour les montagnes en 3D.
+HOST_DEM = "s3.amazonaws.com"
+MAX_ZOOM_DEM = 15
+MAX_DEM_BYTES = 600_000
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def fetch_dem(z: int, x: int, y: int) -> bytes:
+    if not (0 <= z <= MAX_ZOOM_DEM):
+        raise TileError("zoom invalide")
+    check_tile(z, x, y)
+    try:
+        ip = web.resolve_public(HOST_DEM, 443)
+        status, _, body = web._open("https", HOST_DEM, ip, 443,
+                                    f"/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png", HEADERS_3D)
+    except web.WebError as e:
+        raise TileError(str(e)) from None
+    if status != 200 or not body.startswith(PNG_MAGIC) or len(body) > MAX_DEM_BYTES:
+        raise TileError(f"relief indisponible ({status})")
+    return body
+
+
 def fetch_glyphs(fontstack: str, rng: str) -> bytes:
     if fontstack not in FONTS:
         raise TileError("police inconnue")
